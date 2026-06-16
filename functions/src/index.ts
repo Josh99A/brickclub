@@ -1,5 +1,5 @@
 import {randomUUID} from "crypto";
-import {HttpsError, onCall} from "firebase-functions/v2/https";
+import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {logger} from "firebase-functions";
 import {initializeApp} from "firebase-admin/app";
 import {getAuth, UserRecord} from "firebase-admin/auth";
@@ -30,6 +30,18 @@ type CryptoPaymentOption = {
   minimumAmount: number;
 };
 
+type MemberOpportunity = {
+  id: string;
+  assetClass: string;
+  riskLevel: string;
+  paymentMethods: string[];
+  title: string;
+  location: string;
+  minimumInvestment: number;
+  targetReturn: number;
+  fundedPercent: number;
+};
+
 type UserPayload = {
   email: string;
   password?: string;
@@ -40,6 +52,8 @@ type UserPayload = {
 
 const assetsCollection = db.collection("adminAssets");
 const paymentOptionsCollection = db.collection("cryptoPaymentOptions");
+const purchaseOrdersCollection = db.collection("purchaseOrders");
+const kycProfilesCollection = db.collection("kycProfiles");
 const devMailFrom = "BrickClub Dev <no-reply@brickclub.local>";
 
 export const getMemberProfile = onCall(async (request) => {
@@ -132,6 +146,113 @@ export const listAdminDashboard = onAdminCall(async () => {
   };
 });
 
+export const listMemberOpportunities = onMemberCall(async () => {
+  const [assetsSnapshot, paymentOptionsSnapshot] = await Promise.all([
+    assetsCollection
+      .where("reviewStatus", "==", "Verified")
+      .where("publishedStatus", "==", "Live")
+      .get(),
+    paymentOptionsCollection.where("enabled", "==", true).get(),
+  ]);
+
+  const paymentMethods = paymentOptionsSnapshot.docs
+    .map((doc) => paymentOptionFromDoc(doc).assetSymbol)
+    .filter((value, index, values) => values.indexOf(value) === index);
+
+  return {
+    opportunities: assetsSnapshot.docs.map((doc) =>
+      opportunityFromDoc(doc, paymentMethods),
+    ),
+  };
+});
+
+export const createPurchaseOrder = onMemberCall(async (request) => {
+  const data = readObject(request.data);
+  const opportunityId = readString(data, "opportunityId");
+  const amountUgx = readPositiveNumber(data, "amountUgx");
+  const paymentAsset = readString(data, "paymentAsset").toUpperCase();
+
+  const uid = request.auth!.uid;
+  const kycSnapshot = await kycProfilesCollection.doc(uid).get();
+  if (kycSnapshot.data()?.status !== "approved") {
+    throw new HttpsError(
+      "failed-precondition",
+      "KYC approval is required before investing.",
+    );
+  }
+
+  const assetSnapshot = await assetsCollection.doc(opportunityId).get();
+  if (!assetSnapshot.exists) {
+    throw new HttpsError("not-found", "Opportunity was not found.");
+  }
+
+  const asset = opportunityFromDoc(
+    assetSnapshot,
+    [paymentAsset],
+  );
+  if (
+    assetSnapshot.data()?.reviewStatus !== "Verified" ||
+    assetSnapshot.data()?.publishedStatus !== "Live"
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Opportunity is not available for investment.",
+    );
+  }
+  if (amountUgx < asset.minimumInvestment) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Amount is below the opportunity minimum.",
+    );
+  }
+
+  const paymentOptionSnapshot = await paymentOptionsCollection
+    .where("enabled", "==", true)
+    .where("assetSymbol", "==", paymentAsset)
+    .limit(1)
+    .get();
+  if (paymentOptionSnapshot.empty) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Selected payment asset is not enabled.",
+    );
+  }
+
+  const paymentOption = paymentOptionFromDoc(paymentOptionSnapshot.docs[0]);
+  if (amountUgx < paymentOption.minimumAmount) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Amount is below the payment option minimum.",
+    );
+  }
+
+  const id = randomUUID();
+  const quoteAmount = roundMoney(amountUgx / 3700);
+  const networkFee = paymentAsset === "BTC" ? 0.0001 : 1;
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  const order = {
+    id,
+    uid,
+    opportunityId,
+    opportunityTitle: asset.title,
+    amountUgx,
+    paymentNetwork: paymentOption.network,
+    paymentAsset,
+    quoteAmount,
+    networkFee,
+    paymentWalletAddress: paymentOption.walletAddress,
+    status: "pending_payment",
+    expiresAt: expiresAt.toISOString(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await purchaseOrdersCollection.doc(id).set(order);
+
+  return order;
+});
+
 export const createAdminUser = onAdminCall(async (data) => {
   const payload = readUserPayload(data);
   if (!payload.password) {
@@ -183,6 +304,58 @@ export const setUserAdmin = onAdminCall(async (data) => {
   await auth.setCustomUserClaims(uid, admin ? {admin: true} : null);
 
   return userToJson(await auth.getUser(uid));
+});
+
+export const approveKycProfile = onAdminCall(async (data) => {
+  const uid = readString(data, "uid");
+  await kycProfilesCollection.doc(uid).set(
+    {
+      status: "approved",
+      rejectionReason: FieldValue.delete(),
+      reviewedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  return {uid, status: "approved"};
+});
+
+export const rejectKycProfile = onAdminCall(async (data) => {
+  const value = readObject(data);
+  const uid = readString(value, "uid");
+  const rejectionReason = readString(value, "rejectionReason");
+  await kycProfilesCollection.doc(uid).set(
+    {
+      status: "rejected",
+      rejectionReason,
+      reviewedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  return {uid, status: "rejected", rejectionReason};
+});
+
+export const listSubmittedKycProfiles = onAdminCall(async () => {
+  const snapshot = await kycProfilesCollection
+    .where("status", "in", ["submitted", "rejected"])
+    .get();
+
+  return {
+    profiles: snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        fullLegalName: String(data.fullLegalName ?? ""),
+        email: String(data.email ?? ""),
+        phoneNumber: String(data.phoneNumber ?? ""),
+        status: String(data.status ?? "notStarted"),
+        rejectionReason: String(data.rejectionReason ?? ""),
+      };
+    }),
+  };
 });
 
 export const createAdminAsset = onAdminCall(async (data) => {
@@ -269,6 +442,18 @@ function onAdminCall<T>(
   });
 }
 
+function onMemberCall<T>(
+  handler: (request: CallableRequest<unknown>) => Promise<T>,
+) {
+  return onCall(async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    return handler(request);
+  });
+}
+
 function userToJson(user: UserRecord) {
   return {
     uid: user.uid,
@@ -294,6 +479,31 @@ function assetFromDoc(
     fundedPercent: Number(data.fundedPercent ?? 0),
     reviewStatus: String(data.reviewStatus ?? "Pending"),
     publishedStatus: String(data.publishedStatus ?? "Draft"),
+  };
+}
+
+function opportunityFromDoc(
+  doc: FirebaseFirestore.DocumentSnapshot,
+  enabledPaymentMethods: string[],
+): MemberOpportunity {
+  const data = doc.data();
+  if (!data) {
+    throw new HttpsError("not-found", "Opportunity was not found.");
+  }
+
+  return {
+    id: doc.id,
+    assetClass: String(data.assetClass ?? data.type ?? "Real Estate"),
+    riskLevel: String(data.riskLevel ?? "Medium"),
+    paymentMethods: readStringArrayOrDefault(
+      data.paymentMethods,
+      enabledPaymentMethods.length === 0 ? ["USDT"] : enabledPaymentMethods,
+    ),
+    title: String(data.title ?? ""),
+    location: String(data.location ?? ""),
+    minimumInvestment: Number(data.minimumInvestment ?? 250000),
+    targetReturn: Number(data.targetReturn ?? 11.8),
+    fundedPercent: Number(data.fundedPercent ?? 0),
   };
 }
 
@@ -466,4 +676,29 @@ function readNumber(data: unknown, key: string): number {
   }
 
   return value;
+}
+
+function readPositiveNumber(data: unknown, key: string): number {
+  const value = readNumber(data, key);
+  if (value <= 0) {
+    throw new HttpsError("invalid-argument", `${key} must be greater than 0.`);
+  }
+
+  return value;
+}
+
+function readStringArrayOrDefault(
+  value: unknown,
+  fallback: string[],
+): string[] {
+  if (!Array.isArray(value)) return fallback;
+  const strings = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return strings.length === 0 ? fallback : strings;
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
 }

@@ -86,8 +86,13 @@ class FirebaseKycRepository implements KycRepository {
     if (trimmedPhone.isEmpty) {
       throw const KycValidationException('Enter your phone number first.');
     }
+    if (!_isE164PhoneNumber(trimmedPhone)) {
+      throw const KycValidationException(
+        'Enter your phone number in international format, e.g. +256774224734.',
+      );
+    }
 
-    final verificationStarted = _startPhoneVerification(trimmedPhone);
+    await _startPhoneVerification(trimmedPhone);
 
     await _firestore.collection('kycProfiles').doc(user.uid).set({
       'phoneNumber': trimmedPhone,
@@ -95,8 +100,6 @@ class FirebaseKycRepository implements KycRepository {
       'status': 'inProgress',
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-
-    await verificationStarted;
   }
 
   User _requireUser() {
@@ -117,33 +120,37 @@ class FirebaseKycRepository implements KycRepository {
     return reference.getDownloadURL();
   }
 
-  Future<void> _startPhoneVerification(String phoneNumber) {
+  Future<void> _startPhoneVerification(String phoneNumber) async {
     final completer = Completer<void>();
     _phoneVerificationId = null;
     _autoPhoneCredential = null;
 
-    _firebaseAuth.verifyPhoneNumber(
-      phoneNumber: phoneNumber,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (credential) {
-        _autoPhoneCredential = credential;
-        if (!completer.isCompleted) completer.complete();
-      },
-      verificationFailed: (error) {
-        if (!completer.isCompleted) {
-          completer.completeError(KycValidationException(_phoneError(error)));
-        }
-      },
-      codeSent: (verificationId, _) {
-        _phoneVerificationId = verificationId;
-        if (!completer.isCompleted) completer.complete();
-      },
-      codeAutoRetrievalTimeout: (verificationId) {
-        _phoneVerificationId = verificationId;
-      },
-    );
+    try {
+      await _firebaseAuth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (credential) {
+          _autoPhoneCredential = credential;
+          if (!completer.isCompleted) completer.complete();
+        },
+        verificationFailed: (error) {
+          if (!completer.isCompleted) {
+            completer.completeError(KycValidationException(_phoneError(error)));
+          }
+        },
+        codeSent: (verificationId, _) {
+          _phoneVerificationId = verificationId;
+          if (!completer.isCompleted) completer.complete();
+        },
+        codeAutoRetrievalTimeout: (verificationId) {
+          _phoneVerificationId = verificationId;
+        },
+      );
+    } on FirebaseAuthException catch (error) {
+      throw KycValidationException(_phoneError(error));
+    }
 
-    return completer.future;
+    await completer.future;
   }
 
   Future<void> _verifyPhoneCode(KycSubmission submission) async {
@@ -176,13 +183,18 @@ class FirebaseKycRepository implements KycRepository {
 
   String _phoneError(FirebaseAuthException error) {
     return switch (error.code) {
-      'invalid-phone-number' => 'Enter a valid phone number with country code.',
+      'invalid-phone-number' =>
+        'Enter your phone number in international format, e.g. +256774224734.',
       'invalid-verification-code' => 'Enter the SMS code from the emulator.',
       'credential-already-in-use' =>
         'That phone number is already linked to another account.',
       'too-many-requests' => 'Too many verification attempts. Try again later.',
       _ => error.message ?? 'Phone verification failed. Please try again.',
     };
+  }
+
+  bool _isE164PhoneNumber(String phoneNumber) {
+    return RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(phoneNumber);
   }
 
   KycProfile _profileFromSnapshot(

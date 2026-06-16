@@ -10,14 +10,19 @@ import '../features/admin/domain/admin_models.dart';
 import '../features/admin/domain/admin_repository.dart';
 import '../features/auth/domain/auth_credentials.dart';
 import '../features/auth/domain/auth_repository.dart';
+import '../features/investment/domain/investment_models.dart';
+import '../features/investment/domain/investment_repository.dart';
 import '../features/kyc/domain/kyc_models.dart';
 import '../features/kyc/domain/kyc_repository.dart';
+
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 class BrickClubApp extends StatelessWidget {
   const BrickClubApp({
     super.key,
     required this.authRepository,
     required this.adminRepository,
+    required this.investmentRepository,
     required this.kycRepository,
     this.showLandingPage = kIsWeb,
     this.splashDuration = const Duration(seconds: 2),
@@ -25,6 +30,7 @@ class BrickClubApp extends StatelessWidget {
 
   final AuthRepository authRepository;
   final AdminRepository adminRepository;
+  final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
   final bool showLandingPage;
   final Duration splashDuration;
@@ -34,6 +40,7 @@ class BrickClubApp extends StatelessWidget {
     return MaterialApp(
       title: 'BrickClub',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: AppColors.background,
@@ -47,6 +54,7 @@ class BrickClubApp extends StatelessWidget {
       home: AppGate(
         authRepository: authRepository,
         adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
         kycRepository: kycRepository,
         showLandingPage: showLandingPage,
         splashDuration: splashDuration,
@@ -60,6 +68,7 @@ class AppGate extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.adminRepository,
+    required this.investmentRepository,
     required this.kycRepository,
     required this.showLandingPage,
     required this.splashDuration,
@@ -67,6 +76,7 @@ class AppGate extends StatefulWidget {
 
   final AuthRepository authRepository;
   final AdminRepository adminRepository;
+  final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
   final bool showLandingPage;
   final Duration splashDuration;
@@ -87,14 +97,14 @@ class _AppGateState extends State<AppGate> {
     if (!widget.showLandingPage) {
       Future<void>.delayed(widget.splashDuration, () {
         if (mounted && destination == AppDestination.splash) {
-          setState(() => destination = AppDestination.signUp);
+          setState(() => destination = AppDestination.signIn);
         }
       });
     }
   }
 
   AppDestination get authEntryDestination =>
-      widget.showLandingPage ? AppDestination.landing : AppDestination.signUp;
+      widget.showLandingPage ? AppDestination.landing : AppDestination.signIn;
 
   @override
   Widget build(BuildContext context) {
@@ -121,10 +131,12 @@ class _AppGateState extends State<AppGate> {
               ? AppDestination.landing
               : AppDestination.signIn,
         ),
+        onSignIn: () => setState(() => destination = AppDestination.signIn),
         onCreated: () => setState(() => destination = AppDestination.member),
       ),
       AppDestination.member => BrickClubShell(
         authRepository: widget.authRepository,
+        investmentRepository: widget.investmentRepository,
         kycRepository: widget.kycRepository,
       ),
       AppDestination.admin => AdminDashboard(
@@ -153,9 +165,7 @@ class SplashScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _BrickMark(),
-              SizedBox(height: 18),
-              Text('BrickClub', style: AppText.authBrand),
+              _BrandLockup(height: 160),
               SizedBox(height: 8),
               Text('Property-backed ownership', style: AppText.bodyLarge),
             ],
@@ -273,25 +283,17 @@ class _LandingHeader extends StatelessWidget {
 }
 
 class _BrandLockup extends StatelessWidget {
-  const _BrandLockup();
+  const _BrandLockup({this.height = 54});
+
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _BrickMark(),
-        SizedBox(width: 11),
-        Text(
-          'BrickClub',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 21,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -.4,
-          ),
-        ),
-      ],
+    return Image.asset(
+      'assets/images/brickclub_logo.png',
+      height: height,
+      fit: BoxFit.contain,
+      semanticLabel: 'The Brick Club',
     );
   }
 }
@@ -301,18 +303,12 @@ class _BrickMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Image.asset(
+      'assets/images/brickclub_mark.png',
       width: 32,
       height: 32,
-      decoration: BoxDecoration(
-        color: AppColors.gold,
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: const Icon(
-        Icons.apartment_rounded,
-        color: AppColors.background,
-        size: 19,
-      ),
+      fit: BoxFit.contain,
+      semanticLabel: 'The Brick Club mark',
     );
   }
 }
@@ -1283,6 +1279,8 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   bool adminAccess = false;
   bool signingIn = false;
+  bool signingInWithGoogle = false;
+  String? authMessage;
   late final TextEditingController emailController;
   late final TextEditingController passwordController;
 
@@ -1327,9 +1325,9 @@ class _SignInScreenState extends State<SignInScreen> {
                               icon: const Icon(Icons.arrow_back_rounded),
                             ),
                           ),
-                          const SizedBox(height: 28),
-                          const _BrandLockup(),
-                          const SizedBox(height: 54),
+                          const SizedBox(height: 18),
+                          const _BrandLockup(height: 72),
+                          const SizedBox(height: 30),
                           Text(
                             adminAccess ? 'Admin sign in' : 'Welcome back',
                             style: const TextStyle(
@@ -1350,7 +1348,7 @@ class _SignInScreenState extends State<SignInScreen> {
                               height: 1.5,
                             ),
                           ),
-                          const SizedBox(height: 34),
+                          const SizedBox(height: 24),
                           const FieldLabel('Email'),
                           const SizedBox(height: 8),
                           AppTextField(
@@ -1377,14 +1375,30 @@ class _SignInScreenState extends State<SignInScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
+                          if (authMessage != null) ...[
+                            _AuthMessageBanner(message: authMessage!),
+                            const SizedBox(height: 14),
+                          ],
                           PrimaryButton(
                             key: const ValueKey('sign-in'),
-                            label: adminAccess
-                                ? 'Open admin dashboard'
-                                : signingIn
+                            label: signingIn
                                 ? 'Signing in...'
+                                : adminAccess
+                                ? 'Open admin dashboard'
                                 : 'Sign in securely',
                             onPressed: signingIn ? null : _signIn,
+                          ),
+                          const SizedBox(height: 12),
+                          GoogleAuthButton(
+                            key: const ValueKey('google-sign-in'),
+                            label: signingInWithGoogle
+                                ? 'Connecting...'
+                                : adminAccess
+                                ? 'Continue as admin with Google'
+                                : 'Continue with Google',
+                            onPressed: signingIn || signingInWithGoogle
+                                ? null
+                                : _signInWithGoogle,
                           ),
                           const SizedBox(height: 24),
                           Center(
@@ -1393,6 +1407,7 @@ class _SignInScreenState extends State<SignInScreen> {
                               onPressed: () {
                                 setState(() {
                                   adminAccess = !adminAccess;
+                                  authMessage = null;
                                   emailController.clear();
                                   passwordController.clear();
                                 });
@@ -1430,8 +1445,50 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      authMessage = null;
+      signingInWithGoogle = true;
+    });
+    try {
+      await widget.authRepository.signInWithGoogle();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (adminAccess) {
+        final isAdmin = await widget.authRepository.currentUserIsAdmin();
+        if (!mounted) {
+          return;
+        }
+
+        if (!isAdmin) {
+          _showAuthMessage('This Google account does not have admin access.');
+          return;
+        }
+
+        widget.onAdminSignedIn();
+        return;
+      }
+
+      widget.onMemberSignedIn();
+    } catch (error) {
+      if (mounted) {
+        _showAuthMessage(_authErrorMessage(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => signingInWithGoogle = false);
+      }
+    }
+  }
+
   Future<void> _signIn() async {
-    setState(() => signingIn = true);
+    setState(() {
+      authMessage = null;
+      signingIn = true;
+    });
     try {
       await widget.authRepository.signIn(
         SignInCredentials(
@@ -1451,7 +1508,7 @@ class _SignInScreenState extends State<SignInScreen> {
         }
 
         if (!isAdmin) {
-          showMessage(context, 'This account does not have admin access.');
+          _showAuthMessage('This account does not have admin access.');
           return;
         }
 
@@ -1462,7 +1519,7 @@ class _SignInScreenState extends State<SignInScreen> {
       widget.onMemberSignedIn();
     } catch (error) {
       if (mounted) {
-        showMessage(context, _authErrorMessage(error));
+        _showAuthMessage(_authErrorMessage(error));
       }
     } finally {
       if (mounted) {
@@ -1472,6 +1529,7 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _sendPasswordReset() async {
+    setState(() => authMessage = null);
     try {
       await widget.authRepository.sendPasswordResetEmail(emailController.text);
       if (mounted) {
@@ -1479,9 +1537,59 @@ class _SignInScreenState extends State<SignInScreen> {
       }
     } catch (error) {
       if (mounted) {
-        showMessage(context, _authErrorMessage(error));
+        _showAuthMessage(_authErrorMessage(error));
       }
     }
+  }
+
+  void _showAuthMessage(String message) {
+    setState(() => authMessage = message);
+    showMessage(context, message);
+  }
+}
+
+class _AuthMessageBanner extends StatelessWidget {
+  const _AuthMessageBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        key: const ValueKey('auth-message'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.panel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.gold.withValues(alpha: .5)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.info_outline_rounded,
+              color: AppColors.gold,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -3177,11 +3285,13 @@ class SignUpScreen extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.onBack,
+    required this.onSignIn,
     required this.onCreated,
   });
 
   final AuthRepository authRepository;
   final VoidCallback onBack;
+  final VoidCallback onSignIn;
   final VoidCallback onCreated;
 
   @override
@@ -3191,6 +3301,7 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   bool accepted = false;
   bool creatingAccount = false;
+  bool signingUpWithGoogle = false;
   final firstNameController = TextEditingController();
   final lastNameController = TextEditingController();
   final emailController = TextEditingController();
@@ -3226,8 +3337,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     padding: EdgeInsets.zero,
                     alignment: Alignment.centerLeft,
                   ),
-                  const Text('BrickClub', style: AppText.authBrand),
-                  const SizedBox(height: 4),
+                  const _BrandLockup(height: 112),
+                  const SizedBox(height: 10),
                   const Text(
                     'Create your BrickShares account. Wallet verification '
                     'and KYC come next.',
@@ -3245,49 +3356,91 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           style: AppText.body,
                         ),
                         const SizedBox(height: 18),
-                        FieldLabel('First name'),
-                        const SizedBox(height: 6),
-                        AppTextField(
-                          controller: firstNameController,
-                          hintText: 'Legal first name',
-                          compact: true,
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final stackNames = constraints.maxWidth < 350;
+                            final firstName = _SignUpField(
+                              label: 'First name',
+                              child: AppTextField(
+                                controller: firstNameController,
+                                hintText: 'Legal first name',
+                                compact: true,
+                                prefixIcon: Icons.badge_outlined,
+                                textInputAction: TextInputAction.next,
+                                autofillHints: const [AutofillHints.givenName],
+                              ),
+                            );
+                            final lastName = _SignUpField(
+                              label: 'Last name',
+                              child: AppTextField(
+                                controller: lastNameController,
+                                hintText: 'Legal last name',
+                                compact: true,
+                                prefixIcon: Icons.badge_outlined,
+                                textInputAction: TextInputAction.next,
+                                autofillHints: const [AutofillHints.familyName],
+                              ),
+                            );
+
+                            if (stackNames) {
+                              return Column(
+                                children: [
+                                  firstName,
+                                  const SizedBox(height: 14),
+                                  lastName,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              children: [
+                                Expanded(child: firstName),
+                                const SizedBox(width: 12),
+                                Expanded(child: lastName),
+                              ],
+                            );
+                          },
                         ),
-                        const SizedBox(height: 8),
-                        FieldLabel('Last name'),
-                        const SizedBox(height: 6),
-                        AppTextField(
-                          controller: lastNameController,
-                          hintText: 'Legal last name',
-                          compact: true,
+                        const SizedBox(height: 14),
+                        _SignUpField(
+                          label: 'Email',
+                          child: AppTextField(
+                            controller: emailController,
+                            hintText: 'you@example.com',
+                            keyboardType: TextInputType.emailAddress,
+                            compact: true,
+                            prefixIcon: Icons.alternate_email_rounded,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.email],
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        FieldLabel('Email'),
-                        const SizedBox(height: 6),
-                        AppTextField(
-                          controller: emailController,
-                          hintText: 'you@example.com',
-                          keyboardType: TextInputType.emailAddress,
-                          compact: true,
+                        const SizedBox(height: 14),
+                        _SignUpField(
+                          label: 'Password',
+                          child: AppTextField(
+                            controller: passwordController,
+                            hintText: 'Create a password',
+                            obscureText: true,
+                            compact: true,
+                            prefixIcon: Icons.lock_outline_rounded,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.newPassword],
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        FieldLabel('Password'),
-                        const SizedBox(height: 6),
-                        AppTextField(
-                          controller: passwordController,
-                          hintText: 'Create a password',
-                          obscureText: true,
-                          compact: true,
+                        const SizedBox(height: 14),
+                        _SignUpField(
+                          label: 'Confirm password',
+                          child: AppTextField(
+                            controller: confirmPasswordController,
+                            hintText: 'Confirm your password',
+                            obscureText: true,
+                            compact: true,
+                            prefixIcon: Icons.lock_reset_rounded,
+                            textInputAction: TextInputAction.done,
+                            autofillHints: const [AutofillHints.newPassword],
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        FieldLabel('Confirm password'),
-                        const SizedBox(height: 6),
-                        AppTextField(
-                          controller: confirmPasswordController,
-                          hintText: 'Confirm your password',
-                          obscureText: true,
-                          compact: true,
-                        ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -3323,11 +3476,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         : null,
                   ),
                   const SizedBox(height: 10),
+                  GoogleAuthButton(
+                    key: const ValueKey('google-sign-up'),
+                    label: signingUpWithGoogle
+                        ? 'Connecting...'
+                        : 'Sign up with Google',
+                    onPressed: creatingAccount || signingUpWithGoogle
+                        ? null
+                        : _signUpWithGoogle,
+                  ),
+                  const SizedBox(height: 10),
                   const Text(
                     'Financial actions require KYC and verified wallet setup '
                     'after account creation.',
                     textAlign: TextAlign.center,
                     style: AppText.disclosure,
+                  ),
+                  const SizedBox(height: 10),
+                  SecondaryButton(
+                    key: const ValueKey('account-login-button'),
+                    label: 'Already have an account? Sign in',
+                    onPressed: widget.onSignIn,
                   ),
                 ],
               ),
@@ -3336,6 +3505,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _signUpWithGoogle() async {
+    setState(() => signingUpWithGoogle = true);
+    try {
+      await widget.authRepository.signInWithGoogle();
+
+      if (mounted) {
+        widget.onCreated();
+      }
+    } catch (error) {
+      if (mounted) {
+        showMessage(context, _authErrorMessage(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => signingUpWithGoogle = false);
+      }
+    }
   }
 
   Future<void> _createAccount() async {
@@ -3366,14 +3554,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
+class _SignUpField extends StatelessWidget {
+  const _SignUpField({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [FieldLabel(label), const SizedBox(height: 7), child],
+    );
+  }
+}
+
 class BrickClubShell extends StatefulWidget {
   const BrickClubShell({
     super.key,
     required this.authRepository,
+    required this.investmentRepository,
     required this.kycRepository,
   });
 
   final AuthRepository authRepository;
+  final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
 
   @override
@@ -3398,12 +3603,23 @@ class _BrickClubShellState extends State<BrickClubShell> {
         final pages = [
           HomeScreen(
             kyc: kyc,
+            investmentRepository: widget.investmentRepository,
             onInvest: () => setState(() => index = 1),
             onStartKyc: () => _openKyc(context),
+            onOpenProfile: _openProfile,
           ),
-          InvestScreen(kyc: kyc, onStartKyc: () => _openKyc(context)),
-          WalletScreen(kyc: kyc, onStartKyc: () => _openKyc(context)),
-          const PortfolioScreen(),
+          InvestScreen(
+            kyc: kyc,
+            investmentRepository: widget.investmentRepository,
+            onStartKyc: () => _openKyc(context),
+            onOpenProfile: _openProfile,
+          ),
+          WalletScreen(
+            kyc: kyc,
+            onStartKyc: () => _openKyc(context),
+            onOpenProfile: _openProfile,
+          ),
+          PortfolioScreen(onOpenProfile: _openProfile),
           ProfileScreen(
             user: widget.authRepository.currentUserDetails(),
             kyc: kyc,
@@ -3431,6 +3647,10 @@ class _BrickClubShellState extends State<BrickClubShell> {
         builder: (_) => KycScreen(repository: widget.kycRepository),
       ),
     );
+  }
+
+  void _openProfile() {
+    setState(() => index = 4);
   }
 }
 
@@ -3602,6 +3822,7 @@ class _KycScreenState extends State<KycScreen> {
   bool sendingEmail = false;
   bool sendingPhone = false;
   bool submitting = false;
+  String? kycMessage;
 
   @override
   void dispose() {
@@ -3641,6 +3862,10 @@ class _KycScreenState extends State<KycScreen> {
                       compact: true,
                       showAction: false,
                     ),
+                    if (kycMessage != null) ...[
+                      const SizedBox(height: 14),
+                      _KycMessageBanner(message: kycMessage!),
+                    ],
                     const SizedBox(height: 18),
                     const FieldLabel('Full legal name'),
                     const SizedBox(height: 8),
@@ -3693,8 +3918,11 @@ class _KycScreenState extends State<KycScreen> {
                     AppTextField(
                       key: const ValueKey('kyc-phone'),
                       controller: phoneController,
-                      hintText: '+256 700 000000',
+                      hintText: '+256774224734',
                       keyboardType: TextInputType.phone,
+                      prefixIcon: Icons.phone_iphone_rounded,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.telephoneNumber],
                     ),
                     const SizedBox(height: 10),
                     SecondaryButton(
@@ -3708,6 +3936,8 @@ class _KycScreenState extends State<KycScreen> {
                       controller: phoneCodeController,
                       hintText: 'Verification code',
                       keyboardType: TextInputType.number,
+                      prefixIcon: Icons.sms_outlined,
+                      textInputAction: TextInputAction.done,
                     ),
                     const SizedBox(height: 16),
                     const FieldLabel('Email verification'),
@@ -3813,12 +4043,15 @@ class _KycScreenState extends State<KycScreen> {
   }
 
   Future<void> _sendEmailVerification() async {
-    setState(() => sendingEmail = true);
+    setState(() {
+      kycMessage = null;
+      sendingEmail = true;
+    });
     try {
       await widget.repository.sendEmailVerification();
       if (mounted) showMessage(context, 'Verification email sent');
     } catch (error) {
-      if (mounted) showMessage(context, _kycErrorMessage(error));
+      if (mounted) _showKycMessage(_kycErrorMessage(error));
     } finally {
       if (mounted) setState(() => sendingEmail = false);
     }
@@ -3826,17 +4059,20 @@ class _KycScreenState extends State<KycScreen> {
 
   Future<void> _sendPhoneCode() async {
     if (phoneController.text.trim().isEmpty) {
-      showMessage(context, 'Enter your phone number first');
+      _showKycMessage('Enter your phone number first');
       return;
     }
-    setState(() => sendingPhone = true);
+    setState(() {
+      kycMessage = null;
+      sendingPhone = true;
+    });
     try {
       await widget.repository.sendPhoneVerificationCode(phoneController.text);
       if (mounted) {
         showMessage(context, 'Code sent. Check the Firebase Auth emulator.');
       }
     } catch (error) {
-      if (mounted) showMessage(context, _kycErrorMessage(error));
+      if (mounted) _showKycMessage(_kycErrorMessage(error));
     } finally {
       if (mounted) setState(() => sendingPhone = false);
     }
@@ -3845,11 +4081,14 @@ class _KycScreenState extends State<KycScreen> {
   Future<void> _submit() async {
     final missing = _missingFields();
     if (missing != null) {
-      showMessage(context, missing);
+      _showKycMessage(missing);
       return;
     }
 
-    setState(() => submitting = true);
+    setState(() {
+      kycMessage = null;
+      submitting = true;
+    });
     try {
       await widget.repository.submit(
         KycSubmission(
@@ -3867,7 +4106,7 @@ class _KycScreenState extends State<KycScreen> {
         Navigator.pop(context);
       }
     } catch (error) {
-      if (mounted) showMessage(context, _kycErrorMessage(error));
+      if (mounted) _showKycMessage(_kycErrorMessage(error));
     } finally {
       if (mounted) setState(() => submitting = false);
     }
@@ -3880,10 +4119,25 @@ class _KycScreenState extends State<KycScreen> {
     if (selfie == null) return 'Capture a selfie';
     if (addressProof == null) return 'Upload address proof';
     if (phoneController.text.trim().isEmpty) return 'Enter your phone number';
+    if (!_isE164PhoneNumber(phoneController.text.trim())) {
+      return 'Enter your phone number in international format, e.g. +256774224734.';
+    }
     if (phoneCodeController.text.trim().isEmpty) {
       return 'Enter the phone verification code';
     }
     return null;
+  }
+
+  void _showKycMessage(String message) {
+    final displayMessage = message.trim().isEmpty
+        ? 'We could not update your KYC details. Please try again.'
+        : message.trim();
+    setState(() => kycMessage = displayMessage);
+    showMessage(context, displayMessage);
+  }
+
+  bool _isE164PhoneNumber(String phoneNumber) {
+    return RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(phoneNumber);
   }
 
   String _contentTypeFor(String name) {
@@ -3891,6 +4145,51 @@ class _KycScreenState extends State<KycScreen> {
     if (lower.endsWith('.pdf')) return 'application/pdf';
     if (lower.endsWith('.png')) return 'image/png';
     return 'image/jpeg';
+  }
+}
+
+class _KycMessageBanner extends StatelessWidget {
+  const _KycMessageBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        key: const ValueKey('kyc-message'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.panel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.warning.withValues(alpha: .55)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.warning,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 13,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -3975,6 +4274,20 @@ String _kycErrorMessage(Object error) {
   if (error is KycValidationException) {
     return error.message;
   }
+  if (error is FirebaseAuthException) {
+    return switch (error.code) {
+      'invalid-phone-number' =>
+        'Enter your phone number in international format, e.g. +256774224734.',
+      'invalid-verification-code' => 'Enter the SMS code from the emulator.',
+      'credential-already-in-use' =>
+        'That phone number is already linked to another account.',
+      'too-many-requests' => 'Too many verification attempts. Try again later.',
+      _ =>
+        error.message?.trim().isNotEmpty == true
+            ? error.message!
+            : 'Phone verification failed. Please try again.',
+    };
+  }
   if (error is FirebaseException) {
     return switch (error.code) {
       'unauthenticated' => 'Sign in again to continue with KYC.',
@@ -4001,18 +4314,23 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.kyc,
+    required this.investmentRepository,
     required this.onInvest,
     required this.onStartKyc,
+    required this.onOpenProfile,
   });
 
   final KycProfile kyc;
+  final InvestmentRepository investmentRepository;
   final VoidCallback onInvest;
   final VoidCallback onStartKyc;
+  final VoidCallback onOpenProfile;
 
   @override
   Widget build(BuildContext context) {
     return AppPage(
       title: 'BrickClub',
+      onProfileTap: onOpenProfile,
       children: [
         KycStatusCard(kyc: kyc, onStartKyc: onStartKyc, compact: true),
         const _PortfolioOverview(),
@@ -4021,10 +4339,58 @@ class HomeScreen extends StatelessWidget {
           action: 'View all',
           onAction: onInvest,
         ),
-        InvestmentCard(
-          compact: true,
-          returnText: '12.4%',
-          onTap: () => openDetail(context, kyc, onStartKyc),
+        FutureBuilder<List<InvestmentOpportunity>>(
+          future: investmentRepository.listOpportunities(),
+          builder: (context, snapshot) {
+            final opportunities = snapshot.data ?? const [];
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Panel(
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.gold),
+                ),
+              );
+            }
+            if (opportunities.isEmpty) {
+              return Panel(
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.apartment_rounded,
+                      color: AppColors.gold,
+                      size: 34,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('No live BrickShares yet', style: AppText.h2),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Published, verified assets will appear here.',
+                      textAlign: TextAlign.center,
+                      style: AppText.body,
+                    ),
+                    const SizedBox(height: 16),
+                    SecondaryButton(label: 'View invest', onPressed: onInvest),
+                  ],
+                ),
+              );
+            }
+
+            final opportunity = opportunities.first;
+            return InvestmentCard(
+              compact: true,
+              category: opportunity.assetClass,
+              title: opportunity.displayTitle,
+              location: opportunity.location,
+              minimum: opportunity.minimumText,
+              returnText: opportunity.returnText,
+              onTap: () => openDetail(
+                context,
+                kyc,
+                opportunity,
+                investmentRepository,
+                onStartKyc,
+              ),
+            );
+          },
         ),
         const SectionHeading(title: 'Your holdings', action: 'View all'),
         const Panel(
@@ -4302,74 +4668,197 @@ class _AssetIcon extends StatelessWidget {
   }
 }
 
-class InvestScreen extends StatelessWidget {
-  const InvestScreen({super.key, required this.kyc, required this.onStartKyc});
+class BrickShareFilters {
+  const BrickShareFilters({
+    this.asset = 'Real Estate',
+    this.risk = 'Medium',
+    this.payment = 'USDT',
+  });
+
+  final String asset;
+  final String risk;
+  final String payment;
+
+  bool matches(InvestmentOpportunity opportunity) {
+    return opportunity.assetClass == asset &&
+        opportunity.riskLevel == risk &&
+        opportunity.paymentMethods.contains(payment);
+  }
+}
+
+class InvestScreen extends StatefulWidget {
+  const InvestScreen({
+    super.key,
+    required this.kyc,
+    required this.investmentRepository,
+    required this.onStartKyc,
+    required this.onOpenProfile,
+  });
 
   final KycProfile kyc;
+  final InvestmentRepository investmentRepository;
   final VoidCallback onStartKyc;
+  final VoidCallback onOpenProfile;
+
+  @override
+  State<InvestScreen> createState() => _InvestScreenState();
+}
+
+class _InvestScreenState extends State<InvestScreen> {
+  BrickShareFilters filters = const BrickShareFilters();
 
   @override
   Widget build(BuildContext context) {
-    return AppPage(
-      title: 'Invest',
-      subtitle: 'Explore verified multi-asset BrickShares',
-      children: [
-        const Wrap(
-          spacing: 10,
+    return FutureBuilder<List<InvestmentOpportunity>>(
+      future: widget.investmentRepository.listOpportunities(),
+      builder: (context, snapshot) {
+        final allOpportunities = snapshot.data ?? const [];
+        final opportunities = allOpportunities
+            .where(filters.matches)
+            .toList(growable: false);
+        final featuredReturn = opportunities.isEmpty
+            ? '0.0%'
+            : opportunities.first.returnText;
+
+        return AppPage(
+          title: 'Invest',
+          subtitle: 'Explore verified multi-asset BrickShares',
+          onProfileTap: widget.onOpenProfile,
           children: [
-            ChoicePill(label: 'Available 12', selected: true),
-            ChoicePill(label: 'Funded 38'),
-            ChoicePill(label: 'Saved'),
-          ],
-        ),
-        Panel(
-          radius: 20,
-          child: const Row(
-            children: [
-              Text('8.2%', style: AppText.goldMetric),
-              SizedBox(width: 22),
-              Expanded(
-                child: Text(
-                  'Target income\nBrickShares',
-                  style: AppText.cardHeadingSmall,
+            SizedBox(
+              height: 36,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoicePill(
+                      label: 'Available ${opportunities.length}',
+                      selected: true,
+                    ),
+                    const SizedBox(width: 8),
+                    ChoicePill(label: filters.asset),
+                    const SizedBox(width: 8),
+                    ChoicePill(label: filters.risk),
+                    const SizedBox(width: 8),
+                    ChoicePill(label: filters.payment),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-        SectionHeading(
-          title: '12 opportunities',
-          action: 'Filters',
-          actionButton: true,
-          onAction: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const FiltersScreen()),
-          ),
-        ),
-        InvestmentCard(onTap: () => openDetail(context, kyc, onStartKyc)),
-        InvestmentCard(
-          category: 'REIT',
-          title: 'Bugolobi\nLogistics REIT',
-          location: 'Income portfolio',
-          minimum: 'UGX 500K',
-          returnText: '9.6%',
-          onTap: () => openDetail(context, kyc, onStartKyc),
-        ),
-      ],
+            ),
+            Panel(
+              radius: 20,
+              child: Row(
+                children: [
+                  Text(featuredReturn, style: AppText.goldMetric),
+                  const SizedBox(width: 22),
+                  const Expanded(
+                    child: Text(
+                      'Filtered income\nBrickShares',
+                      style: AppText.cardHeadingSmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SectionHeading(
+              title: snapshot.connectionState == ConnectionState.done
+                  ? '${opportunities.length} opportunities'
+                  : 'Loading opportunities',
+              action: 'Filters',
+              actionButton: true,
+              onAction: allOpportunities.isEmpty
+                  ? null
+                  : () => _openFilters(allOpportunities),
+            ),
+            if (snapshot.connectionState != ConnectionState.done)
+              const Panel(
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.gold),
+                ),
+              )
+            else if (opportunities.isEmpty)
+              Panel(
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.search_off_rounded,
+                      color: AppColors.gold,
+                      size: 34,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('No BrickShares match', style: AppText.h2),
+                    const SizedBox(height: 6),
+                    Text(
+                      allOpportunities.isEmpty
+                          ? 'Admin-published verified assets will appear here.'
+                          : 'Try a different asset class, risk level, or payment method.',
+                      textAlign: TextAlign.center,
+                      style: AppText.body,
+                    ),
+                    const SizedBox(height: 16),
+                    SecondaryButton(
+                      label: 'Reset filters',
+                      onPressed: () =>
+                          setState(() => filters = const BrickShareFilters()),
+                    ),
+                  ],
+                ),
+              )
+            else
+              for (final opportunity in opportunities)
+                InvestmentCard(
+                  category: opportunity.assetClass,
+                  title: opportunity.displayTitle,
+                  location: opportunity.location,
+                  minimum: opportunity.minimumText,
+                  returnText: opportunity.returnText,
+                  onTap: () => openDetail(
+                    context,
+                    widget.kyc,
+                    opportunity,
+                    widget.investmentRepository,
+                    widget.onStartKyc,
+                  ),
+                ),
+          ],
+        );
+      },
     );
+  }
+
+  Future<void> _openFilters(List<InvestmentOpportunity> opportunities) async {
+    final updated = await Navigator.push<BrickShareFilters>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FiltersScreen(
+          initialFilters: filters,
+          opportunities: opportunities,
+        ),
+      ),
+    );
+    if (updated != null && mounted) {
+      setState(() => filters = updated);
+    }
   }
 }
 
 class WalletScreen extends StatelessWidget {
-  const WalletScreen({super.key, required this.kyc, required this.onStartKyc});
+  const WalletScreen({
+    super.key,
+    required this.kyc,
+    required this.onStartKyc,
+    required this.onOpenProfile,
+  });
 
   final KycProfile kyc;
   final VoidCallback onStartKyc;
+  final VoidCallback onOpenProfile;
 
   @override
   Widget build(BuildContext context) {
     return AppPage(
       title: 'Wallet',
+      onProfileTap: onOpenProfile,
       children: [
         Container(
           height: 170,
@@ -4447,12 +4936,15 @@ class WalletScreen extends StatelessWidget {
 }
 
 class PortfolioScreen extends StatelessWidget {
-  const PortfolioScreen({super.key});
+  const PortfolioScreen({super.key, required this.onOpenProfile});
+
+  final VoidCallback onOpenProfile;
 
   @override
   Widget build(BuildContext context) {
     return AppPage(
       title: 'Portfolio',
+      onProfileTap: onOpenProfile,
       children: [
         Panel(
           radius: 22,
@@ -4568,16 +5060,31 @@ class ProfileScreen extends StatelessWidget {
 }
 
 class FiltersScreen extends StatefulWidget {
-  const FiltersScreen({super.key});
+  const FiltersScreen({
+    super.key,
+    required this.initialFilters,
+    required this.opportunities,
+  });
+
+  final BrickShareFilters initialFilters;
+  final List<InvestmentOpportunity> opportunities;
 
   @override
   State<FiltersScreen> createState() => _FiltersScreenState();
 }
 
 class _FiltersScreenState extends State<FiltersScreen> {
-  String asset = 'Real Estate';
-  String risk = 'Medium';
-  String payment = 'USDT';
+  late String asset;
+  late String risk;
+  late String payment;
+
+  @override
+  void initState() {
+    super.initState();
+    asset = widget.initialFilters.asset;
+    risk = widget.initialFilters.risk;
+    payment = widget.initialFilters.payment;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4590,41 +5097,107 @@ class _FiltersScreenState extends State<FiltersScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Asset class', style: AppText.h2),
-              const SizedBox(height: 16),
-              FilterChoices(
-                values: const ['Real Estate', 'REIT', 'ETF', 'Index'],
-                selected: asset,
-                onChanged: (value) => setState(() => asset = value),
-              ),
-              const SizedBox(height: 62),
-              const Text('Risk level', style: AppText.h2),
-              const SizedBox(height: 16),
-              FilterChoices(
-                values: const ['Low', 'Medium', 'High'],
-                selected: risk,
-                onChanged: (value) => setState(() => risk = value),
-              ),
-              const Spacer(),
-              const Text('Payment method', style: AppText.h2),
-              const SizedBox(height: 16),
-              FilterChoices(
-                values: const ['USDT', 'USDC', 'BTC', 'UGX Wallet'],
-                selected: payment,
-                onChanged: (value) => setState(() => payment = value),
-              ),
-              const Spacer(),
-              Align(
-                alignment: Alignment.centerRight,
-                child: SizedBox(
-                  width: 197,
-                  child: PrimaryButton(
-                    key: const ValueKey('show-brickshares'),
-                    label: 'Show 5 BrickShares',
-                    height: 46,
-                    onPressed: () => Navigator.pop(context),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Panel(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Asset class', style: AppText.h2),
+                            const SizedBox(height: 16),
+                            FilterChoices(
+                              values: const [
+                                'Real Estate',
+                                'REIT',
+                                'ETF',
+                                'Index',
+                              ],
+                              selected: asset,
+                              onChanged: (value) =>
+                                  setState(() => asset = value),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Panel(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Risk level', style: AppText.h2),
+                            const SizedBox(height: 16),
+                            FilterChoices(
+                              values: const ['Low', 'Medium', 'High'],
+                              selected: risk,
+                              onChanged: (value) =>
+                                  setState(() => risk = value),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Panel(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Payment method', style: AppText.h2),
+                            const SizedBox(height: 16),
+                            FilterChoices(
+                              values: const [
+                                'USDT',
+                                'USDC',
+                                'BTC',
+                                'UGX Wallet',
+                              ],
+                              selected: payment,
+                              onChanged: (value) =>
+                                  setState(() => payment = value),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: SecondaryButton(
+                      key: const ValueKey('reset-filters'),
+                      label: 'Reset',
+                      onPressed: () => setState(() {
+                        asset = const BrickShareFilters().asset;
+                        risk = const BrickShareFilters().risk;
+                        payment = const BrickShareFilters().payment;
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PrimaryButton(
+                      key: const ValueKey('show-brickshares'),
+                      label: 'Show $_matchingCount',
+                      height: 46,
+                      onPressed: () => Navigator.pop(
+                        context,
+                        BrickShareFilters(
+                          asset: asset,
+                          risk: risk,
+                          payment: payment,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -4632,12 +5205,29 @@ class _FiltersScreenState extends State<FiltersScreen> {
       ),
     );
   }
+
+  int get _matchingCount {
+    final selected = BrickShareFilters(
+      asset: asset,
+      risk: risk,
+      payment: payment,
+    );
+    return widget.opportunities.where(selected.matches).length;
+  }
 }
 
 class DetailScreen extends StatelessWidget {
-  const DetailScreen({super.key, required this.kyc, required this.onStartKyc});
+  const DetailScreen({
+    super.key,
+    required this.kyc,
+    required this.opportunity,
+    required this.investmentRepository,
+    required this.onStartKyc,
+  });
 
   final KycProfile kyc;
+  final InvestmentOpportunity opportunity;
+  final InvestmentRepository investmentRepository;
   final VoidCallback onStartKyc;
 
   @override
@@ -4670,57 +5260,64 @@ class DetailScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 26),
-              const Text(
-                'Kololo Heights Income Fund',
-                style: AppText.detailTitle,
-              ),
-              const Text(
-                'Real Estate BrickShares | Kampala Central',
+              Text(opportunity.displayTitle, style: AppText.detailTitle),
+              Text(
+                '${opportunity.assetClass} BrickShares | ${opportunity.location}',
                 style: AppText.body,
               ),
               const SizedBox(height: 20),
-              const Panel(
+              Panel(
                 child: Column(
                   children: [
                     Row(
                       children: [
                         Expanded(
-                          child: Metric('8.2%', 'Target return', gold: true),
+                          child: Metric(
+                            opportunity.returnText,
+                            'Target return',
+                            gold: true,
+                          ),
                         ),
-                        Expanded(child: Metric('UGX 850K', 'Minimum')),
+                        Expanded(
+                          child: Metric(opportunity.minimumText, 'Minimum'),
+                        ),
                       ],
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
-                        Expanded(child: Metric('36 mo', 'Liquidity')),
-                        Expanded(child: Metric('Medium', 'Risk level')),
+                        const Expanded(child: Metric('36 mo', 'Liquidity')),
+                        Expanded(
+                          child: Metric(opportunity.riskLevel, 'Risk level'),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-              const Panel(
+              Panel(
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        Expanded(
+                        const Expanded(
                           child: Text(
                             'Funding status',
                             style: AppText.cardHeadingSmall,
                           ),
                         ),
-                        Text('62% funded', style: AppText.goldBody),
+                        Text(
+                          '${opportunity.fundedPercent.toStringAsFixed(0)}% funded',
+                          style: AppText.goldBody,
+                        ),
                       ],
                     ),
-                    SizedBox(height: 14),
-                    ProgressLine(value: .62),
-                    SizedBox(height: 12),
-                    Text(
-                      'USDT and USDC accepted. Quote expires before '
-                      'settlement confirmation.',
+                    const SizedBox(height: 14),
+                    ProgressLine(value: opportunity.fundedPercent / 100),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Supported payment options and quote expiry are shown before settlement confirmation.',
                       style: AppText.small,
                     ),
                   ],
@@ -4735,7 +5332,13 @@ class DetailScreen extends StatelessWidget {
                   kyc,
                   () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => PaymentScreen(kyc: kyc)),
+                    MaterialPageRoute(
+                      builder: (_) => PaymentScreen(
+                        kyc: kyc,
+                        opportunity: opportunity,
+                        investmentRepository: investmentRepository,
+                      ),
+                    ),
                   ),
                   onStartKyc,
                 ),
@@ -4748,13 +5351,30 @@ class DetailScreen extends StatelessWidget {
   }
 }
 
-class PaymentScreen extends StatelessWidget {
-  const PaymentScreen({super.key, required this.kyc});
+class PaymentScreen extends StatefulWidget {
+  const PaymentScreen({
+    super.key,
+    required this.kyc,
+    required this.opportunity,
+    required this.investmentRepository,
+  });
 
   final KycProfile kyc;
+  final InvestmentOpportunity opportunity;
+  final InvestmentRepository investmentRepository;
+
+  @override
+  State<PaymentScreen> createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  bool submitting = false;
 
   @override
   Widget build(BuildContext context) {
+    final paymentAsset = widget.opportunity.paymentMethods.contains('USDT')
+        ? 'USDT'
+        : widget.opportunity.paymentMethods.firstOrNull ?? 'USDT';
     return PhoneFrame(
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -4763,39 +5383,39 @@ class PaymentScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           child: Column(
             children: [
-              const Panel(
+              Panel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Buying BrickShares', style: AppText.eyebrow),
-                    SizedBox(height: 12),
+                    const Text('Buying BrickShares', style: AppText.eyebrow),
+                    const SizedBox(height: 12),
                     Text(
-                      'Kololo Heights Income\nFund',
+                      widget.opportunity.displayTitle,
                       style: AppText.cardHeading,
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 28),
-              const Panel(
+              Panel(
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        Expanded(
+                        const Expanded(
                           child: Text(
                             'Crypto quote',
                             style: AppText.cardHeading,
                           ),
                         ),
-                        Text('Expires in 09:42', style: AppText.warning),
+                        Text('Expires after submit', style: AppText.warning),
                       ],
                     ),
-                    SizedBox(height: 18),
-                    QuoteRow('Network', 'USDT - TRC20'),
-                    QuoteRow('Quote', '445.18 USDT'),
-                    QuoteRow('Network fee', '1.00 USDT'),
-                    QuoteRow(
+                    const SizedBox(height: 18),
+                    QuoteRow('Payment asset', paymentAsset),
+                    QuoteRow('Amount', widget.opportunity.minimumText),
+                    const QuoteRow('Network fee', 'Calculated by backend'),
+                    const QuoteRow(
                       'Settlement',
                       'Pending confirmation',
                       warning: true,
@@ -4824,14 +5444,9 @@ class PaymentScreen extends StatelessWidget {
               const SizedBox(height: 36),
               PrimaryButton(
                 key: const ValueKey('confirm-purchase'),
-                label: 'Confirm purchase',
-                onPressed: kyc.canPerformFinancialActions
-                    ? () => Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SuccessScreen(),
-                        ),
-                      )
+                label: submitting ? 'Submitting...' : 'Confirm purchase',
+                onPressed: widget.kyc.canPerformFinancialActions && !submitting
+                    ? () => _submit(paymentAsset)
                     : null,
               ),
               const SizedBox(height: 14),
@@ -4845,10 +5460,40 @@ class PaymentScreen extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _submit(String paymentAsset) async {
+    setState(() => submitting = true);
+    try {
+      final order = await widget.investmentRepository.createPurchaseOrder(
+        PurchaseRequest(
+          opportunityId: widget.opportunity.id,
+          amountUgx: widget.opportunity.minimumInvestment,
+          paymentAsset: paymentAsset,
+        ),
+      );
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => SuccessScreen(order: order)),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showMessage(context, _friendlyUnexpectedMessage(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => submitting = false);
+      }
+    }
+  }
 }
 
 class SuccessScreen extends StatelessWidget {
-  const SuccessScreen({super.key});
+  const SuccessScreen({super.key, required this.order});
+
+  final PurchaseOrder order;
 
   @override
   Widget build(BuildContext context) {
@@ -4881,19 +5526,19 @@ class SuccessScreen extends StatelessWidget {
                   style: AppText.bodyLarge,
                 ),
                 const SizedBox(height: 38),
-                const Panel(
+                Panel(
                   child: SizedBox(
                     height: 84,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
+                        const Expanded(
                           child: Text(
                             'Settlement status',
                             style: AppText.bodyLarge,
                           ),
                         ),
-                        Text('Confirming', style: AppText.warning),
+                        Text(order.status, style: AppText.warning),
                       ],
                     ),
                   ),
@@ -4921,11 +5566,13 @@ class AppPage extends StatelessWidget {
     required this.children,
     this.subtitle,
     this.simpleHeader = false,
+    this.onProfileTap,
   });
 
   final String title;
   final String? subtitle;
   final bool simpleHeader;
+  final VoidCallback? onProfileTap;
   final List<Widget> children;
 
   @override
@@ -4943,7 +5590,7 @@ class AppPage extends StatelessWidget {
                   if (simpleHeader)
                     Center(child: Text(title, style: AppText.topTitle))
                   else
-                    AppHeader(title: title),
+                    AppHeader(title: title, onProfileTap: onProfileTap),
                   if (subtitle != null) ...[
                     const SizedBox(height: 4),
                     Text(subtitle!, style: AppText.body),
@@ -4967,9 +5614,10 @@ class AppPage extends StatelessWidget {
 }
 
 class AppHeader extends StatelessWidget {
-  const AppHeader({super.key, required this.title});
+  const AppHeader({super.key, required this.title, this.onProfileTap});
 
   final String title;
+  final VoidCallback? onProfileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -4977,37 +5625,28 @@ class AppHeader extends StatelessWidget {
       height: 48,
       child: Row(
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.gold),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.apartment_rounded,
-              color: AppColors.gold,
-              size: 19,
-            ),
-          ),
+          const _BrickMark(),
           const SizedBox(width: 10),
           Expanded(child: Text(title, style: AppText.topTitle)),
           HeaderCircle(
+            onTap: () => showMessage(context, 'No new notifications'),
             child: const Icon(
               Icons.notifications_none_rounded,
               color: AppColors.secondary,
               size: 18,
             ),
-            onTap: () => showMessage(context, 'No new notifications'),
           ),
           const SizedBox(width: 9),
           HeaderCircle(
+            key: const ValueKey('profile-header-button'),
+            onTap:
+                onProfileTap ??
+                () => showMessage(context, 'Profile is in More'),
             child: const Icon(
               Icons.person_outline_rounded,
               color: AppColors.gold,
               size: 17,
             ),
-            onTap: () => showMessage(context, 'Profile is in More'),
           ),
         ],
       ),
@@ -5373,6 +6012,99 @@ class FilterChoices extends StatelessWidget {
   }
 }
 
+class GoogleAuthButton extends StatelessWidget {
+  const GoogleAuthButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.border),
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        icon: const GoogleIcon(),
+        label: Text(label, overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+}
+
+class GoogleIcon extends StatelessWidget {
+  const GoogleIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: CustomPaint(painter: _GoogleIconPainter()),
+    );
+  }
+}
+
+class _GoogleIconPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = size.width * .16;
+    final rect = Offset.zero & size;
+
+    void drawArc(Color color, double start, double sweep) {
+      canvas.drawArc(
+        rect.deflate(stroke / 2),
+        start,
+        sweep,
+        false,
+        Paint()
+          ..color = color
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    drawArc(const Color(0xFF4285F4), -0.08, 1.32);
+    drawArc(const Color(0xFF34A853), 1.18, 1.34);
+    drawArc(const Color(0xFFFBBC05), 2.43, 1.06);
+    drawArc(const Color(0xFFEA4335), 3.43, 1.54);
+
+    final bluePaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.square
+      ..style = PaintingStyle.stroke;
+    final centerY = size.height * .52;
+    canvas.drawLine(
+      Offset(size.width * .52, centerY),
+      Offset(size.width * .94, centerY),
+      bluePaint,
+    );
+    canvas.drawLine(
+      Offset(size.width * .94, centerY),
+      Offset(size.width * .94, size.height * .65),
+      bluePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
     super.key,
@@ -5449,6 +6181,9 @@ class AppTextField extends StatefulWidget {
     this.obscureText = false,
     this.compact = false,
     this.keyboardType,
+    this.prefixIcon,
+    this.textInputAction,
+    this.autofillHints,
   });
 
   final String? initialValue;
@@ -5457,6 +6192,9 @@ class AppTextField extends StatefulWidget {
   final bool obscureText;
   final bool compact;
   final TextInputType? keyboardType;
+  final IconData? prefixIcon;
+  final TextInputAction? textInputAction;
+  final Iterable<String>? autofillHints;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -5488,13 +6226,24 @@ class _AppTextFieldState extends State<AppTextField> {
         initialValue: widget.controller == null ? widget.initialValue : null,
         obscureText: obscured,
         keyboardType: widget.keyboardType,
+        textInputAction: widget.textInputAction,
+        autofillHints: widget.autofillHints,
         style: const TextStyle(fontSize: 14, color: AppColors.primary),
         decoration: InputDecoration(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: widget.prefixIcon == null ? 16 : 12,
+          ),
           filled: true,
-          fillColor: AppColors.background,
+          fillColor: AppColors.surface,
           hintText: widget.hintText,
           hintStyle: AppText.placeholder,
+          prefixIcon: widget.prefixIcon == null
+              ? null
+              : Icon(widget.prefixIcon, color: AppColors.muted, size: 19),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 42,
+            minHeight: 42,
+          ),
           suffixIcon: widget.obscureText
               ? IconButton(
                   tooltip: obscured ? 'Show password' : 'Hide password',
@@ -5518,7 +6267,7 @@ class _AppTextFieldState extends State<AppTextField> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(widget.compact ? 12 : 14),
-            borderSide: const BorderSide(color: AppColors.gold),
+            borderSide: const BorderSide(color: AppColors.gold, width: 1.3),
           ),
         ),
       ),
@@ -5759,20 +6508,36 @@ PreferredSizeWidget detailAppBar(BuildContext context, String title) {
   );
 }
 
-void openDetail(BuildContext context, KycProfile kyc, VoidCallback onStartKyc) {
+void openDetail(
+  BuildContext context,
+  KycProfile kyc,
+  InvestmentOpportunity opportunity,
+  InvestmentRepository investmentRepository,
+  VoidCallback onStartKyc,
+) {
   Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (_) => DetailScreen(kyc: kyc, onStartKyc: onStartKyc),
+      builder: (_) => DetailScreen(
+        kyc: kyc,
+        opportunity: opportunity,
+        investmentRepository: investmentRepository,
+        onStartKyc: onStartKyc,
+      ),
     ),
   );
 }
 
 void showMessage(BuildContext context, String message) {
-  ScaffoldMessenger.of(context)
+  final displayMessage = message.trim().isEmpty
+      ? 'Something went wrong. Please try again.'
+      : message.trim();
+  final messenger =
+      rootScaffoldMessengerKey.currentState ?? ScaffoldMessenger.of(context);
+  messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.panel),
+      SnackBar(content: Text(displayMessage), backgroundColor: AppColors.panel),
     );
 }
 
@@ -5780,7 +6545,15 @@ String _authErrorMessage(Object error) {
   if (error is AuthValidationException) {
     return error.message;
   }
+  if (error is AuthOperationTimeoutException) {
+    return error.message;
+  }
   if (error is FirebaseAuthException) {
+    final message = error.message?.toLowerCase() ?? '';
+    if (message.contains('cleartext') || message.contains('10.0.2.2')) {
+      return 'The app could not reach the Firebase Auth emulator. Rebuild the debug app and make sure the Firebase emulators are running.';
+    }
+
     return switch (error.code) {
       'invalid-email' => 'Enter a valid email address.',
       'missing-email' => 'Enter your email address.',
@@ -5803,7 +6576,9 @@ String _authErrorMessage(Object error) {
         'This link has expired. Request a new one and try again.',
       'invalid-action-code' =>
         'This link is no longer valid. Request a new one and try again.',
-      _ => 'We could not complete sign in. Please try again.',
+      'internal-error' =>
+        'We could not complete that account request. Please try again.',
+      _ => 'We could not complete that account request. Please try again.',
     };
   }
 
@@ -5848,7 +6623,8 @@ String _friendlyUnexpectedMessage(Object error) {
     return 'We could not connect. Check your internet and try again.';
   }
 
-  if (text.contains('permission-denied') || text.contains('permission denied')) {
+  if (text.contains('permission-denied') ||
+      text.contains('permission denied')) {
     return 'You do not have permission to do that.';
   }
 

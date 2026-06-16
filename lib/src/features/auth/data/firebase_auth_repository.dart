@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/firebase/backend_functions.dart';
 import '../../../core/firebase/firebase_bootstrap.dart';
@@ -14,6 +15,7 @@ class FirebaseAuthRepository implements AuthRepository {
 
   final FirebaseAuth _firebaseAuth;
   final BackendFunctions _backendFunctions;
+  static const Duration _authTimeout = Duration(seconds: 12);
 
   @override
   Future<void> signIn(SignInCredentials credentials) async {
@@ -25,10 +27,26 @@ class FirebaseAuthRepository implements AuthRepository {
       throw const AuthValidationException('Enter your password.');
     }
 
-    await _firebaseAuth.signInWithEmailAndPassword(
-      email: email,
-      password: credentials.password,
+    await _withAuthTimeout(
+      _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: credentials.password,
+      ),
     );
+  }
+
+  @override
+  Future<void> signInWithGoogle() async {
+    final provider = GoogleAuthProvider()
+      ..addScope('email')
+      ..addScope('profile');
+
+    if (kIsWeb) {
+      await _withAuthTimeout(_firebaseAuth.signInWithPopup(provider));
+      return;
+    }
+
+    await _withAuthTimeout(_firebaseAuth.signInWithProvider(provider));
   }
 
   @override
@@ -52,14 +70,14 @@ class FirebaseAuthRepository implements AuthRepository {
       throw const AuthValidationException('Passwords do not match.');
     }
 
-    final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
-      email: email,
-      password: credentials.password,
+    final userCredential = await _withAuthTimeout(
+      _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: credentials.password,
+      ),
     );
 
-    await userCredential.user?.updateDisplayName(
-      '$firstName $lastName'.trim(),
-    );
+    await userCredential.user?.updateDisplayName('$firstName $lastName'.trim());
   }
 
   @override
@@ -82,10 +100,14 @@ class FirebaseAuthRepository implements AuthRepository {
     }
 
     if (FirebaseBootstrap.useEmulators) {
-      return _backendFunctions.sendDevelopmentPasswordResetEmail(email);
+      return _withAuthTimeout(
+        _backendFunctions.sendDevelopmentPasswordResetEmail(email),
+      );
     }
 
-    return _firebaseAuth.sendPasswordResetEmail(email: email.trim());
+    return _withAuthTimeout(
+      _firebaseAuth.sendPasswordResetEmail(email: email.trim()),
+    );
   }
 
   @override
@@ -96,10 +118,13 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() => _firebaseAuth.signOut();
-}
 
-class AuthValidationException implements Exception {
-  const AuthValidationException(this.message);
-
-  final String message;
+  Future<T> _withAuthTimeout<T>(Future<T> operation) {
+    return operation.timeout(
+      _authTimeout,
+      onTimeout: () => throw const AuthOperationTimeoutException(
+        'We could not reach Firebase Auth. Make sure the local Firebase emulators are running, then try again.',
+      ),
+    );
+  }
 }

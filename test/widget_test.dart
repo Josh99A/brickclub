@@ -3,6 +3,8 @@ import 'package:brickclub/src/features/admin/domain/admin_models.dart';
 import 'package:brickclub/src/features/admin/domain/admin_repository.dart';
 import 'package:brickclub/src/features/auth/domain/auth_credentials.dart';
 import 'package:brickclub/src/features/auth/domain/auth_repository.dart';
+import 'package:brickclub/src/features/investment/domain/investment_models.dart';
+import 'package:brickclub/src/features/investment/domain/investment_repository.dart';
 import 'package:brickclub/src/features/kyc/domain/kyc_models.dart';
 import 'package:brickclub/src/features/kyc/domain/kyc_repository.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final authRepository = FakeAuthRepository();
   final adminRepository = FakeAdminRepository();
+  final investmentRepository = FakeInvestmentRepository();
   final kycRepository = FakeKycRepository.approved();
 
   Future<void> signIn(WidgetTester tester) async {
@@ -18,6 +21,7 @@ void main() {
       BrickClubApp(
         authRepository: authRepository,
         adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
         kycRepository: kycRepository,
         showLandingPage: true,
       ),
@@ -40,6 +44,7 @@ void main() {
       BrickClubApp(
         authRepository: authRepository,
         adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
         kycRepository: kycRepository,
         showLandingPage: true,
       ),
@@ -51,11 +56,12 @@ void main() {
     expect(find.text('Built on investor confidence.'), findsOneWidget);
   });
 
-  testWidgets('mobile startup moves from splash to signup', (tester) async {
+  testWidgets('mobile startup moves from splash to sign in', (tester) async {
     await tester.pumpWidget(
       BrickClubApp(
         authRepository: authRepository,
         adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
         kycRepository: kycRepository,
         showLandingPage: false,
         splashDuration: Duration.zero,
@@ -67,7 +73,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Create account'), findsWidgets);
+    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.byKey(const ValueKey('create-account-link')), findsOneWidget);
     expect(find.text('Own more than\na dream.'), findsNothing);
   });
 
@@ -81,6 +88,7 @@ void main() {
       BrickClubApp(
         authRepository: authRepository,
         adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
         kycRepository: kycRepository,
         showLandingPage: true,
       ),
@@ -102,6 +110,61 @@ void main() {
     expect(find.text('0x71B...8E4'), findsOneWidget);
   });
 
+  testWidgets('sign in failure shows an inline frontend error', (tester) async {
+    final failingAuthRepository = FakeAuthRepository(
+      signInError: const AuthValidationException('Enter your password.'),
+    );
+
+    await tester.pumpWidget(
+      BrickClubApp(
+        authRepository: failingAuthRepository,
+        adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
+        kycRepository: kycRepository,
+        showLandingPage: true,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('landing-sign-in')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sign-in')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('auth-message')), findsOneWidget);
+    expect(find.text('Enter your password.'), findsWidgets);
+    expect(find.text('Welcome back'), findsOneWidget);
+  });
+
+  testWidgets('non-admin sign in shows an inline frontend error', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final memberAuthRepository = FakeAuthRepository(isAdmin: false);
+
+    await tester.pumpWidget(
+      BrickClubApp(
+        authRepository: memberAuthRepository,
+        adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
+        kycRepository: kycRepository,
+        showLandingPage: true,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('landing-sign-in')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('admin-access')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sign-in')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('auth-message')), findsOneWidget);
+    expect(find.text('This account does not have admin access.'), findsWidgets);
+    expect(find.text('Admin sign in'), findsOneWidget);
+  });
+
   testWidgets('matches the BrickClub authenticated navigation', (tester) async {
     await signIn(tester);
 
@@ -109,7 +172,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('nav-invest')));
     await tester.pumpAndSettle();
-    expect(find.text('12 opportunities'), findsOneWidget);
+    expect(find.text('1 opportunities'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-wallet')));
     await tester.pumpAndSettle();
@@ -122,6 +185,62 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('nav-more')));
     await tester.pumpAndSettle();
     expect(find.text('Amina Kato'), findsOneWidget);
+  });
+
+  testWidgets('profile header button opens the profile page', (tester) async {
+    await signIn(tester);
+
+    await tester.tap(find.byKey(const ValueKey('profile-header-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Amina Kato'), findsOneWidget);
+  });
+
+  testWidgets('investment filters apply to the opportunities list', (
+    tester,
+  ) async {
+    await signIn(tester);
+    await tester.tap(find.byKey(const ValueKey('nav-invest')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('REIT'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('show-brickshares')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 opportunities'), findsOneWidget);
+    expect(find.text('Bugolobi\nLogistics REIT'), findsOneWidget);
+  });
+
+  testWidgets('account page login button returns to sign in', (tester) async {
+    await tester.pumpWidget(
+      BrickClubApp(
+        authRepository: authRepository,
+        adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
+        kycRepository: kycRepository,
+        showLandingPage: false,
+        splashDuration: Duration.zero,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('create-account-link')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('create-account-link')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('account-login-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('account-login-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome back'), findsOneWidget);
   });
 
   testWidgets('investment purchase flow reaches settlement success', (
@@ -166,6 +285,7 @@ void main() {
       BrickClubApp(
         authRepository: authRepository,
         adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
         kycRepository: pendingKycRepository,
         showLandingPage: true,
       ),
@@ -193,9 +313,55 @@ void main() {
     expect(find.text('Complete KYC first'), findsOneWidget);
     expect(find.byKey(const ValueKey('start-kyc-gate')), findsOneWidget);
   });
+
+  testWidgets('KYC phone errors appear inline with a useful message', (
+    tester,
+  ) async {
+    final pendingKycRepository = FakeKycRepository.pending(
+      phoneError: const KycValidationException(
+        'Enter your phone number in international format, e.g. +256774224734.',
+      ),
+    );
+    await tester.pumpWidget(
+      BrickClubApp(
+        authRepository: authRepository,
+        adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
+        kycRepository: pendingKycRepository,
+        showLandingPage: true,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('landing-sign-in')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sign-in')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('kyc-status-cta')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('kyc-phone')),
+      '0774224734',
+    );
+    await tester.ensureVisible(find.byKey(const ValueKey('send-phone-code')));
+    await tester.tap(find.byKey(const ValueKey('send-phone-code')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('kyc-message')), findsOneWidget);
+    expect(
+      find.text(
+        'Enter your phone number in international format, e.g. +256774224734.',
+      ),
+      findsWidgets,
+    );
+  });
 }
 
 class FakeAuthRepository implements AuthRepository {
+  FakeAuthRepository({this.signInError, this.isAdmin = true});
+
+  final Object? signInError;
+  final bool isAdmin;
+
   @override
   Future<void> createAccount(SignUpCredentials credentials) async {}
 
@@ -211,13 +377,21 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> sendPasswordResetEmail(String email) async {}
 
   @override
-  Future<bool> currentUserIsAdmin() async => true;
+  Future<bool> currentUserIsAdmin() async => isAdmin;
 
   @override
   Future<void> signOut() async {}
 
   @override
-  Future<void> signIn(SignInCredentials credentials) async {}
+  Future<void> signIn(SignInCredentials credentials) async {
+    final error = signInError;
+    if (error != null) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> signInWithGoogle() async {}
 }
 
 class FakeAdminRepository implements AdminRepository {
@@ -314,8 +488,91 @@ class FakeAdminRepository implements AdminRepository {
   }) async {}
 }
 
+class FakeInvestmentRepository implements InvestmentRepository {
+  static const opportunities = [
+    InvestmentOpportunity(
+      id: 'asset-1',
+      assetClass: 'Real Estate',
+      riskLevel: 'Medium',
+      paymentMethods: ['USDT', 'USDC', 'UGX Wallet'],
+      title: 'Kololo Heights Income Fund',
+      location: 'Kampala Central',
+      minimumInvestment: 250000,
+      targetReturn: 11.8,
+      fundedPercent: 62,
+    ),
+    InvestmentOpportunity(
+      id: 'asset-2',
+      assetClass: 'REIT',
+      riskLevel: 'Medium',
+      paymentMethods: ['USDT', 'UGX Wallet'],
+      title: 'Bugolobi\nLogistics REIT',
+      location: 'Income portfolio',
+      minimumInvestment: 500000,
+      targetReturn: 9.6,
+      fundedPercent: 41,
+    ),
+    InvestmentOpportunity(
+      id: 'asset-3',
+      assetClass: 'ETF',
+      riskLevel: 'Low',
+      paymentMethods: ['USDC', 'UGX Wallet'],
+      title: 'East Africa\nProperty ETF',
+      location: 'Diversified fund',
+      minimumInvestment: 150000,
+      targetReturn: 7.4,
+      fundedPercent: 78,
+    ),
+    InvestmentOpportunity(
+      id: 'asset-4',
+      assetClass: 'Index',
+      riskLevel: 'Low',
+      paymentMethods: ['BTC', 'USDC'],
+      title: 'Kampala Core\nIndex',
+      location: 'Prime property basket',
+      minimumInvestment: 200000,
+      targetReturn: 8.1,
+      fundedPercent: 54,
+    ),
+    InvestmentOpportunity(
+      id: 'asset-5',
+      assetClass: 'Real Estate',
+      riskLevel: 'High',
+      paymentMethods: ['USDT', 'BTC'],
+      title: 'Entebbe Bay\nDevelopment',
+      location: 'Growth project',
+      minimumInvestment: 750000,
+      targetReturn: 14.2,
+      fundedPercent: 29,
+    ),
+  ];
+
+  @override
+  Future<PurchaseOrder> createPurchaseOrder(PurchaseRequest request) async {
+    final opportunity = opportunities.firstWhere(
+      (item) => item.id == request.opportunityId,
+    );
+    return PurchaseOrder(
+      id: 'order-1',
+      opportunityId: opportunity.id,
+      opportunityTitle: opportunity.title,
+      amountUgx: request.amountUgx,
+      paymentNetwork: 'Tron',
+      paymentAsset: request.paymentAsset,
+      quoteAmount: 67.57,
+      networkFee: 1,
+      status: 'pending_payment',
+      expiresAt: '2026-06-16T10:00:00.000Z',
+    );
+  }
+
+  @override
+  Future<List<InvestmentOpportunity>> listOpportunities() async =>
+      opportunities;
+}
+
 class FakeKycRepository implements KycRepository {
-  FakeKycRepository.approved()
+  FakeKycRepository.approved({this.phoneError})
     : profile = const KycProfile(
         status: KycStatus.approved,
         emailVerified: true,
@@ -323,7 +580,7 @@ class FakeKycRepository implements KycRepository {
         fullLegalName: 'Awule Joshua',
       );
 
-  FakeKycRepository.pending()
+  FakeKycRepository.pending({this.phoneError})
     : profile = const KycProfile(
         status: KycStatus.notStarted,
         emailVerified: false,
@@ -331,12 +588,18 @@ class FakeKycRepository implements KycRepository {
       );
 
   final KycProfile profile;
+  final Object? phoneError;
 
   @override
   Future<void> sendEmailVerification() async {}
 
   @override
-  Future<void> sendPhoneVerificationCode(String phoneNumber) async {}
+  Future<void> sendPhoneVerificationCode(String phoneNumber) async {
+    final error = phoneError;
+    if (error != null) {
+      throw error;
+    }
+  }
 
   @override
   Future<void> submit(KycSubmission submission) async {}

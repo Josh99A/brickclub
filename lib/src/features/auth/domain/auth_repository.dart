@@ -20,6 +20,8 @@ class SignedInUserDetails {
 abstract interface class AuthRepository {
   Future<void> signIn(SignInCredentials credentials);
 
+  Future<void> signInWithGoogle();
+
   Future<void> createAccount(SignUpCredentials credentials);
 
   SignedInUserDetails? currentUserDetails();
@@ -29,4 +31,16 @@ abstract interface class AuthRepository {
   Future<bool> currentUserIsAdmin();
 
   Future<void> signOut();
+}
+
+class AuthValidationException implements Exception {
+  const AuthValidationException(this.message);
+
+  final String message;
+}
+
+class AuthOperationTimeoutException implements Exception {
+  const AuthOperationTimeoutException(this.message);
+
+  final String message;
 }

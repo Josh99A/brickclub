@@ -4,6 +4,7 @@ import 'src/app/brickclub_app.dart';
 import 'src/core/firebase/firebase_bootstrap.dart';
 import 'src/features/admin/data/firebase_admin_repository.dart';
 import 'src/features/auth/data/firebase_auth_repository.dart';
+import 'src/features/investment/data/firebase_investment_repository.dart';
 import 'src/features/kyc/data/firebase_kyc_repository.dart';
 
 Future<void> main() async {
@@ -14,6 +15,7 @@ Future<void> main() async {
     BrickClubApp(
       authRepository: FirebaseAuthRepository(),
       adminRepository: FirebaseAdminRepository(),
+      investmentRepository: FirebaseInvestmentRepository(),
       kycRepository: FirebaseKycRepository(),
     ),
   );
