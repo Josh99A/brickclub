@@ -26,6 +26,14 @@ class BackendFunctions {
     );
     await callable.call<void>({'email': email.trim()});
   }
+
+  Future<void> registerMessagingToken({
+    required String token,
+    required String platform,
+  }) async {
+    final callable = _functions.httpsCallable('registerMessagingToken');
+    await callable.call<void>({'token': token, 'platform': platform});
+  }
 }
 
 class MemberProfileDto {

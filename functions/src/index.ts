@@ -4,12 +4,14 @@ import {logger} from "firebase-functions";
 import {initializeApp} from "firebase-admin/app";
 import {getAuth, UserRecord} from "firebase-admin/auth";
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
+import {getMessaging} from "firebase-admin/messaging";
 import * as nodemailer from "nodemailer";
 
 initializeApp();
 
 const db = getFirestore();
 const auth = getAuth();
+const messaging = getMessaging();
 
 type AdminAsset = {
   id: string;
@@ -26,6 +28,7 @@ type CryptoPaymentOption = {
   network: string;
   assetSymbol: string;
   walletAddress: string;
+  qrCodeUrl: string;
   enabled: boolean;
   minimumAmount: number;
 };
@@ -54,6 +57,10 @@ const assetsCollection = db.collection("adminAssets");
 const paymentOptionsCollection = db.collection("cryptoPaymentOptions");
 const purchaseOrdersCollection = db.collection("purchaseOrders");
 const kycProfilesCollection = db.collection("kycProfiles");
+const notificationTokensCollection = db.collection("notificationTokens");
+const adminNotificationsCollection = db.collection("adminNotifications");
+const withdrawalRequestsCollection = db.collection("withdrawalRequests");
+const supportTicketsCollection = db.collection("supportTickets");
 const devMailFrom = "BrickClub Dev <no-reply@brickclub.local>";
 
 export const getMemberProfile = onCall(async (request) => {
@@ -138,11 +145,20 @@ export const listAdminDashboard = onAdminCall(async () => {
       assetsCollection.get(),
       paymentOptionsCollection.get(),
     ]);
+  const depositRequestsSnapshot = await purchaseOrdersCollection
+    .where("status", "in", ["proof_submitted", "deposit_verified", "deposit_rejected"])
+    .get();
+  const supportTicketsSnapshot = await supportTicketsCollection
+    .orderBy("updatedAt", "desc")
+    .limit(100)
+    .get();
 
   return {
     users: usersResult.users.map(userToJson),
     assets: assetsSnapshot.docs.map(assetFromDoc),
     cryptoPaymentOptions: paymentOptionsSnapshot.docs.map(paymentOptionFromDoc),
+    depositRequests: depositRequestsSnapshot.docs.map(depositRequestFromDoc),
+    supportTickets: supportTicketsSnapshot.docs.map(supportTicketFromDoc),
   };
 });
 
@@ -242,6 +258,7 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
     quoteAmount,
     networkFee,
     paymentWalletAddress: paymentOption.walletAddress,
+    paymentQrCodeUrl: paymentOption.qrCodeUrl,
     status: "pending_payment",
     expiresAt: expiresAt.toISOString(),
     createdAt: FieldValue.serverTimestamp(),
@@ -250,7 +267,343 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
 
   await purchaseOrdersCollection.doc(id).set(order);
 
+  await notifyAdmins({
+    type: "deposit_request_created",
+    title: "New deposit request",
+    body: `${asset.title} deposit request created for ${amountUgx} UGX.`,
+    data: {orderId: id, uid, opportunityId},
+  });
+
   return order;
+});
+
+export const submitDepositProof = onMemberCall(async (request) => {
+  const data = readObject(request.data);
+  const orderId = readString(data, "orderId");
+  const transactionHash = readString(data, "transactionHash");
+  const proofUrl = readString(data, "proofUrl");
+  const uid = request.auth!.uid;
+
+  const orderRef = purchaseOrdersCollection.doc(orderId);
+  const orderSnapshot = await orderRef.get();
+  const order = orderSnapshot.data();
+  if (!orderSnapshot.exists || !order) {
+    throw new HttpsError("not-found", "Deposit request was not found.");
+  }
+  if (order.uid !== uid) {
+    throw new HttpsError(
+      "permission-denied",
+      "You can only update your own deposit request.",
+    );
+  }
+  if (order.status !== "pending_payment") {
+    throw new HttpsError(
+      "failed-precondition",
+      "This deposit request is no longer awaiting proof.",
+    );
+  }
+
+  await orderRef.set(
+    {
+      transactionHash,
+      proofUrl,
+      status: "proof_submitted",
+      proofSubmittedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  await notifyAdmins({
+    type: "deposit_proof_submitted",
+    title: "Deposit proof submitted",
+    body: `${String(order.opportunityTitle ?? "BrickShares")} proof is ready for verification.`,
+    data: {orderId, uid},
+  });
+
+  return {
+    ...order,
+    id: orderId,
+    transactionHash,
+    proofUrl,
+    status: "proof_submitted",
+  };
+});
+
+export const verifyDepositProof = onAdminCall(async (data) => {
+  const orderId = readString(data, "orderId");
+  const orderRef = purchaseOrdersCollection.doc(orderId);
+  const orderSnapshot = await orderRef.get();
+  const order = orderSnapshot.data();
+  if (!orderSnapshot.exists || !order) {
+    throw new HttpsError("not-found", "Deposit request was not found.");
+  }
+  if (order.status !== "proof_submitted") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Only submitted deposit proofs can be verified.",
+    );
+  }
+
+  await orderRef.set(
+    {
+      status: "deposit_verified",
+      verifiedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  await notifyMember(String(order.uid), {
+    type: "deposit_verified",
+    title: "Deposit verified",
+    body: "Your crypto deposit proof has been verified.",
+    data: {orderId},
+  });
+
+  return {orderId, status: "deposit_verified"};
+});
+
+export const rejectDepositProof = onAdminCall(async (data) => {
+  const value = readObject(data);
+  const orderId = readString(value, "orderId");
+  const reason = readString(value, "reason");
+  const orderRef = purchaseOrdersCollection.doc(orderId);
+  const orderSnapshot = await orderRef.get();
+  const order = orderSnapshot.data();
+  if (!orderSnapshot.exists || !order) {
+    throw new HttpsError("not-found", "Deposit request was not found.");
+  }
+
+  await orderRef.set(
+    {
+      status: "deposit_rejected",
+      rejectionReason: reason,
+      reviewedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  await notifyMember(String(order.uid), {
+    type: "deposit_rejected",
+    title: "Deposit proof needs attention",
+    body: reason,
+    data: {orderId},
+  });
+
+  return {orderId, status: "deposit_rejected", reason};
+});
+
+export const createWithdrawalRequest = onMemberCall(async (request) => {
+  const data = readObject(request.data);
+  const amountUgx = readPositiveNumber(data, "amountUgx");
+  const destinationAddress = readString(data, "destinationAddress");
+  const assetSymbol = readString(data, "assetSymbol").toUpperCase();
+  const uid = request.auth!.uid;
+  const id = randomUUID();
+
+  const requestData = {
+    id,
+    uid,
+    amountUgx,
+    destinationAddress,
+    assetSymbol,
+    status: "submitted",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  await withdrawalRequestsCollection.doc(id).set(requestData);
+
+  await notifyAdmins({
+    type: "withdrawal_request_created",
+    title: "New withdrawal request",
+    body: `${amountUgx} UGX ${assetSymbol} withdrawal request submitted.`,
+    data: {withdrawalRequestId: id, uid},
+  });
+
+  return requestData;
+});
+
+export const registerMessagingToken = onMemberCall(async (request) => {
+  const data = readObject(request.data);
+  const token = readString(data, "token");
+  const platform = readOptionalString(data, "platform") ?? "unknown";
+
+  await notificationTokensCollection.doc(token).set(
+    {
+      uid: request.auth!.uid,
+      admin: request.auth!.token.admin === true,
+      platform,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  return {registered: true};
+});
+
+export const createSupportTicket = onMemberCall(async (request) => {
+  const data = readObject(request.data);
+  const subject = readString(data, "subject");
+  const message = readString(data, "message");
+  const uid = request.auth!.uid;
+  const user = await auth.getUser(uid);
+  const id = randomUUID();
+  const now = new Date().toISOString();
+
+  const ticket = {
+    id,
+    uid,
+    subject,
+    status: "waiting_for_admin",
+    userEmail: user.email ?? "",
+    userDisplayName: user.displayName ?? "",
+    messages: [
+      supportMessage({
+        senderUid: uid,
+        senderRole: "member",
+        body: message,
+        createdAt: now,
+      }),
+    ],
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await supportTicketsCollection.doc(id).set(ticket);
+
+  await notifyAdmins({
+    type: "support_ticket_created",
+    title: "New support request",
+    body: `${subject}: ${message}`,
+    data: {ticketId: id, uid},
+  });
+
+  return {id};
+});
+
+export const replyToSupportTicket = onMemberCall(async (request) => {
+  const data = readObject(request.data);
+  const ticketId = readString(data, "ticketId");
+  const message = readString(data, "message");
+  const uid = request.auth!.uid;
+  const ticketRef = supportTicketsCollection.doc(ticketId);
+  const snapshot = await ticketRef.get();
+  const ticket = snapshot.data();
+
+  if (!snapshot.exists || !ticket) {
+    throw new HttpsError("not-found", "Support ticket was not found.");
+  }
+  if (ticket.uid !== uid) {
+    throw new HttpsError(
+      "permission-denied",
+      "You can only reply to your own support tickets.",
+    );
+  }
+  if (ticket.status === "closed") {
+    throw new HttpsError(
+      "failed-precondition",
+      "This support ticket is already closed.",
+    );
+  }
+
+  await ticketRef.set(
+    {
+      status: "waiting_for_admin",
+      messages: FieldValue.arrayUnion(
+        supportMessage({
+          senderUid: uid,
+          senderRole: "member",
+          body: message,
+          createdAt: new Date().toISOString(),
+        }),
+      ),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  await notifyAdmins({
+    type: "support_ticket_replied",
+    title: "Support reply from member",
+    body: `${String(ticket.subject ?? "Support request")}: ${message}`,
+    data: {ticketId, uid},
+  });
+
+  return {ticketId};
+});
+
+export const adminReplyToSupportTicket = onAdminCall(async (data) => {
+  const value = readObject(data);
+  const ticketId = readString(value, "ticketId");
+  const message = readString(value, "message");
+  const ticketRef = supportTicketsCollection.doc(ticketId);
+  const snapshot = await ticketRef.get();
+  const ticket = snapshot.data();
+
+  if (!snapshot.exists || !ticket) {
+    throw new HttpsError("not-found", "Support ticket was not found.");
+  }
+  if (ticket.status === "closed") {
+    throw new HttpsError(
+      "failed-precondition",
+      "This support ticket is already closed.",
+    );
+  }
+
+  await ticketRef.set(
+    {
+      status: "waiting_for_member",
+      messages: FieldValue.arrayUnion(
+        supportMessage({
+          senderUid: "",
+          senderRole: "admin",
+          body: message,
+          createdAt: new Date().toISOString(),
+        }),
+      ),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  await notifyMember(String(ticket.uid), {
+    type: "support_ticket_replied",
+    title: "Support replied",
+    body: message,
+    data: {ticketId},
+  });
+
+  return {ticketId};
+});
+
+export const closeSupportTicket = onAdminCall(async (data) => {
+  const ticketId = readString(data, "ticketId");
+  const ticketRef = supportTicketsCollection.doc(ticketId);
+  const snapshot = await ticketRef.get();
+  const ticket = snapshot.data();
+
+  if (!snapshot.exists || !ticket) {
+    throw new HttpsError("not-found", "Support ticket was not found.");
+  }
+
+  await ticketRef.set(
+    {
+      status: "closed",
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  await notifyMember(String(ticket.uid), {
+    type: "support_ticket_closed",
+    title: "Support request closed",
+    body: String(ticket.subject ?? "Your support request was closed."),
+    data: {ticketId},
+  });
+
+  return {ticketId, status: "closed"};
 });
 
 export const createAdminUser = onAdminCall(async (data) => {
@@ -516,8 +869,59 @@ function paymentOptionFromDoc(
     network: String(data.network ?? ""),
     assetSymbol: String(data.assetSymbol ?? ""),
     walletAddress: String(data.walletAddress ?? ""),
+    qrCodeUrl: String(data.qrCodeUrl ?? ""),
     enabled: Boolean(data.enabled ?? true),
     minimumAmount: Number(data.minimumAmount ?? 0),
+  };
+}
+
+function depositRequestFromDoc(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+) {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    uid: String(data.uid ?? ""),
+    opportunityTitle: String(data.opportunityTitle ?? ""),
+    amountUgx: Number(data.amountUgx ?? 0),
+    paymentNetwork: String(data.paymentNetwork ?? ""),
+    paymentAsset: String(data.paymentAsset ?? ""),
+    paymentWalletAddress: String(data.paymentWalletAddress ?? ""),
+    transactionHash: String(data.transactionHash ?? ""),
+    proofUrl: String(data.proofUrl ?? ""),
+    status: String(data.status ?? "pending_payment"),
+  };
+}
+
+function supportTicketFromDoc(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+) {
+  const data = doc.data();
+  const messages = Array.isArray(data.messages) ? data.messages : [];
+  const latest = messages.at(-1) as Record<string, unknown> | undefined;
+
+  return {
+    id: doc.id,
+    uid: String(data.uid ?? ""),
+    subject: String(data.subject ?? ""),
+    status: String(data.status ?? "open"),
+    messageCount: messages.length,
+    latestMessage: String(latest?.body ?? ""),
+    userEmail: String(data.userEmail ?? ""),
+    userDisplayName: String(data.userDisplayName ?? ""),
+    updatedAt: readSerializableDate(data.updatedAt),
+  };
+}
+
+function supportMessage(message: {
+  senderUid: string;
+  senderRole: "member" | "admin";
+  body: string;
+  createdAt: string;
+}) {
+  return {
+    id: randomUUID(),
+    ...message,
   };
 }
 
@@ -597,9 +1001,126 @@ function readPaymentOptionPayload(
     network: readString(value, "network"),
     assetSymbol: readString(value, "assetSymbol"),
     walletAddress: readString(value, "walletAddress"),
+    qrCodeUrl: readOptionalString(value, "qrCodeUrl") ?? "",
     enabled: readBoolean(value, "enabled"),
     minimumAmount: readNumber(value, "minimumAmount"),
   };
+}
+
+async function notifyAdmins(notification: {
+  type: string;
+  title: string;
+  body: string;
+  data: Record<string, string>;
+}) {
+  const [admins, tokenSnapshot] = await Promise.all([
+    listAdminUsers(),
+    notificationTokensCollection.where("admin", "==", true).get(),
+  ]);
+
+  const notificationData = {
+    ...notification,
+    createdAt: FieldValue.serverTimestamp(),
+    read: false,
+  };
+  await adminNotificationsCollection.add(notificationData);
+
+  await Promise.all(
+    admins
+      .filter((admin) => admin.email)
+      .map((admin) =>
+        sendOperationalEmail({
+          to: admin.email!,
+          subject: `BrickClub: ${notification.title}`,
+          text: `${notification.body}\n\nOpen the admin dashboard to review.`,
+          html: [
+            `<p>${escapeHtml(notification.body)}</p>`,
+            "<p>Open the admin dashboard to review.</p>",
+          ].join(""),
+        }),
+      ),
+  );
+
+  const tokens = tokenSnapshot.docs.map((doc) => doc.id);
+  if (tokens.length > 0) {
+    await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title: notification.title,
+        body: notification.body,
+      },
+      data: notification.data,
+    });
+  }
+}
+
+async function notifyMember(uid: string, notification: {
+  type: string;
+  title: string;
+  body: string;
+  data: Record<string, string>;
+}) {
+  const tokenSnapshot = await notificationTokensCollection
+    .where("uid", "==", uid)
+    .get();
+
+  await db.collection("memberNotifications").add({
+    uid,
+    ...notification,
+    createdAt: FieldValue.serverTimestamp(),
+    read: false,
+  });
+
+  const user = await auth.getUser(uid);
+  if (user.email) {
+    await sendOperationalEmail({
+      to: user.email,
+      subject: `BrickClub: ${notification.title}`,
+      text: notification.body,
+      html: `<p>${escapeHtml(notification.body)}</p>`,
+    });
+  }
+
+  const tokens = tokenSnapshot.docs.map((doc) => doc.id);
+  if (tokens.length > 0) {
+    await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title: notification.title,
+        body: notification.body,
+      },
+      data: notification.data,
+    });
+  }
+}
+
+async function listAdminUsers(): Promise<UserRecord[]> {
+  const result = await auth.listUsers(1000);
+  return result.users.filter((user) => user.customClaims?.admin === true);
+}
+
+async function sendOperationalEmail(message: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  const transport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST ?? process.env.MAILPIT_SMTP_HOST ?? "127.0.0.1",
+    port: Number(process.env.SMTP_PORT ?? process.env.MAILPIT_SMTP_PORT ?? 1025),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: process.env.SMTP_USER && process.env.SMTP_PASS
+      ? {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        }
+      : undefined,
+  });
+
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? process.env.MAILPIT_FROM ?? devMailFrom,
+    ...message,
+  });
 }
 
 function readObject(data: unknown): Record<string, unknown> {
@@ -697,6 +1218,20 @@ function readStringArrayOrDefault(
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
   return strings.length === 0 ? fallback : strings;
+}
+
+function readSerializableDate(value: unknown): string {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate().toISOString();
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") return value;
+  return "";
 }
 
 function roundMoney(value: number): number {

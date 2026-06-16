@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/firebase/backend_functions.dart';
@@ -10,11 +11,14 @@ class FirebaseAuthRepository implements AuthRepository {
   FirebaseAuthRepository({
     FirebaseAuth? firebaseAuth,
     BackendFunctions? backendFunctions,
+    FirebaseMessaging? firebaseMessaging,
   }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-       _backendFunctions = backendFunctions ?? BackendFunctions();
+       _backendFunctions = backendFunctions ?? BackendFunctions(),
+       _firebaseMessaging = firebaseMessaging ?? FirebaseMessaging.instance;
 
   final FirebaseAuth _firebaseAuth;
   final BackendFunctions _backendFunctions;
+  final FirebaseMessaging _firebaseMessaging;
   static const Duration _authTimeout = Duration(seconds: 12);
 
   @override
@@ -33,6 +37,7 @@ class FirebaseAuthRepository implements AuthRepository {
         password: credentials.password,
       ),
     );
+    await _registerMessagingToken();
   }
 
   @override
@@ -43,10 +48,12 @@ class FirebaseAuthRepository implements AuthRepository {
 
     if (kIsWeb) {
       await _withAuthTimeout(_firebaseAuth.signInWithPopup(provider));
+      await _registerMessagingToken();
       return;
     }
 
     await _withAuthTimeout(_firebaseAuth.signInWithProvider(provider));
+    await _registerMessagingToken();
   }
 
   @override
@@ -78,6 +85,7 @@ class FirebaseAuthRepository implements AuthRepository {
     );
 
     await userCredential.user?.updateDisplayName('$firstName $lastName'.trim());
+    await _registerMessagingToken();
   }
 
   @override
@@ -118,6 +126,20 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() => _firebaseAuth.signOut();
+
+  Future<void> _registerMessagingToken() async {
+    try {
+      await _firebaseMessaging.requestPermission();
+      final token = await _firebaseMessaging.getToken();
+      if (token == null || token.isEmpty) return;
+      await _backendFunctions.registerMessagingToken(
+        token: token,
+        platform: defaultTargetPlatform.name,
+      );
+    } catch (_) {
+      // Notification registration is best-effort and must not block sign-in.
+    }
+  }
 
   Future<T> _withAuthTimeout<T>(Future<T> operation) {
     return operation.timeout(

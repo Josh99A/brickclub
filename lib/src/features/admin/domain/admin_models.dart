@@ -3,6 +3,8 @@ class AdminDashboardData {
     required this.users,
     required this.assets,
     required this.cryptoPaymentOptions,
+    required this.depositRequests,
+    required this.supportTickets,
   });
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
@@ -13,12 +15,22 @@ class AdminDashboardData {
         json['cryptoPaymentOptions'],
         CryptoPaymentOption.fromJson,
       ),
+      depositRequests: _list(
+        json['depositRequests'],
+        AdminDepositRequest.fromJson,
+      ),
+      supportTickets: _list(
+        json['supportTickets'],
+        AdminSupportTicket.fromJson,
+      ),
     );
   }
 
   final List<AdminUser> users;
   final List<AdminAsset> assets;
   final List<CryptoPaymentOption> cryptoPaymentOptions;
+  final List<AdminDepositRequest> depositRequests;
+  final List<AdminSupportTicket> supportTickets;
 }
 
 class AdminUser {
@@ -118,6 +130,7 @@ class CryptoPaymentOption {
     required this.network,
     required this.assetSymbol,
     required this.walletAddress,
+    required this.qrCodeUrl,
     required this.enabled,
     required this.minimumAmount,
   });
@@ -128,6 +141,7 @@ class CryptoPaymentOption {
       network: 'Tron',
       assetSymbol: 'USDT',
       walletAddress: '',
+      qrCodeUrl: '',
       enabled: true,
       minimumAmount: 0,
     );
@@ -139,6 +153,7 @@ class CryptoPaymentOption {
       network: json['network'] as String? ?? '',
       assetSymbol: json['assetSymbol'] as String? ?? '',
       walletAddress: json['walletAddress'] as String? ?? '',
+      qrCodeUrl: json['qrCodeUrl'] as String? ?? '',
       enabled: json['enabled'] as bool? ?? true,
       minimumAmount: (json['minimumAmount'] as num?)?.toDouble() ?? 0,
     );
@@ -150,6 +165,7 @@ class CryptoPaymentOption {
       'network': network,
       'assetSymbol': assetSymbol,
       'walletAddress': walletAddress,
+      'qrCodeUrl': qrCodeUrl,
       'enabled': enabled,
       'minimumAmount': minimumAmount,
     };
@@ -159,8 +175,116 @@ class CryptoPaymentOption {
   final String network;
   final String assetSymbol;
   final String walletAddress;
+  final String qrCodeUrl;
   final bool enabled;
   final double minimumAmount;
+}
+
+class AdminUploadFile {
+  const AdminUploadFile({
+    required this.name,
+    required this.bytes,
+    required this.contentType,
+  });
+
+  final String name;
+  final List<int> bytes;
+  final String contentType;
+}
+
+class AdminDepositRequest {
+  const AdminDepositRequest({
+    required this.id,
+    required this.uid,
+    required this.opportunityTitle,
+    required this.amountUgx,
+    required this.paymentNetwork,
+    required this.paymentAsset,
+    required this.paymentWalletAddress,
+    required this.transactionHash,
+    required this.proofUrl,
+    required this.status,
+  });
+
+  factory AdminDepositRequest.fromJson(Map<String, dynamic> json) {
+    return AdminDepositRequest(
+      id: json['id'] as String,
+      uid: json['uid'] as String? ?? '',
+      opportunityTitle: json['opportunityTitle'] as String? ?? '',
+      amountUgx: (json['amountUgx'] as num?)?.toDouble() ?? 0,
+      paymentNetwork: json['paymentNetwork'] as String? ?? '',
+      paymentAsset: json['paymentAsset'] as String? ?? '',
+      paymentWalletAddress: json['paymentWalletAddress'] as String? ?? '',
+      transactionHash: json['transactionHash'] as String? ?? '',
+      proofUrl: json['proofUrl'] as String? ?? '',
+      status: json['status'] as String? ?? 'pending_payment',
+    );
+  }
+
+  final String id;
+  final String uid;
+  final String opportunityTitle;
+  final double amountUgx;
+  final String paymentNetwork;
+  final String paymentAsset;
+  final String paymentWalletAddress;
+  final String transactionHash;
+  final String proofUrl;
+  final String status;
+}
+
+class AdminSupportTicket {
+  const AdminSupportTicket({
+    required this.id,
+    required this.uid,
+    required this.subject,
+    required this.status,
+    required this.messageCount,
+    required this.latestMessage,
+    required this.userEmail,
+    required this.userDisplayName,
+    required this.updatedAt,
+  });
+
+  factory AdminSupportTicket.fromJson(Map<String, dynamic> json) {
+    return AdminSupportTicket(
+      id: json['id'] as String? ?? '',
+      uid: json['uid'] as String? ?? '',
+      subject: json['subject'] as String? ?? '',
+      status: json['status'] as String? ?? 'open',
+      messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
+      latestMessage: json['latestMessage'] as String? ?? '',
+      userEmail: json['userEmail'] as String? ?? '',
+      userDisplayName: json['userDisplayName'] as String? ?? '',
+      updatedAt: json['updatedAt'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String uid;
+  final String subject;
+  final String status;
+  final int messageCount;
+  final String latestMessage;
+  final String userEmail;
+  final String userDisplayName;
+  final String updatedAt;
+
+  String get requesterLabel {
+    final name = userDisplayName.trim();
+    if (name.isNotEmpty) return name;
+    final email = userEmail.trim();
+    return email.isNotEmpty ? email : uid;
+  }
+
+  String get statusLabel {
+    return switch (status) {
+      'waiting_for_admin' => 'Waiting for admin',
+      'waiting_for_member' => 'Waiting for member',
+      'closed' => 'Closed',
+      _ => 'Open',
+    };
+  }
 }
 
 List<T> _list<T>(

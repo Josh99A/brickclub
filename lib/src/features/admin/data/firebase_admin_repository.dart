@@ -1,13 +1,20 @@
+import 'dart:typed_data';
+
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../domain/admin_models.dart';
 import '../domain/admin_repository.dart';
 
 class FirebaseAdminRepository implements AdminRepository {
-  FirebaseAdminRepository({FirebaseFunctions? functions})
-    : _functions = functions ?? FirebaseFunctions.instance;
+  FirebaseAdminRepository({
+    FirebaseFunctions? functions,
+    FirebaseStorage? storage,
+  }) : _functions = functions ?? FirebaseFunctions.instance,
+       _storage = storage ?? FirebaseStorage.instance;
 
   final FirebaseFunctions _functions;
+  final FirebaseStorage _storage;
 
   @override
   Future<AdminDashboardData> loadDashboard() async {
@@ -89,6 +96,51 @@ class FirebaseAdminRepository implements AdminRepository {
   @override
   Future<void> deleteCryptoPaymentOption(String id) {
     return _callVoid('deleteCryptoPaymentOption', {'id': id});
+  }
+
+  @override
+  Future<String> uploadCryptoPaymentQrCode(AdminUploadFile file) async {
+    final safeName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '-');
+    final reference = _storage.ref(
+      'admin/payment-qr/${DateTime.now().millisecondsSinceEpoch}-$safeName',
+    );
+    await reference.putData(
+      Uint8List.fromList(file.bytes),
+      SettableMetadata(
+        contentType: file.contentType,
+        customMetadata: {'originalName': file.name},
+      ),
+    );
+    return reference.getDownloadURL();
+  }
+
+  @override
+  Future<void> verifyDepositRequest(String id) {
+    return _callVoid('verifyDepositProof', {'orderId': id});
+  }
+
+  @override
+  Future<void> rejectDepositRequest({
+    required String id,
+    required String reason,
+  }) {
+    return _callVoid('rejectDepositProof', {'orderId': id, 'reason': reason});
+  }
+
+  @override
+  Future<void> replyToSupportTicket({
+    required String id,
+    required String message,
+  }) {
+    return _callVoid('adminReplyToSupportTicket', {
+      'ticketId': id,
+      'message': message,
+    });
+  }
+
+  @override
+  Future<void> closeSupportTicket(String id) {
+    return _callVoid('closeSupportTicket', {'ticketId': id});
   }
 
   Future<Map<String, dynamic>> _callMap(

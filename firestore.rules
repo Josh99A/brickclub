@@ -35,5 +35,32 @@ service cloud.firestore {
         && (resource.data.uid == request.auth.uid || isAdmin());
       allow write: if isAdmin();
     }
+
+    match /withdrawalRequests/{requestId} {
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /notificationTokens/{tokenId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /adminNotifications/{notificationId} {
+      allow read, update: if isAdmin();
+      allow create, delete: if false;
+    }
+
+    match /memberNotifications/{notificationId} {
+      allow read, update: if request.auth != null
+        && resource.data.uid == request.auth.uid;
+      allow create, delete: if false;
+    }
+
+    match /supportTickets/{ticketId} {
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
   }
 }

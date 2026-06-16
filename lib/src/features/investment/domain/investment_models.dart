@@ -48,10 +48,14 @@ class PurchaseOrder {
     required this.amountUgx,
     required this.paymentNetwork,
     required this.paymentAsset,
+    required this.paymentWalletAddress,
+    required this.paymentQrCodeUrl,
     required this.quoteAmount,
     required this.networkFee,
     required this.status,
     required this.expiresAt,
+    this.transactionHash,
+    this.proofUrl,
   });
 
   factory PurchaseOrder.fromJson(Map<String, dynamic> json) {
@@ -62,10 +66,14 @@ class PurchaseOrder {
       amountUgx: (json['amountUgx'] as num?)?.toDouble() ?? 0,
       paymentNetwork: json['paymentNetwork'] as String? ?? '',
       paymentAsset: json['paymentAsset'] as String? ?? '',
+      paymentWalletAddress: json['paymentWalletAddress'] as String? ?? '',
+      paymentQrCodeUrl: json['paymentQrCodeUrl'] as String? ?? '',
       quoteAmount: (json['quoteAmount'] as num?)?.toDouble() ?? 0,
       networkFee: (json['networkFee'] as num?)?.toDouble() ?? 0,
       status: json['status'] as String? ?? 'pending_payment',
       expiresAt: json['expiresAt'] as String? ?? '',
+      transactionHash: json['transactionHash'] as String?,
+      proofUrl: json['proofUrl'] as String?,
     );
   }
 
@@ -75,13 +83,29 @@ class PurchaseOrder {
   final double amountUgx;
   final String paymentNetwork;
   final String paymentAsset;
+  final String paymentWalletAddress;
+  final String paymentQrCodeUrl;
   final double quoteAmount;
   final double networkFee;
   final String status;
   final String expiresAt;
+  final String? transactionHash;
+  final String? proofUrl;
 
   String get quoteText => '${quoteAmount.toStringAsFixed(2)} $paymentAsset';
   String get networkFeeText => '${networkFee.toStringAsFixed(2)} $paymentAsset';
+}
+
+class DepositProofFile {
+  const DepositProofFile({
+    required this.name,
+    required this.bytes,
+    required this.contentType,
+  });
+
+  final String name;
+  final List<int> bytes;
+  final String contentType;
 }
 
 class PurchaseRequest {

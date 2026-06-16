@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:brickclub/src/app/brickclub_app.dart';
 import 'package:brickclub/src/features/admin/domain/admin_models.dart';
 import 'package:brickclub/src/features/admin/domain/admin_repository.dart';
@@ -7,14 +9,30 @@ import 'package:brickclub/src/features/investment/domain/investment_models.dart'
 import 'package:brickclub/src/features/investment/domain/investment_repository.dart';
 import 'package:brickclub/src/features/kyc/domain/kyc_models.dart';
 import 'package:brickclub/src/features/kyc/domain/kyc_repository.dart';
+import 'package:brickclub/src/features/support/domain/support_models.dart';
+import 'package:brickclub/src/features/support/domain/support_repository.dart';
+import 'package:file_picker/file_picker.dart';
+// ignore: implementation_imports
+import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  late FilePickerPlatform originalFilePicker;
   final authRepository = FakeAuthRepository();
   final adminRepository = FakeAdminRepository();
   final investmentRepository = FakeInvestmentRepository();
   final kycRepository = FakeKycRepository.approved();
+  final supportRepository = FakeSupportRepository();
+
+  setUpAll(() {
+    originalFilePicker = FilePickerPlatform.instance;
+    FilePickerPlatform.instance = FakeFilePickerPlatform();
+  });
+
+  tearDownAll(() {
+    FilePickerPlatform.instance = originalFilePicker;
+  });
 
   Future<void> signIn(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -23,6 +41,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: true,
       ),
     );
@@ -46,6 +65,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: true,
       ),
     );
@@ -63,6 +83,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: false,
         splashDuration: Duration.zero,
       ),
@@ -90,6 +111,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: true,
       ),
     );
@@ -121,6 +143,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: true,
       ),
     );
@@ -150,6 +173,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: true,
       ),
     );
@@ -163,6 +187,44 @@ void main() {
     expect(find.byKey(const ValueKey('auth-message')), findsOneWidget);
     expect(find.text('This account does not have admin access.'), findsWidgets);
     expect(find.text('Admin sign in'), findsOneWidget);
+  });
+
+  testWidgets('sign up failure shows an inline frontend error', (tester) async {
+    final failingAuthRepository = FakeAuthRepository(
+      createAccountError: const AuthValidationException(
+        'Confirm your password.',
+      ),
+    );
+
+    await tester.pumpWidget(
+      BrickClubApp(
+        authRepository: failingAuthRepository,
+        adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
+        kycRepository: kycRepository,
+        supportRepository: supportRepository,
+        showLandingPage: true,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('landing-sign-in')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('create-account-link')),
+    );
+    await tester.tap(find.byKey(const ValueKey('create-account-link')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('create-account-submit')),
+    );
+    await tester.tap(find.byKey(const ValueKey('create-account-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('auth-message')), findsOneWidget);
+    expect(find.text('Confirm your password.'), findsWidgets);
+    expect(find.text('Create account'), findsWidgets);
   });
 
   testWidgets('matches the BrickClub authenticated navigation', (tester) async {
@@ -197,6 +259,69 @@ void main() {
     expect(find.text('Amina Kato'), findsOneWidget);
   });
 
+  testWidgets('member can open support and create a request', (tester) async {
+    await signIn(tester);
+
+    await tester.tap(find.byKey(const ValueKey('nav-more')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('profile-support')),
+      120,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('profile-support')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Support'), findsOneWidget);
+    expect(find.text('Wallet transfer delayed'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('new-support-ticket')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('support-subject')),
+      'KYC review',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('support-message')),
+      'Can you check my KYC documents?',
+    );
+    await tester.tap(find.byKey(const ValueKey('send-support-message')));
+    await tester.pumpAndSettle();
+
+    expect(supportRepository.createdSubject, 'KYC review');
+    expect(supportRepository.createdMessage, 'Can you check my KYC documents?');
+  });
+
+  testWidgets('admin support section lists tickets', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      BrickClubApp(
+        authRepository: authRepository,
+        adminRepository: adminRepository,
+        investmentRepository: investmentRepository,
+        kycRepository: kycRepository,
+        supportRepository: supportRepository,
+        showLandingPage: true,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('landing-sign-in')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('admin-access')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sign-in')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('admin-support')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Support conversations'), findsOneWidget);
+    expect(find.text('Wallet transfer delayed'), findsOneWidget);
+  });
+
   testWidgets('investment filters apply to the opportunities list', (
     tester,
   ) async {
@@ -222,6 +347,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: false,
         splashDuration: Duration.zero,
       ),
@@ -276,7 +402,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('confirm-purchase')));
     await tester.pumpAndSettle();
-    expect(find.text('Purchase submitted'), findsOneWidget);
+    expect(find.text('Deposit instructions'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('transaction-hash')),
+      '0x1234567890abcdef',
+    );
+    await tester.ensureVisible(find.byKey(const ValueKey('payment-proof')));
+    await tester.tap(find.byKey(const ValueKey('payment-proof')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-purchase')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Proof submitted'), findsOneWidget);
   });
 
   testWidgets('unapproved members are gated before investing', (tester) async {
@@ -287,6 +425,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: pendingKycRepository,
+        supportRepository: supportRepository,
         showLandingPage: true,
       ),
     );
@@ -328,6 +467,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: pendingKycRepository,
+        supportRepository: supportRepository,
         showLandingPage: true,
       ),
     );
@@ -357,13 +497,23 @@ void main() {
 }
 
 class FakeAuthRepository implements AuthRepository {
-  FakeAuthRepository({this.signInError, this.isAdmin = true});
+  FakeAuthRepository({
+    this.signInError,
+    this.createAccountError,
+    this.isAdmin = true,
+  });
 
   final Object? signInError;
+  final Object? createAccountError;
   final bool isAdmin;
 
   @override
-  Future<void> createAccount(SignUpCredentials credentials) async {}
+  Future<void> createAccount(SignUpCredentials credentials) async {
+    final error = createAccountError;
+    if (error != null) {
+      throw error;
+    }
+  }
 
   @override
   SignedInUserDetails? currentUserDetails() {
@@ -435,8 +585,36 @@ class FakeAdminRepository implements AdminRepository {
         network: 'Tron',
         assetSymbol: 'USDT',
         walletAddress: '0x71B...8E4',
+        qrCodeUrl: 'https://example.com/usdt-qr.png',
         enabled: true,
         minimumAmount: 100,
+      ),
+    ],
+    depositRequests: [
+      AdminDepositRequest(
+        id: 'order-1',
+        uid: 'member-1',
+        opportunityTitle: 'Kololo Heights Income Fund',
+        amountUgx: 250000,
+        paymentNetwork: 'Tron',
+        paymentAsset: 'USDT',
+        paymentWalletAddress: '0x71B...8E4',
+        transactionHash: '0x1234567890abcdef',
+        proofUrl: 'https://example.com/proof.png',
+        status: 'proof_submitted',
+      ),
+    ],
+    supportTickets: [
+      AdminSupportTicket(
+        id: 'support-1',
+        uid: 'member-1',
+        subject: 'Wallet transfer delayed',
+        status: 'waiting_for_admin',
+        messageCount: 1,
+        latestMessage: 'My wallet transfer is still pending.',
+        userEmail: 'sarah@brickclub.ug',
+        userDisplayName: 'Sarah Namuli',
+        updatedAt: '2026-06-16T10:00:00.000Z',
       ),
     ],
   );
@@ -486,6 +664,75 @@ class FakeAdminRepository implements AdminRepository {
     required bool admin,
     String? password,
   }) async {}
+
+  @override
+  Future<String> uploadCryptoPaymentQrCode(AdminUploadFile file) async =>
+      'https://example.com/${file.name}';
+
+  @override
+  Future<void> verifyDepositRequest(String id) async {}
+
+  @override
+  Future<void> rejectDepositRequest({
+    required String id,
+    required String reason,
+  }) async {}
+
+  @override
+  Future<void> replyToSupportTicket({
+    required String id,
+    required String message,
+  }) async {}
+
+  @override
+  Future<void> closeSupportTicket(String id) async {}
+}
+
+class FakeSupportRepository implements SupportRepository {
+  String? createdSubject;
+  String? createdMessage;
+  String? replyTicketId;
+  String? replyMessage;
+
+  @override
+  Future<void> createTicket({
+    required String subject,
+    required String message,
+  }) async {
+    createdSubject = subject;
+    createdMessage = message;
+  }
+
+  @override
+  Future<void> replyToTicket({
+    required String ticketId,
+    required String message,
+  }) async {
+    replyTicketId = ticketId;
+    replyMessage = message;
+  }
+
+  @override
+  Stream<List<SupportTicket>> watchMyTickets() {
+    return Stream.value(const [
+      SupportTicket(
+        id: 'support-1',
+        uid: 'member-1',
+        subject: 'Wallet transfer delayed',
+        status: SupportTicketStatus.waitingForAdmin,
+        createdAt: null,
+        updatedAt: null,
+        messages: [
+          SupportMessage(
+            id: 'message-1',
+            sender: SupportMessageSender.member,
+            body: 'My wallet transfer is still pending.',
+            createdAt: null,
+          ),
+        ],
+      ),
+    ]);
+  }
 }
 
 class FakeInvestmentRepository implements InvestmentRepository {
@@ -559,6 +806,8 @@ class FakeInvestmentRepository implements InvestmentRepository {
       amountUgx: request.amountUgx,
       paymentNetwork: 'Tron',
       paymentAsset: request.paymentAsset,
+      paymentWalletAddress: '0x71B...8E4',
+      paymentQrCodeUrl: '',
       quoteAmount: 67.57,
       networkFee: 1,
       status: 'pending_payment',
@@ -569,6 +818,30 @@ class FakeInvestmentRepository implements InvestmentRepository {
   @override
   Future<List<InvestmentOpportunity>> listOpportunities() async =>
       opportunities;
+
+  @override
+  Future<PurchaseOrder> submitDepositProof({
+    required String orderId,
+    required String transactionHash,
+    required DepositProofFile proof,
+  }) async {
+    return const PurchaseOrder(
+      id: 'order-1',
+      opportunityId: 'asset-1',
+      opportunityTitle: 'Kololo Heights Income Fund',
+      amountUgx: 250000,
+      paymentNetwork: 'Tron',
+      paymentAsset: 'USDT',
+      paymentWalletAddress: '0x71B...8E4',
+      paymentQrCodeUrl: '',
+      quoteAmount: 67.57,
+      networkFee: 1,
+      status: 'proof_submitted',
+      expiresAt: '2026-06-16T10:00:00.000Z',
+      transactionHash: '0x1234567890abcdef',
+      proofUrl: 'https://example.com/proof.png',
+    );
+  }
 }
 
 class FakeKycRepository implements KycRepository {
@@ -606,4 +879,30 @@ class FakeKycRepository implements KycRepository {
 
   @override
   Stream<KycProfile> watchProfile() => Stream.value(profile);
+}
+
+class FakeFilePickerPlatform extends FilePickerPlatform {
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+    bool cancelUploadOnWindowBlur = true,
+  }) async {
+    return FilePickerResult([
+      PlatformFile(
+        name: 'proof.png',
+        size: 3,
+        bytes: Uint8List.fromList([1, 2, 3]),
+      ),
+    ]);
+  }
 }

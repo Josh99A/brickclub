@@ -35,4 +35,20 @@ abstract interface class AdminRepository {
   Future<void> updateCryptoPaymentOption(CryptoPaymentOption option);
 
   Future<void> deleteCryptoPaymentOption(String id);
+
+  Future<String> uploadCryptoPaymentQrCode(AdminUploadFile file);
+
+  Future<void> verifyDepositRequest(String id);
+
+  Future<void> rejectDepositRequest({
+    required String id,
+    required String reason,
+  });
+
+  Future<void> replyToSupportTicket({
+    required String id,
+    required String message,
+  });
+
+  Future<void> closeSupportTicket(String id);
 }

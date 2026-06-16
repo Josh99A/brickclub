@@ -14,6 +14,8 @@ import '../features/investment/domain/investment_models.dart';
 import '../features/investment/domain/investment_repository.dart';
 import '../features/kyc/domain/kyc_models.dart';
 import '../features/kyc/domain/kyc_repository.dart';
+import '../features/support/domain/support_models.dart';
+import '../features/support/domain/support_repository.dart';
 
 final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -24,6 +26,7 @@ class BrickClubApp extends StatelessWidget {
     required this.adminRepository,
     required this.investmentRepository,
     required this.kycRepository,
+    required this.supportRepository,
     this.showLandingPage = kIsWeb,
     this.splashDuration = const Duration(seconds: 2),
   });
@@ -32,6 +35,7 @@ class BrickClubApp extends StatelessWidget {
   final AdminRepository adminRepository;
   final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
+  final SupportRepository supportRepository;
   final bool showLandingPage;
   final Duration splashDuration;
 
@@ -56,6 +60,7 @@ class BrickClubApp extends StatelessWidget {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        supportRepository: supportRepository,
         showLandingPage: showLandingPage,
         splashDuration: splashDuration,
       ),
@@ -70,6 +75,7 @@ class AppGate extends StatefulWidget {
     required this.adminRepository,
     required this.investmentRepository,
     required this.kycRepository,
+    required this.supportRepository,
     required this.showLandingPage,
     required this.splashDuration,
   });
@@ -78,6 +84,7 @@ class AppGate extends StatefulWidget {
   final AdminRepository adminRepository;
   final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
+  final SupportRepository supportRepository;
   final bool showLandingPage;
   final Duration splashDuration;
 
@@ -138,6 +145,7 @@ class _AppGateState extends State<AppGate> {
         authRepository: widget.authRepository,
         investmentRepository: widget.investmentRepository,
         kycRepository: widget.kycRepository,
+        supportRepository: widget.supportRepository,
       ),
       AppDestination.admin => AdminDashboard(
         authRepository: widget.authRepository,
@@ -1667,6 +1675,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ('Users', Icons.people_alt_outlined),
     ('Assets', Icons.apartment_outlined),
     ('Crypto payments', Icons.currency_bitcoin_rounded),
+    ('Support', Icons.support_agent_rounded),
     ('Reports', Icons.bar_chart_rounded),
     ('Settings', Icons.settings_outlined),
   ];
@@ -1998,10 +2007,16 @@ class _AdminSection extends StatelessWidget {
       ),
       3 => _PaymentsPanel(
         options: data.cryptoPaymentOptions,
+        depositRequests: data.depositRequests,
         repository: repository,
         onChanged: onChanged,
       ),
-      4 => const _ReportsPanel(),
+      4 => _SupportPanel(
+        tickets: data.supportTickets,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      5 => const _ReportsPanel(),
       _ => const _SettingsPanel(),
     };
   }
@@ -2023,6 +2038,12 @@ class _OverviewPanel extends StatelessWidget {
         .length;
     final pendingAssets = data.assets
         .where((asset) => asset.reviewStatus.toLowerCase() != 'verified')
+        .length;
+    final pendingDeposits = data.depositRequests
+        .where((request) => request.status == 'proof_submitted')
+        .length;
+    final pendingSupport = data.supportTickets
+        .where((ticket) => ticket.status == 'waiting_for_admin')
         .length;
 
     return Column(
@@ -2057,10 +2078,17 @@ class _OverviewPanel extends StatelessWidget {
             ),
             _AdminMetricCard(
               'Pending reviews',
-              '$pendingAssets',
-              'Needs action',
+              '${pendingAssets + pendingDeposits + pendingSupport}',
+              '$pendingDeposits deposits',
               Icons.pending_actions_outlined,
               warning: true,
+            ),
+            _AdminMetricCard(
+              'Support tickets',
+              '${data.supportTickets.length}',
+              '$pendingSupport need reply',
+              Icons.support_agent_rounded,
+              warning: pendingSupport > 0,
             ),
           ],
         ),
@@ -2475,11 +2503,13 @@ class _AssetsPanel extends StatelessWidget {
 class _PaymentsPanel extends StatelessWidget {
   const _PaymentsPanel({
     required this.options,
+    required this.depositRequests,
     required this.repository,
     required this.onChanged,
   });
 
   final List<CryptoPaymentOption> options;
+  final List<AdminDepositRequest> depositRequests;
   final AdminRepository repository;
   final VoidCallback onChanged;
 
@@ -2496,21 +2526,202 @@ class _PaymentsPanel extends StatelessWidget {
       ),
       child: _AdminPanel(
         title: 'Crypto payment options',
-        child: _PaymentOptionTable(
-          options: options,
-          onEdit: (option) => _showPaymentOptionDialog(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _PaymentOptionTable(
+              options: options,
+              onEdit: (option) => _showPaymentOptionDialog(
+                context,
+                repository: repository,
+                option: option,
+                onChanged: onChanged,
+              ),
+              onDelete: (option) => _runAdminAction(
+                context,
+                action: () => repository.deleteCryptoPaymentOption(option.id),
+                onChanged: onChanged,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text('Deposit proof review', style: AppText.cardHeadingSmall),
+            const SizedBox(height: 12),
+            _DepositRequestTable(
+              requests: depositRequests,
+              onVerify: (request) => _runAdminAction(
+                context,
+                action: () => repository.verifyDepositRequest(request.id),
+                onChanged: onChanged,
+              ),
+              onReject: (request) => _showRejectDepositDialog(
+                context,
+                repository: repository,
+                request: request,
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DepositRequestTable extends StatelessWidget {
+  const _DepositRequestTable({
+    required this.requests,
+    required this.onVerify,
+    required this.onReject,
+  });
+
+  final List<AdminDepositRequest> requests;
+  final ValueChanged<AdminDepositRequest> onVerify;
+  final ValueChanged<AdminDepositRequest> onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    if (requests.isEmpty) {
+      return const Panel(
+        child: Text('No submitted deposit proofs yet.', style: AppText.body),
+      );
+    }
+
+    return _ResponsiveDataTable(
+      columns: const ['Asset', 'Amount', 'Coin', 'Hash', 'Status'],
+      rows: [
+        for (final request in requests)
+          _AdminTableRow(
+            values: [
+              request.opportunityTitle,
+              request.amountUgx.toStringAsFixed(0),
+              '${request.paymentAsset} ${request.paymentNetwork}',
+              _shortHash(request.transactionHash),
+              request.status,
+            ],
+            source: request,
+          ),
+      ],
+      statusColumns: const {4},
+      trailingBuilder: (row) {
+        final request = row.source as AdminDepositRequest;
+        final submitted = request.status == 'proof_submitted';
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Open proof',
+              onPressed: request.proofUrl.isEmpty
+                  ? null
+                  : () => showMessage(context, request.proofUrl),
+              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+            ),
+            IconButton(
+              tooltip: 'Verify',
+              onPressed: submitted ? () => onVerify(request) : null,
+              icon: const Icon(Icons.verified_outlined, size: 18),
+            ),
+            IconButton(
+              tooltip: 'Reject',
+              onPressed: submitted ? () => onReject(request) : null,
+              icon: const Icon(Icons.close_rounded, size: 18),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SupportPanel extends StatelessWidget {
+  const _SupportPanel({
+    required this.tickets,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<AdminSupportTicket> tickets;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionPage(
+      description: 'Review member support requests and reply from operations.',
+      child: _AdminPanel(
+        title: 'Support conversations',
+        child: _SupportTicketTable(
+          tickets: tickets,
+          onReply: (ticket) => _showSupportReplyDialog(
             context,
             repository: repository,
-            option: option,
+            ticket: ticket,
             onChanged: onChanged,
           ),
-          onDelete: (option) => _runAdminAction(
+          onClose: (ticket) => _runAdminAction(
             context,
-            action: () => repository.deleteCryptoPaymentOption(option.id),
+            action: () => repository.closeSupportTicket(ticket.id),
             onChanged: onChanged,
+            successMessage: 'Support request closed',
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SupportTicketTable extends StatelessWidget {
+  const _SupportTicketTable({
+    required this.tickets,
+    required this.onReply,
+    required this.onClose,
+  });
+
+  final List<AdminSupportTicket> tickets;
+  final ValueChanged<AdminSupportTicket> onReply;
+  final ValueChanged<AdminSupportTicket> onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tickets.isEmpty) {
+      return const Panel(
+        child: Text('No support tickets yet.', style: AppText.body),
+      );
+    }
+
+    return _ResponsiveDataTable(
+      columns: const ['Member', 'Subject', 'Status', 'Messages'],
+      rows: [
+        for (final ticket in tickets)
+          _AdminTableRow(
+            values: [
+              ticket.requesterLabel,
+              ticket.subject,
+              ticket.statusLabel,
+              '${ticket.messageCount}',
+            ],
+            source: ticket,
+          ),
+      ],
+      statusColumns: const {2},
+      trailingBuilder: (row) {
+        final ticket = row.source as AdminSupportTicket;
+        final closed = ticket.status == 'closed';
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Reply',
+              onPressed: closed ? null : () => onReply(ticket),
+              icon: const Icon(Icons.reply_rounded, size: 18),
+            ),
+            IconButton(
+              tooltip: 'Close',
+              onPressed: closed ? null : () => onClose(ticket),
+              icon: const Icon(Icons.task_alt_rounded, size: 18),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -2721,7 +2932,7 @@ class _PaymentOptionTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ResponsiveDataTable(
-      columns: const ['Network', 'Asset', 'Wallet', 'Minimum', 'Status'],
+      columns: const ['Network', 'Asset', 'Wallet', 'QR', 'Minimum', 'Status'],
       rows: [
         for (final option in options.take(compact ? 4 : options.length))
           _AdminTableRow(
@@ -2729,13 +2940,14 @@ class _PaymentOptionTable extends StatelessWidget {
               option.network,
               option.assetSymbol,
               option.walletAddress,
+              option.qrCodeUrl.isEmpty ? 'Missing' : 'Uploaded',
               option.minimumAmount.toStringAsFixed(2),
               option.enabled ? 'Active' : 'Disabled',
             ],
             source: option,
           ),
       ],
-      statusColumns: const {4},
+      statusColumns: const {3, 5},
       onEdit: onEdit == null
           ? null
           : (row) => onEdit!(row.source as CryptoPaymentOption),
@@ -2927,8 +3139,15 @@ class _StatusChip extends StatelessWidget {
       'Active',
       'Live',
       'Confirmed',
+      'Uploaded',
+      'deposit_verified',
     }.contains(label);
-    final warning = {'Review', 'Pending', 'Draft'}.contains(label);
+    final warning = {
+      'Review',
+      'Pending',
+      'Draft',
+      'proof_submitted',
+    }.contains(label);
     final color = positive
         ? const Color(0xFF45C486)
         : warning
@@ -3154,6 +3373,7 @@ Future<void> _showPaymentOptionDialog(
   final network = TextEditingController(text: value.network);
   final assetSymbol = TextEditingController(text: value.assetSymbol);
   final walletAddress = TextEditingController(text: value.walletAddress);
+  var qrCodeUrl = value.qrCodeUrl;
   final minimumAmount = TextEditingController(
     text: value.minimumAmount.toStringAsFixed(2),
   );
@@ -3178,6 +3398,19 @@ Future<void> _showPaymentOptionDialog(
                 AppTextField(
                   controller: walletAddress,
                   hintText: 'Settlement wallet address',
+                ),
+                const SizedBox(height: 10),
+                _PickerTile(
+                  icon: Icons.qr_code_2_rounded,
+                  title: qrCodeUrl.isEmpty
+                      ? 'Upload payment QR code'
+                      : 'QR code uploaded',
+                  onTap: () async {
+                    final uploaded = await _pickAdminQrCode(repository);
+                    if (uploaded != null) {
+                      setState(() => qrCodeUrl = uploaded);
+                    }
+                  },
                 ),
                 const SizedBox(height: 10),
                 AppTextField(
@@ -3206,6 +3439,7 @@ Future<void> _showPaymentOptionDialog(
                   network: network.text,
                   assetSymbol: assetSymbol.text,
                   walletAddress: walletAddress.text,
+                  qrCodeUrl: qrCodeUrl,
                   enabled: enabled,
                   minimumAmount: double.tryParse(minimumAmount.text) ?? 0,
                 );
@@ -3235,16 +3469,153 @@ Future<void> _showPaymentOptionDialog(
   minimumAmount.dispose();
 }
 
+Future<String?> _pickAdminQrCode(AdminRepository repository) async {
+  final result = await FilePicker.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['jpg', 'jpeg', 'png'],
+    withData: true,
+  );
+  final file = result?.files.single;
+  if (file?.bytes == null) return null;
+
+  return repository.uploadCryptoPaymentQrCode(
+    AdminUploadFile(
+      name: file!.name,
+      bytes: file.bytes!,
+      contentType: _contentTypeForName(file.name),
+    ),
+  );
+}
+
+Future<void> _showRejectDepositDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required AdminDepositRequest request,
+  required VoidCallback onChanged,
+}) async {
+  final reason = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: const Text('Reject deposit proof'),
+      content: SizedBox(
+        width: 420,
+        child: AppTextField(
+          controller: reason,
+          hintText: 'Reason shown to the member',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            await _runAdminAction(
+              context,
+              action: () => repository.rejectDepositRequest(
+                id: request.id,
+                reason: reason.text,
+              ),
+              onChanged: onChanged,
+            );
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+          },
+          child: const Text('Reject'),
+        ),
+      ],
+    ),
+  );
+  reason.dispose();
+}
+
+Future<void> _showSupportReplyDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required AdminSupportTicket ticket,
+  required VoidCallback onChanged,
+}) async {
+  final reply = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: Text('Reply to ${ticket.requesterLabel}'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(ticket.subject, style: AppText.fieldLabel),
+            if (ticket.latestMessage.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(ticket.latestMessage, style: AppText.body),
+            ],
+            const SizedBox(height: 16),
+            TextField(
+              controller: reply,
+              minLines: 4,
+              maxLines: 6,
+              style: const TextStyle(color: AppColors.primary),
+              decoration: InputDecoration(
+                hintText: 'Type your reply',
+                hintStyle: AppText.placeholder,
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final message = reply.text.trim();
+            if (message.isEmpty) {
+              showMessage(context, 'Enter a reply');
+              return;
+            }
+            await _runAdminAction(
+              context,
+              action: () => repository.replyToSupportTicket(
+                id: ticket.id,
+                message: message,
+              ),
+              onChanged: onChanged,
+              successMessage: 'Support reply sent',
+            );
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+          },
+          child: const Text('Send reply'),
+        ),
+      ],
+    ),
+  );
+  reply.dispose();
+}
+
 Future<void> _runAdminAction(
   BuildContext context, {
   required Future<void> Function() action,
   required VoidCallback onChanged,
+  String successMessage = 'Admin change saved',
 }) async {
   try {
     await action();
     onChanged();
     if (context.mounted) {
-      showMessage(context, 'Admin change saved');
+      showMessage(context, successMessage);
     }
   } catch (error) {
     if (context.mounted) {
@@ -3302,6 +3673,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool accepted = false;
   bool creatingAccount = false;
   bool signingUpWithGoogle = false;
+  String? authMessage;
   final firstNameController = TextEditingController();
   final lastNameController = TextEditingController();
   final emailController = TextEditingController();
@@ -3446,8 +3818,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           children: [
                             Checkbox(
                               value: accepted,
-                              onChanged: (value) =>
-                                  setState(() => accepted = value ?? false),
+                              onChanged: (value) => setState(() {
+                                accepted = value ?? false;
+                                authMessage = null;
+                              }),
                               side: const BorderSide(color: AppColors.border),
                               activeColor: AppColors.gold,
                             ),
@@ -3467,7 +3841,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  if (authMessage != null) ...[
+                    _AuthMessageBanner(message: authMessage!),
+                    const SizedBox(height: 10),
+                  ],
                   PrimaryButton(
+                    key: const ValueKey('create-account-submit'),
                     label: creatingAccount
                         ? 'Creating account...'
                         : 'Create account',
@@ -3508,7 +3887,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _signUpWithGoogle() async {
-    setState(() => signingUpWithGoogle = true);
+    setState(() {
+      authMessage = null;
+      signingUpWithGoogle = true;
+    });
     try {
       await widget.authRepository.signInWithGoogle();
 
@@ -3517,7 +3899,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     } catch (error) {
       if (mounted) {
-        showMessage(context, _authErrorMessage(error));
+        _showAuthMessage(_authErrorMessage(error));
       }
     } finally {
       if (mounted) {
@@ -3527,7 +3909,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _createAccount() async {
-    setState(() => creatingAccount = true);
+    setState(() {
+      authMessage = null;
+      creatingAccount = true;
+    });
     try {
       await widget.authRepository.createAccount(
         SignUpCredentials(
@@ -3544,13 +3929,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     } catch (error) {
       if (mounted) {
-        showMessage(context, _authErrorMessage(error));
+        _showAuthMessage(_authErrorMessage(error));
       }
     } finally {
       if (mounted) {
         setState(() => creatingAccount = false);
       }
     }
+  }
+
+  void _showAuthMessage(String message) {
+    setState(() => authMessage = message);
+    showMessage(context, message);
   }
 }
 
@@ -3575,11 +3965,13 @@ class BrickClubShell extends StatefulWidget {
     required this.authRepository,
     required this.investmentRepository,
     required this.kycRepository,
+    required this.supportRepository,
   });
 
   final AuthRepository authRepository;
   final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
+  final SupportRepository supportRepository;
 
   @override
   State<BrickClubShell> createState() => _BrickClubShellState();
@@ -3623,6 +4015,7 @@ class _BrickClubShellState extends State<BrickClubShell> {
           ProfileScreen(
             user: widget.authRepository.currentUserDetails(),
             kyc: kyc,
+            supportRepository: widget.supportRepository,
             onStartKyc: () => _openKyc(context),
           ),
         ];
@@ -4980,11 +5373,13 @@ class ProfileScreen extends StatelessWidget {
     super.key,
     required this.user,
     required this.kyc,
+    required this.supportRepository,
     required this.onStartKyc,
   });
 
   final SignedInUserDetails? user;
   final KycProfile kyc;
+  final SupportRepository supportRepository;
   final VoidCallback onStartKyc;
 
   @override
@@ -5030,13 +5425,23 @@ class ProfileScreen extends StatelessWidget {
           ('Settings', 'Theme, currency, alerts'),
           ('Security & privacy', 'Verified wallet and biometrics'),
           ('Documents', 'Statements, risk disclosures'),
-          ('Help center', 'Investor support'),
         ])
           ProfileRow(
             title: item.$1,
             subtitle: item.$2,
             onTap: () => showMessage(context, '${item.$1} opened'),
           ),
+        ProfileRow(
+          key: const ValueKey('profile-support'),
+          title: 'Support',
+          subtitle: 'Message the BrickClub team',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SupportScreen(repository: supportRepository),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -5056,6 +5461,362 @@ class ProfileScreen extends StatelessWidget {
     if (email != null && email.isNotEmpty) return email;
 
     return 'Your account and BrickShares details';
+  }
+}
+
+class SupportScreen extends StatelessWidget {
+  const SupportScreen({super.key, required this.repository});
+
+  final SupportRepository repository;
+
+  @override
+  Widget build(BuildContext context) {
+    return PhoneFrame(
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: detailAppBar(context, 'Support'),
+        body: StreamBuilder<List<SupportTicket>>(
+          stream: repository.watchMyTickets(),
+          builder: (context, snapshot) {
+            final tickets = snapshot.data ?? const <SupportTicket>[];
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 26),
+              children: [
+                PrimaryButton(
+                  key: const ValueKey('new-support-ticket'),
+                  label: 'New support request',
+                  onPressed: () => _showCreateTicket(context),
+                ),
+                const SizedBox(height: 18),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(color: AppColors.gold),
+                    ),
+                  )
+                else if (tickets.isEmpty)
+                  const Panel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('No support requests yet', style: AppText.h2),
+                        SizedBox(height: 8),
+                        Text(
+                          'Start a conversation with the BrickClub team when you need account, KYC, wallet, or investment help.',
+                          style: AppText.body,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  for (final ticket in tickets)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _SupportTicketTile(
+                        ticket: ticket,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => SupportThreadScreen(
+                              repository: repository,
+                              ticket: ticket,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCreateTicket(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _SupportComposerSheet(
+        title: 'New support request',
+        subjectEnabled: true,
+        submitLabel: 'Send request',
+        onSubmit: (subject, message) async {
+          await repository.createTicket(subject: subject, message: message);
+        },
+      ),
+    );
+  }
+}
+
+class SupportThreadScreen extends StatelessWidget {
+  const SupportThreadScreen({
+    super.key,
+    required this.repository,
+    required this.ticket,
+  });
+
+  final SupportRepository repository;
+  final SupportTicket ticket;
+
+  @override
+  Widget build(BuildContext context) {
+    return PhoneFrame(
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: detailAppBar(context, ticket.subject),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 26),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(ticket.status.label, style: AppText.goldBody),
+                ),
+                Text('${ticket.messages.length} messages', style: AppText.tiny),
+              ],
+            ),
+            const SizedBox(height: 16),
+            for (final message in ticket.messages)
+              _SupportMessageBubble(message: message),
+            const SizedBox(height: 16),
+            PrimaryButton(
+              key: const ValueKey('reply-support-ticket'),
+              label: ticket.isClosed ? 'Request closed' : 'Reply',
+              onPressed: ticket.isClosed ? null : () => _showReply(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showReply(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _SupportComposerSheet(
+        title: 'Reply to support',
+        subjectEnabled: false,
+        submitLabel: 'Send reply',
+        onSubmit: (_, message) async {
+          await repository.replyToTicket(ticketId: ticket.id, message: message);
+        },
+      ),
+    );
+  }
+}
+
+class _SupportTicketTile extends StatelessWidget {
+  const _SupportTicketTile({required this.ticket, required this.onTap});
+
+  final SupportTicket ticket;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.panel,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(ticket.subject, style: AppText.h2)),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.muted,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                ticket.latestMessage?.body ?? 'No messages yet',
+                style: AppText.body,
+              ),
+              const SizedBox(height: 12),
+              ChoicePill(label: ticket.status.label, selected: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportMessageBubble extends StatelessWidget {
+  const _SupportMessageBubble({required this.message});
+
+  final SupportMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final alignment = message.isAdmin
+        ? CrossAxisAlignment.start
+        : CrossAxisAlignment.end;
+    final color = message.isAdmin ? AppColors.panel : AppColors.goldSoft;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: alignment,
+        children: [
+          Text(
+            message.isAdmin ? 'BrickClub support' : 'You',
+            style: AppText.tinyLight,
+          ),
+          const SizedBox(height: 5),
+          Container(
+            constraints: const BoxConstraints(maxWidth: 290),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: color,
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(message.body, style: AppText.bodyLarge),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SupportComposerSheet extends StatefulWidget {
+  const _SupportComposerSheet({
+    required this.title,
+    required this.subjectEnabled,
+    required this.submitLabel,
+    required this.onSubmit,
+  });
+
+  final String title;
+  final bool subjectEnabled;
+  final String submitLabel;
+  final Future<void> Function(String subject, String message) onSubmit;
+
+  @override
+  State<_SupportComposerSheet> createState() => _SupportComposerSheetState();
+}
+
+class _SupportComposerSheetState extends State<_SupportComposerSheet> {
+  final subjectController = TextEditingController();
+  final messageController = TextEditingController();
+  bool submitting = false;
+
+  @override
+  void dispose() {
+    subjectController.dispose();
+    messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        22,
+        22,
+        22,
+        MediaQuery.viewInsetsOf(context).bottom + 26,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.title, style: AppText.h2),
+          if (widget.subjectEnabled) ...[
+            const SizedBox(height: 16),
+            const FieldLabel('Subject'),
+            const SizedBox(height: 8),
+            AppTextField(
+              key: const ValueKey('support-subject'),
+              controller: subjectController,
+              hintText: 'What do you need help with?',
+              prefixIcon: Icons.support_agent_rounded,
+            ),
+          ],
+          const SizedBox(height: 16),
+          const FieldLabel('Message'),
+          const SizedBox(height: 8),
+          TextField(
+            key: const ValueKey('support-message'),
+            controller: messageController,
+            minLines: 4,
+            maxLines: 6,
+            style: const TextStyle(fontSize: 14, color: AppColors.primary),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              hintText: 'Type your message',
+              hintStyle: AppText.placeholder,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.gold, width: 1.3),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          PrimaryButton(
+            key: const ValueKey('send-support-message'),
+            label: submitting ? 'Sending...' : widget.submitLabel,
+            onPressed: submitting ? null : _submit,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    final subject = subjectController.text.trim();
+    final message = messageController.text.trim();
+    if (widget.subjectEnabled && subject.isEmpty) {
+      showMessage(context, 'Enter a subject');
+      return;
+    }
+    if (message.isEmpty) {
+      showMessage(context, 'Enter a message');
+      return;
+    }
+
+    setState(() => submitting = true);
+    try {
+      await widget.onSubmit(subject, message);
+      if (mounted) {
+        Navigator.pop(context);
+        showMessage(context, 'Message sent');
+      }
+    } catch (error) {
+      if (mounted) showMessage(context, _friendlyUnexpectedMessage(error));
+    } finally {
+      if (mounted) setState(() => submitting = false);
+    }
   }
 }
 
@@ -5369,6 +6130,21 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   bool submitting = false;
+  PurchaseOrder? order;
+  DepositProofFile? proof;
+  late final TextEditingController transactionHashController;
+
+  @override
+  void initState() {
+    super.initState();
+    transactionHashController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    transactionHashController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -5412,9 +6188,27 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    QuoteRow('Payment asset', paymentAsset),
+                    QuoteRow(
+                      'Payment asset',
+                      order?.paymentAsset ?? paymentAsset,
+                    ),
                     QuoteRow('Amount', widget.opportunity.minimumText),
-                    const QuoteRow('Network fee', 'Calculated by backend'),
+                    QuoteRow(
+                      'Network',
+                      order == null
+                          ? 'Selected after request'
+                          : order!.paymentNetwork,
+                    ),
+                    QuoteRow(
+                      'Quote',
+                      order == null ? 'Created by backend' : order!.quoteText,
+                    ),
+                    QuoteRow(
+                      'Network fee',
+                      order == null
+                          ? 'Calculated by backend'
+                          : order!.networkFeeText,
+                    ),
                     const QuoteRow(
                       'Settlement',
                       'Pending confirmation',
@@ -5423,6 +6217,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ],
                 ),
               ),
+              if (order != null) ...[
+                const SizedBox(height: 28),
+                _DepositInstructions(
+                  order: order!,
+                  proofName: proof?.name,
+                  transactionHashController: transactionHashController,
+                  onPickProof: _pickProof,
+                ),
+              ],
               const SizedBox(height: 28),
               const Panel(
                 child: Column(
@@ -5444,9 +6247,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
               const SizedBox(height: 36),
               PrimaryButton(
                 key: const ValueKey('confirm-purchase'),
-                label: submitting ? 'Submitting...' : 'Confirm purchase',
+                label: submitting
+                    ? 'Submitting...'
+                    : order == null
+                    ? 'Create deposit request'
+                    : 'Submit proof for review',
                 onPressed: widget.kyc.canPerformFinancialActions && !submitting
-                    ? () => _submit(paymentAsset)
+                    ? () => order == null
+                          ? _createDepositRequest(paymentAsset)
+                          : _submitProof()
                     : null,
               ),
               const SizedBox(height: 14),
@@ -5461,21 +6270,75 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Future<void> _submit(String paymentAsset) async {
+  Future<void> _createDepositRequest(String paymentAsset) async {
     setState(() => submitting = true);
     try {
-      final order = await widget.investmentRepository.createPurchaseOrder(
-        PurchaseRequest(
-          opportunityId: widget.opportunity.id,
-          amountUgx: widget.opportunity.minimumInvestment,
-          paymentAsset: paymentAsset,
-        ),
+      final createdOrder = await widget.investmentRepository
+          .createPurchaseOrder(
+            PurchaseRequest(
+              opportunityId: widget.opportunity.id,
+              amountUgx: widget.opportunity.minimumInvestment,
+              paymentAsset: paymentAsset,
+            ),
+          );
+
+      if (mounted) {
+        setState(() => order = createdOrder);
+        showMessage(context, 'Deposit request created');
+      }
+    } catch (error) {
+      if (mounted) {
+        showMessage(context, _friendlyUnexpectedMessage(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => submitting = false);
+      }
+    }
+  }
+
+  Future<void> _pickProof() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    final file = result?.files.single;
+    if (file?.bytes == null) return;
+    setState(() {
+      proof = DepositProofFile(
+        name: file!.name,
+        bytes: file.bytes!,
+        contentType: _contentTypeForName(file.name),
+      );
+    });
+  }
+
+  Future<void> _submitProof() async {
+    final currentOrder = order;
+    final currentProof = proof;
+    if (currentOrder == null) return;
+    if (transactionHashController.text.trim().isEmpty) {
+      showMessage(context, 'Enter the transaction hash');
+      return;
+    }
+    if (currentProof == null) {
+      showMessage(context, 'Upload proof of payment');
+      return;
+    }
+
+    setState(() => submitting = true);
+    try {
+      final updatedOrder = await widget.investmentRepository.submitDepositProof(
+        orderId: currentOrder.id,
+        transactionHash: transactionHashController.text,
+        proof: currentProof,
       );
 
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => SuccessScreen(order: order)),
+          MaterialPageRoute(builder: (_) => SuccessScreen(order: updatedOrder)),
         );
       }
     } catch (error) {
@@ -5487,6 +6350,63 @@ class _PaymentScreenState extends State<PaymentScreen> {
         setState(() => submitting = false);
       }
     }
+  }
+}
+
+class _DepositInstructions extends StatelessWidget {
+  const _DepositInstructions({
+    required this.order,
+    required this.proofName,
+    required this.transactionHashController,
+    required this.onPickProof,
+  });
+
+  final PurchaseOrder order;
+  final String? proofName;
+  final TextEditingController transactionHashController;
+  final VoidCallback onPickProof;
+
+  @override
+  Widget build(BuildContext context) {
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Deposit instructions', style: AppText.cardHeading),
+          const SizedBox(height: 14),
+          if (order.paymentQrCodeUrl.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Image.network(
+                order.paymentQrCodeUrl,
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+          QuoteRow('Wallet address', order.paymentWalletAddress),
+          QuoteRow('Network', order.paymentNetwork),
+          const SizedBox(height: 14),
+          const FieldLabel('Transaction hash'),
+          const SizedBox(height: 8),
+          AppTextField(
+            key: const ValueKey('transaction-hash'),
+            controller: transactionHashController,
+            hintText: 'Paste blockchain transaction hash',
+            prefixIcon: Icons.tag_rounded,
+          ),
+          const SizedBox(height: 14),
+          _PickerTile(
+            key: const ValueKey('payment-proof'),
+            icon: Icons.upload_file_rounded,
+            title: proofName ?? 'Upload proof of payment',
+            onTap: onPickProof,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -5517,11 +6437,11 @@ class SuccessScreen extends StatelessWidget {
                   child: const Text('OK', style: AppText.goldMetricSmall),
                 ),
                 const SizedBox(height: 44),
-                const Text('Purchase submitted', style: AppText.h1),
+                const Text('Proof submitted', style: AppText.h1),
                 const SizedBox(height: 12),
                 Text(
-                  'Your crypto payment is awaiting network confirmations. '
-                  'We will update settlement status automatically.',
+                  'Your proof of payment is awaiting admin verification. '
+                  'We will notify you after review.',
                   textAlign: TextAlign.center,
                   style: AppText.bodyLarge,
                 ),
@@ -6526,6 +7446,19 @@ void openDetail(
       ),
     ),
   );
+}
+
+String _shortHash(String hash) {
+  final trimmed = hash.trim();
+  if (trimmed.length <= 14) return trimmed.isEmpty ? '-' : trimmed;
+  return '${trimmed.substring(0, 8)}...${trimmed.substring(trimmed.length - 6)}';
+}
+
+String _contentTypeForName(String name) {
+  final lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.png')) return 'image/png';
+  return 'image/jpeg';
 }
 
 void showMessage(BuildContext context, String message) {
