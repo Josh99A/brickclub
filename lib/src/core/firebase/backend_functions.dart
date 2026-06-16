@@ -12,6 +12,20 @@ class BackendFunctions {
 
     return MemberProfileDto.fromJson(result.data);
   }
+
+  Future<void> sendDevelopmentEmailVerification() async {
+    final callable = _functions.httpsCallable(
+      'sendDevelopmentEmailVerification',
+    );
+    await callable.call<void>();
+  }
+
+  Future<void> sendDevelopmentPasswordResetEmail(String email) async {
+    final callable = _functions.httpsCallable(
+      'sendDevelopmentPasswordResetEmail',
+    );
+    await callable.call<void>({'email': email.trim()});
+  }
 }
 
 class MemberProfileDto {

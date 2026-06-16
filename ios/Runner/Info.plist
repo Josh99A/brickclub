@@ -49,6 +49,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>BrickClub uses the camera to capture your KYC selfie.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>BrickClub lets you choose identity and address proof files for KYC.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

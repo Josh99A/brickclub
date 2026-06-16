@@ -1,13 +1,33 @@
+import 'package:file_picker/file_picker.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
+import '../features/admin/domain/admin_models.dart';
+import '../features/admin/domain/admin_repository.dart';
 import '../features/auth/domain/auth_credentials.dart';
 import '../features/auth/domain/auth_repository.dart';
+import '../features/kyc/domain/kyc_models.dart';
+import '../features/kyc/domain/kyc_repository.dart';
 
 class BrickClubApp extends StatelessWidget {
-  const BrickClubApp({super.key, required this.authRepository});
+  const BrickClubApp({
+    super.key,
+    required this.authRepository,
+    required this.adminRepository,
+    required this.kycRepository,
+    this.showLandingPage = kIsWeb,
+    this.splashDuration = const Duration(seconds: 2),
+  });
 
   final AuthRepository authRepository;
+  final AdminRepository adminRepository;
+  final KycRepository kycRepository;
+  final bool showLandingPage;
+  final Duration splashDuration;
 
   @override
   Widget build(BuildContext context) {
@@ -24,33 +44,69 @@ class BrickClubApp extends StatelessWidget {
         fontFamily: 'Inter',
         useMaterial3: true,
       ),
-      home: AppGate(authRepository: authRepository),
+      home: AppGate(
+        authRepository: authRepository,
+        adminRepository: adminRepository,
+        kycRepository: kycRepository,
+        showLandingPage: showLandingPage,
+        splashDuration: splashDuration,
+      ),
     );
   }
 }
 
 class AppGate extends StatefulWidget {
-  const AppGate({super.key, required this.authRepository});
+  const AppGate({
+    super.key,
+    required this.authRepository,
+    required this.adminRepository,
+    required this.kycRepository,
+    required this.showLandingPage,
+    required this.splashDuration,
+  });
 
   final AuthRepository authRepository;
+  final AdminRepository adminRepository;
+  final KycRepository kycRepository;
+  final bool showLandingPage;
+  final Duration splashDuration;
 
   @override
   State<AppGate> createState() => _AppGateState();
 }
 
 class _AppGateState extends State<AppGate> {
-  AppDestination destination = AppDestination.landing;
+  late AppDestination destination;
+
+  @override
+  void initState() {
+    super.initState();
+    destination = widget.showLandingPage
+        ? AppDestination.landing
+        : AppDestination.splash;
+    if (!widget.showLandingPage) {
+      Future<void>.delayed(widget.splashDuration, () {
+        if (mounted && destination == AppDestination.splash) {
+          setState(() => destination = AppDestination.signUp);
+        }
+      });
+    }
+  }
+
+  AppDestination get authEntryDestination =>
+      widget.showLandingPage ? AppDestination.landing : AppDestination.signUp;
 
   @override
   Widget build(BuildContext context) {
     return switch (destination) {
+      AppDestination.splash => const SplashScreen(),
       AppDestination.landing => LandingPage(
         onSignIn: () => setState(() => destination = AppDestination.signIn),
         onSignUp: () => setState(() => destination = AppDestination.signUp),
       ),
       AppDestination.signIn => SignInScreen(
         authRepository: widget.authRepository,
-        onBack: () => setState(() => destination = AppDestination.landing),
+        onBack: () => setState(() => destination = authEntryDestination),
         onMemberSignedIn: () =>
             setState(() => destination = AppDestination.member),
         onAdminSignedIn: () =>
@@ -60,18 +116,55 @@ class _AppGateState extends State<AppGate> {
       ),
       AppDestination.signUp => SignUpScreen(
         authRepository: widget.authRepository,
-        onBack: () => setState(() => destination = AppDestination.landing),
+        onBack: () => setState(
+          () => destination = widget.showLandingPage
+              ? AppDestination.landing
+              : AppDestination.signIn,
+        ),
         onCreated: () => setState(() => destination = AppDestination.member),
       ),
-      AppDestination.member => const BrickClubShell(),
+      AppDestination.member => BrickClubShell(
+        authRepository: widget.authRepository,
+        kycRepository: widget.kycRepository,
+      ),
       AppDestination.admin => AdminDashboard(
-        onSignOut: () => setState(() => destination = AppDestination.landing),
+        authRepository: widget.authRepository,
+        adminRepository: widget.adminRepository,
+        onSignOut: () async {
+          await widget.authRepository.signOut();
+          setState(() => destination = authEntryDestination);
+        },
       ),
     };
   }
 }
 
-enum AppDestination { landing, signIn, signUp, member, admin }
+enum AppDestination { splash, landing, signIn, signUp, member, admin }
+
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const PhoneFrame(
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _BrickMark(),
+              SizedBox(height: 18),
+              Text('BrickClub', style: AppText.authBrand),
+              SizedBox(height: 8),
+              Text('Property-backed ownership', style: AppText.bodyLarge),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class LandingPage extends StatelessWidget {
   const LandingPage({
@@ -86,6 +179,7 @@ class LandingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: SelectionArea(
         child: SingleChildScrollView(
           child: Column(
@@ -486,7 +580,11 @@ class _PhonePreview extends StatelessWidget {
                     border: Border.all(color: AppColors.border),
                     borderRadius: BorderRadius.circular(13),
                   ),
-                  child: const Text('AJ', style: AppText.tinyLight),
+                  child: const Icon(
+                    Icons.person_outline_rounded,
+                    color: AppColors.secondary,
+                    size: 15,
+                  ),
                 ),
               ],
             ),
@@ -1191,8 +1289,8 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   void initState() {
     super.initState();
-    emailController = TextEditingController(text: 'joshua@brickclub.ug');
-    passwordController = TextEditingController(text: 'password10');
+    emailController = TextEditingController();
+    passwordController = TextEditingController();
   }
 
   @override
@@ -1205,6 +1303,7 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: Row(
         children: [
           if (MediaQuery.sizeOf(context).width >= 900)
@@ -1257,6 +1356,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           AppTextField(
                             key: const ValueKey('email-field'),
                             controller: emailController,
+                            hintText: 'you@example.com',
                             keyboardType: TextInputType.emailAddress,
                           ),
                           const SizedBox(height: 18),
@@ -1265,6 +1365,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           AppTextField(
                             key: const ValueKey('password-field'),
                             controller: passwordController,
+                            hintText: 'Enter your password',
                             obscureText: true,
                           ),
                           const SizedBox(height: 8),
@@ -1292,9 +1393,8 @@ class _SignInScreenState extends State<SignInScreen> {
                               onPressed: () {
                                 setState(() {
                                   adminAccess = !adminAccess;
-                                  emailController.text = adminAccess
-                                      ? 'admin@brickclub.ug'
-                                      : 'joshua@brickclub.ug';
+                                  emailController.clear();
+                                  passwordController.clear();
                                 });
                               },
                               icon: Icon(
@@ -1344,7 +1444,22 @@ class _SignInScreenState extends State<SignInScreen> {
         return;
       }
 
-      adminAccess ? widget.onAdminSignedIn() : widget.onMemberSignedIn();
+      if (adminAccess) {
+        final isAdmin = await widget.authRepository.currentUserIsAdmin();
+        if (!mounted) {
+          return;
+        }
+
+        if (!isAdmin) {
+          showMessage(context, 'This account does not have admin access.');
+          return;
+        }
+
+        widget.onAdminSignedIn();
+        return;
+      }
+
+      widget.onMemberSignedIn();
     } catch (error) {
       if (mounted) {
         showMessage(context, _authErrorMessage(error));
@@ -1420,8 +1535,15 @@ class _SignInStory extends StatelessWidget {
 }
 
 class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({super.key, required this.onSignOut});
+  const AdminDashboard({
+    super.key,
+    required this.authRepository,
+    required this.adminRepository,
+    required this.onSignOut,
+  });
 
+  final AuthRepository authRepository;
+  final AdminRepository adminRepository;
   final VoidCallback onSignOut;
 
   @override
@@ -1430,6 +1552,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int selectedIndex = 0;
+  late Future<AdminDashboardData> dashboardFuture;
 
   static const sections = [
     ('Overview', Icons.grid_view_rounded),
@@ -1441,9 +1564,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    dashboardFuture = widget.adminRepository.loadDashboard();
+  }
+
+  void reloadDashboard() {
+    setState(() {
+      dashboardFuture = widget.adminRepository.loadDashboard();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 980;
     return Scaffold(
+      backgroundColor: AppColors.background,
       drawer: wide ? null : Drawer(child: _sidebarContent()),
       body: Row(
         children: [
@@ -1456,11 +1592,39 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   _AdminTopBar(
                     title: sections[selectedIndex].$1,
                     showMenu: !wide,
+                    user: widget.authRepository.currentUserDetails(),
                   ),
                   Expanded(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.all(wide ? 30 : 18),
-                      child: _AdminSection(index: selectedIndex),
+                    child: FutureBuilder<AdminDashboardData>(
+                      future: dashboardFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.gold,
+                            ),
+                          );
+                        }
+
+                        if (snapshot.hasError) {
+                          return _AdminErrorState(
+                            message: _adminErrorMessage(snapshot.error!),
+                            onRetry: reloadDashboard,
+                          );
+                        }
+
+                        final data = snapshot.data!;
+                        return SingleChildScrollView(
+                          padding: EdgeInsets.all(wide ? 30 : 18),
+                          child: _AdminSection(
+                            index: selectedIndex,
+                            data: data,
+                            repository: widget.adminRepository,
+                            onChanged: reloadDashboard,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -1509,14 +1673,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
               const Spacer(),
               const Divider(color: AppColors.border),
               const SizedBox(height: 12),
-              const ListTile(
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                leading: CircleAvatar(
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                leading: const CircleAvatar(
                   backgroundColor: AppColors.panel,
-                  child: Text('JA', style: AppText.goldBody),
+                  child: Icon(
+                    Icons.admin_panel_settings_outlined,
+                    color: AppColors.gold,
+                    size: 20,
+                  ),
                 ),
-                title: Text('Joshua Admin', style: AppText.fieldLabel),
-                subtitle: Text('Super admin', style: AppText.tinyLight),
+                title: Text(
+                  widget.authRepository.currentUserDetails()?.primaryLabel ??
+                      'Signed-in admin',
+                  style: AppText.fieldLabel,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  widget.authRepository.currentUserDetails()?.email ??
+                      'Admin access',
+                  style: AppText.tinyLight,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               _AdminNavItem(
                 label: 'Sign out',
@@ -1584,10 +1762,15 @@ class _AdminNavItem extends StatelessWidget {
 }
 
 class _AdminTopBar extends StatelessWidget {
-  const _AdminTopBar({required this.title, required this.showMenu});
+  const _AdminTopBar({
+    required this.title,
+    required this.showMenu,
+    required this.user,
+  });
 
   final String title;
   final bool showMenu;
+  final SignedInUserDetails? user;
 
   @override
   Widget build(BuildContext context) {
@@ -1651,10 +1834,26 @@ class _AdminTopBar extends StatelessWidget {
             onPressed: () => showMessage(context, 'No new notifications'),
             icon: const Icon(Icons.notifications_none_rounded),
           ),
+          if (MediaQuery.sizeOf(context).width >= 900) ...[
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: Text(
+                user?.primaryLabel ?? 'Signed-in admin',
+                style: AppText.fieldLabel,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
           const CircleAvatar(
             radius: 17,
             backgroundColor: AppColors.panel,
-            child: Text('JA', style: AppText.headerInitials),
+            child: Icon(
+              Icons.admin_panel_settings_outlined,
+              color: AppColors.gold,
+              size: 18,
+            ),
           ),
         ],
       ),
@@ -1663,17 +1862,37 @@ class _AdminTopBar extends StatelessWidget {
 }
 
 class _AdminSection extends StatelessWidget {
-  const _AdminSection({required this.index});
+  const _AdminSection({
+    required this.index,
+    required this.data,
+    required this.repository,
+    required this.onChanged,
+  });
 
   final int index;
+  final AdminDashboardData data;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
     return switch (index) {
-      0 => const _OverviewPanel(),
-      1 => const _UsersPanel(),
-      2 => const _AssetsPanel(),
-      3 => const _PaymentsPanel(),
+      0 => _OverviewPanel(data: data),
+      1 => _UsersPanel(
+        users: data.users,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      2 => _AssetsPanel(
+        assets: data.assets,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      3 => _PaymentsPanel(
+        options: data.cryptoPaymentOptions,
+        repository: repository,
+        onChanged: onChanged,
+      ),
       4 => const _ReportsPanel(),
       _ => const _SettingsPanel(),
     };
@@ -1681,10 +1900,23 @@ class _AdminSection extends StatelessWidget {
 }
 
 class _OverviewPanel extends StatelessWidget {
-  const _OverviewPanel();
+  const _OverviewPanel({required this.data});
+
+  final AdminDashboardData data;
 
   @override
   Widget build(BuildContext context) {
+    final activeUsers = data.users.where((user) => !user.disabled).length;
+    final liveAssets = data.assets
+        .where((asset) => asset.publishedStatus.toLowerCase() == 'live')
+        .length;
+    final enabledPaymentOptions = data.cryptoPaymentOptions
+        .where((option) => option.enabled)
+        .length;
+    final pendingAssets = data.assets
+        .where((asset) => asset.reviewStatus.toLowerCase() != 'verified')
+        .length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1693,31 +1925,31 @@ class _OverviewPanel extends StatelessWidget {
           style: TextStyle(color: AppColors.secondary, fontSize: 14),
         ),
         const SizedBox(height: 26),
-        const Wrap(
+        Wrap(
           spacing: 14,
           runSpacing: 14,
           children: [
             _AdminMetricCard(
               'Total users',
-              '12,480',
-              '+8.2%',
+              '${data.users.length}',
+              '$activeUsers active',
               Icons.people_alt_outlined,
             ),
             _AdminMetricCard(
-              'Verified assets',
-              '48',
-              '+4 this month',
+              'Live assets',
+              '$liveAssets',
+              '${data.assets.length} total',
               Icons.apartment_outlined,
             ),
             _AdminMetricCard(
-              'Payment volume',
-              '\$842K',
-              '+12.6%',
+              'Payment options',
+              '$enabledPaymentOptions',
+              'enabled networks',
               Icons.currency_bitcoin_rounded,
             ),
             _AdminMetricCard(
               'Pending reviews',
-              '17',
+              '$pendingAssets',
               'Needs action',
               Icons.pending_actions_outlined,
               warning: true,
@@ -1745,18 +1977,56 @@ class _OverviewPanel extends StatelessWidget {
           },
         ),
         const SizedBox(height: 20),
-        const _AdminPanel(
+        _AdminPanel(
           title: 'Recent crypto payments',
           action: 'View all',
-          child: _PaymentTable(compact: true),
+          child: _PaymentOptionTable(
+            options: data.cryptoPaymentOptions,
+            compact: true,
+          ),
         ),
         const SizedBox(height: 20),
-        const _AdminPanel(
+        _AdminPanel(
           title: 'Recent users',
           action: 'Manage users',
-          child: _UserTable(compact: true),
+          child: _UserTable(users: data.users, compact: true),
         ),
       ],
+    );
+  }
+}
+
+class _AdminErrorState extends StatelessWidget {
+  const _AdminErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Panel(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.admin_panel_settings_outlined,
+              color: AppColors.gold,
+              size: 34,
+            ),
+            const SizedBox(height: 14),
+            Text('Admin data unavailable', style: AppText.h2),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: AppText.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 18),
+            SecondaryButton(label: 'Retry', onPressed: onRetry, compact: true),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -2005,42 +2275,134 @@ class _ReviewRow extends StatelessWidget {
 }
 
 class _UsersPanel extends StatelessWidget {
-  const _UsersPanel();
+  const _UsersPanel({
+    required this.users,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<AdminUser> users;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return const _SectionPage(
+    return _SectionPage(
       description: 'Review verification, account status, and member activity.',
-      controls: ['All users', 'KYC status', 'Account status'],
-      child: _AdminPanel(title: 'Users', child: _UserTable()),
+      actionLabel: 'Add user',
+      onAction: () => _showUserDialog(
+        context,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      child: _AdminPanel(
+        title: 'Users',
+        child: _UserTable(
+          users: users,
+          onEdit: (user) => _showUserDialog(
+            context,
+            repository: repository,
+            user: user,
+            onChanged: onChanged,
+          ),
+          onDelete: (user) => _runAdminAction(
+            context,
+            action: () => repository.deleteUser(user.uid),
+            onChanged: onChanged,
+          ),
+          onToggleAdmin: (user, admin) => _runAdminAction(
+            context,
+            action: () => repository.setUserAdmin(uid: user.uid, admin: admin),
+            onChanged: onChanged,
+          ),
+        ),
+      ),
     );
   }
 }
 
 class _AssetsPanel extends StatelessWidget {
-  const _AssetsPanel();
+  const _AssetsPanel({
+    required this.assets,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<AdminAsset> assets;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return const _SectionPage(
+    return _SectionPage(
       description:
           'Manage listings, due diligence, funding progress, and publication.',
-      controls: ['All assets', 'Review status', 'Asset type'],
-      child: _AdminPanel(title: 'Asset inventory', child: _AssetTable()),
+      actionLabel: 'Add asset',
+      onAction: () => _showAssetDialog(
+        context,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      child: _AdminPanel(
+        title: 'Asset inventory',
+        child: _AssetTable(
+          assets: assets,
+          onEdit: (asset) => _showAssetDialog(
+            context,
+            repository: repository,
+            asset: asset,
+            onChanged: onChanged,
+          ),
+          onDelete: (asset) => _runAdminAction(
+            context,
+            action: () => repository.deleteAsset(asset.id),
+            onChanged: onChanged,
+          ),
+        ),
+      ),
     );
   }
 }
 
 class _PaymentsPanel extends StatelessWidget {
-  const _PaymentsPanel();
+  const _PaymentsPanel({
+    required this.options,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<CryptoPaymentOption> options;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return const _SectionPage(
+    return _SectionPage(
       description:
-          'Monitor deposits, settlements, refunds, and network confirmations.',
-      controls: ['All payments', 'Network', 'Status'],
-      child: _AdminPanel(title: 'Crypto payments', child: _PaymentTable()),
+          'Manage the crypto networks and wallet addresses offered in the app.',
+      actionLabel: 'Add option',
+      onAction: () => _showPaymentOptionDialog(
+        context,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      child: _AdminPanel(
+        title: 'Crypto payment options',
+        child: _PaymentOptionTable(
+          options: options,
+          onEdit: (option) => _showPaymentOptionDialog(
+            context,
+            repository: repository,
+            option: option,
+            onChanged: onChanged,
+          ),
+          onDelete: (option) => _runAdminAction(
+            context,
+            action: () => repository.deleteCryptoPaymentOption(option.id),
+            onChanged: onChanged,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2053,7 +2415,6 @@ class _ReportsPanel extends StatelessWidget {
     return const _SectionPage(
       description:
           'Operational reporting for member growth, assets, and settlement.',
-      controls: ['Last 30 days', 'All regions', 'Export CSV'],
       child: _AdminPanel(
         title: 'Operations report',
         child: SizedBox(
@@ -2076,7 +2437,6 @@ class _SettingsPanel extends StatelessWidget {
     return const _SectionPage(
       description:
           'Configure approval rules, payment networks, and administrator access.',
-      controls: ['Security', 'Payment rails', 'Team access'],
       child: _AdminPanel(
         title: 'Platform settings',
         child: Column(
@@ -2097,13 +2457,15 @@ class _SettingsPanel extends StatelessWidget {
 class _SectionPage extends StatelessWidget {
   const _SectionPage({
     required this.description,
-    required this.controls,
     required this.child,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String description;
-  final List<String> controls;
   final Widget child;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -2112,35 +2474,20 @@ class _SectionPage extends StatelessWidget {
       children: [
         Text(description, style: AppText.bodyLarge),
         const SizedBox(height: 24),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
+        Row(
           children: [
-            for (final control in controls) _FilterButton(label: control),
+            const Spacer(),
+            if (actionLabel != null)
+              SecondaryButton(
+                label: actionLabel!,
+                onPressed: onAction,
+                compact: true,
+              ),
           ],
         ),
         const SizedBox(height: 20),
         child,
       ],
-    );
-  }
-}
-
-class _FilterButton extends StatelessWidget {
-  const _FilterButton({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: () => showMessage(context, '$label filter selected'),
-      icon: const Icon(Icons.tune_rounded, size: 16),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.secondary,
-        side: const BorderSide(color: AppColors.border),
-        backgroundColor: AppColors.panel,
-      ),
     );
   }
 }
@@ -2166,67 +2513,136 @@ class _SettingRow extends StatelessWidget {
 }
 
 class _UserTable extends StatelessWidget {
-  const _UserTable({this.compact = false});
+  const _UserTable({
+    required this.users,
+    this.compact = false,
+    this.onEdit,
+    this.onDelete,
+    this.onToggleAdmin,
+  });
+
+  final List<AdminUser> users;
   final bool compact;
+  final ValueChanged<AdminUser>? onEdit;
+  final ValueChanged<AdminUser>? onDelete;
+  final void Function(AdminUser user, bool admin)? onToggleAdmin;
 
   @override
   Widget build(BuildContext context) {
-    final rows = [
-      ('Sarah Namuli', 'sarah@brickclub.ug', 'Verified', 'Active'),
-      ('Daniel Kimani', 'daniel@brickclub.co.ke', 'Verified', 'Active'),
-      ('Amina Mushi', 'amina@brickclub.co.tz', 'Review', 'Active'),
-      ('Joel Mugisha', 'joel@brickclub.rw', 'Pending', 'Restricted'),
-      ('Grace Akello', 'grace@brickclub.ug', 'Verified', 'Active'),
-    ];
     return _ResponsiveDataTable(
-      columns: const ['Member', 'Email', 'KYC', 'Account'],
+      columns: const ['Member', 'Email', 'Role', 'Account'],
       rows: [
-        for (final row in rows.take(compact ? 4 : rows.length))
-          [row.$1, row.$2, row.$3, row.$4],
+        for (final user in users.take(compact ? 4 : users.length))
+          _AdminTableRow(
+            values: [
+              user.displayName?.isNotEmpty == true ? user.displayName! : '-',
+              user.email,
+              user.admin ? 'Admin' : 'Member',
+              user.disabled ? 'Disabled' : 'Active',
+            ],
+            source: user,
+          ),
       ],
       statusColumns: const {2, 3},
+      onEdit: onEdit == null ? null : (row) => onEdit!(row.source as AdminUser),
+      onDelete: onDelete == null
+          ? null
+          : (row) => onDelete!(row.source as AdminUser),
+      trailingBuilder: compact || onToggleAdmin == null
+          ? null
+          : (row) {
+              final user = row.source as AdminUser;
+              return Switch(
+                value: user.admin,
+                onChanged: (value) => onToggleAdmin!(user, value),
+                activeThumbColor: AppColors.gold,
+              );
+            },
     );
   }
 }
 
 class _AssetTable extends StatelessWidget {
-  const _AssetTable();
+  const _AssetTable({required this.assets, this.onEdit, this.onDelete});
+
+  final List<AdminAsset> assets;
+  final ValueChanged<AdminAsset>? onEdit;
+  final ValueChanged<AdminAsset>? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return const _ResponsiveDataTable(
-      columns: ['Asset', 'Type', 'Funded', 'Review', 'Published'],
+    return _ResponsiveDataTable(
+      columns: const ['Asset', 'Type', 'Funded', 'Review', 'Published'],
       rows: [
-        ['Kololo Heights', 'Real estate', '62%', 'Verified', 'Live'],
-        ['Bugolobi Logistics', 'REIT', '41%', 'Review', 'Draft'],
-        ['Kigali Green Offices', 'Real estate', '18%', 'Pending', 'Draft'],
-        ['Nakasero Income Fund', 'Fund', '77%', 'Review', 'Paused'],
-        ['Mombasa Storage Trust', 'Alternatives', '32%', 'Pending', 'Draft'],
+        for (final asset in assets)
+          _AdminTableRow(
+            values: [
+              asset.title,
+              asset.type,
+              '${asset.fundedPercent.toStringAsFixed(0)}%',
+              asset.reviewStatus,
+              asset.publishedStatus,
+            ],
+            source: asset,
+          ),
       ],
-      statusColumns: {3, 4},
+      statusColumns: const {3, 4},
+      onEdit: onEdit == null
+          ? null
+          : (row) => onEdit!(row.source as AdminAsset),
+      onDelete: onDelete == null
+          ? null
+          : (row) => onDelete!(row.source as AdminAsset),
     );
   }
 }
 
-class _PaymentTable extends StatelessWidget {
-  const _PaymentTable({this.compact = false});
+class _PaymentOptionTable extends StatelessWidget {
+  const _PaymentOptionTable({
+    required this.options,
+    this.compact = false,
+    this.onEdit,
+    this.onDelete,
+  });
+
+  final List<CryptoPaymentOption> options;
   final bool compact;
+  final ValueChanged<CryptoPaymentOption>? onEdit;
+  final ValueChanged<CryptoPaymentOption>? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final rows = [
-      ['0x71B...8E4', 'Kololo Heights', 'Tron', '12,500 USDT', 'Confirmed'],
-      ['0xA92...1CF', 'Bugolobi REIT', 'Ethereum', '8,200 USDT', 'Pending'],
-      ['0x44D...90A', 'Kololo Heights', 'Tron', '4,750 USDT', 'Confirmed'],
-      ['0xC08...6B2', 'Kigali Offices', 'Ethereum', '3,100 USDT', 'Review'],
-      ['0x1F3...AA9', 'Nakasero Fund', 'Tron', '9,600 USDT', 'Failed'],
-    ];
     return _ResponsiveDataTable(
-      columns: const ['Wallet', 'Asset', 'Network', 'Amount', 'Status'],
-      rows: rows.take(compact ? 4 : rows.length).toList(),
+      columns: const ['Network', 'Asset', 'Wallet', 'Minimum', 'Status'],
+      rows: [
+        for (final option in options.take(compact ? 4 : options.length))
+          _AdminTableRow(
+            values: [
+              option.network,
+              option.assetSymbol,
+              option.walletAddress,
+              option.minimumAmount.toStringAsFixed(2),
+              option.enabled ? 'Active' : 'Disabled',
+            ],
+            source: option,
+          ),
+      ],
       statusColumns: const {4},
+      onEdit: onEdit == null
+          ? null
+          : (row) => onEdit!(row.source as CryptoPaymentOption),
+      onDelete: onDelete == null
+          ? null
+          : (row) => onDelete!(row.source as CryptoPaymentOption),
     );
   }
+}
+
+class _AdminTableRow {
+  const _AdminTableRow({required this.values, this.source});
+
+  final List<String> values;
+  final Object? source;
 }
 
 class _ResponsiveDataTable extends StatelessWidget {
@@ -2234,11 +2650,17 @@ class _ResponsiveDataTable extends StatelessWidget {
     required this.columns,
     required this.rows,
     this.statusColumns = const {},
+    this.onEdit,
+    this.onDelete,
+    this.trailingBuilder,
   });
 
   final List<String> columns;
-  final List<List<String>> rows;
+  final List<_AdminTableRow> rows;
   final Set<int> statusColumns;
+  final ValueChanged<_AdminTableRow>? onEdit;
+  final ValueChanged<_AdminTableRow>? onDelete;
+  final Widget Function(_AdminTableRow row)? trailingBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -2275,15 +2697,25 @@ class _ResponsiveDataTable extends StatelessWidget {
                                 child: statusColumns.contains(index)
                                     ? Align(
                                         alignment: Alignment.centerLeft,
-                                        child: _StatusChip(row[index]),
+                                        child: _StatusChip(row.values[index]),
                                       )
                                     : Text(
-                                        row[index],
+                                        row.values[index],
                                         style: AppText.fieldLabel,
                                       ),
                               ),
                             ],
                           ),
+                        ),
+                      if (onEdit != null ||
+                          onDelete != null ||
+                          trailingBuilder != null)
+                        _RowActions(
+                          onEdit: onEdit == null ? null : () => onEdit!(row),
+                          onDelete: onDelete == null
+                              ? null
+                              : () => onDelete!(row),
+                          trailing: trailingBuilder?.call(row),
                         ),
                     ],
                   ),
@@ -2311,16 +2743,30 @@ class _ResponsiveDataTable extends StatelessWidget {
             ),
             columns: [
               for (final column in columns) DataColumn(label: Text(column)),
+              if (onEdit != null || onDelete != null || trailingBuilder != null)
+                const DataColumn(label: Text('Actions')),
             ],
             rows: [
               for (final row in rows)
                 DataRow(
                   cells: [
-                    for (var index = 0; index < row.length; index++)
+                    for (var index = 0; index < row.values.length; index++)
                       DataCell(
                         statusColumns.contains(index)
-                            ? _StatusChip(row[index])
-                            : Text(row[index]),
+                            ? _StatusChip(row.values[index])
+                            : Text(row.values[index]),
+                      ),
+                    if (onEdit != null ||
+                        onDelete != null ||
+                        trailingBuilder != null)
+                      DataCell(
+                        _RowActions(
+                          onEdit: onEdit == null ? null : () => onEdit!(row),
+                          onDelete: onDelete == null
+                              ? null
+                              : () => onDelete!(row),
+                          trailing: trailingBuilder?.call(row),
+                        ),
                       ),
                   ],
                 ),
@@ -2328,6 +2774,36 @@ class _ResponsiveDataTable extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _RowActions extends StatelessWidget {
+  const _RowActions({this.onEdit, this.onDelete, this.trailing});
+
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ?trailing,
+        if (onEdit != null)
+          IconButton(
+            tooltip: 'Edit',
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 18),
+          ),
+        if (onDelete != null)
+          IconButton(
+            tooltip: 'Delete',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+          ),
+      ],
     );
   }
 }
@@ -2368,6 +2844,334 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+Future<void> _showUserDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required VoidCallback onChanged,
+  AdminUser? user,
+}) async {
+  final email = TextEditingController(text: user?.email ?? '');
+  final name = TextEditingController(text: user?.displayName ?? '');
+  final password = TextEditingController();
+  var disabled = user?.disabled ?? false;
+  var admin = user?.admin ?? false;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        return AlertDialog(
+          backgroundColor: AppColors.panel,
+          title: Text(user == null ? 'Create user' : 'Edit user'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppTextField(
+                  controller: name,
+                  hintText: 'Full name',
+                  initialValue: null,
+                ),
+                const SizedBox(height: 10),
+                AppTextField(
+                  controller: email,
+                  hintText: 'member@example.com',
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 10),
+                AppTextField(
+                  controller: password,
+                  hintText: user == null
+                      ? 'Temporary password'
+                      : 'Leave blank to keep password',
+                  obscureText: true,
+                  initialValue: null,
+                ),
+                SwitchListTile(
+                  value: admin,
+                  onChanged: (value) => setState(() => admin = value),
+                  title: const Text('Admin access'),
+                  activeThumbColor: AppColors.gold,
+                ),
+                SwitchListTile(
+                  value: disabled,
+                  onChanged: (value) => setState(() => disabled = value),
+                  title: const Text('Disabled'),
+                  activeThumbColor: AppColors.gold,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                await _runAdminAction(
+                  context,
+                  action: () => user == null
+                      ? repository.createUser(
+                          email: email.text,
+                          password: password.text,
+                          displayName: name.text,
+                          disabled: disabled,
+                          admin: admin,
+                        )
+                      : repository.updateUser(
+                          uid: user.uid,
+                          email: email.text,
+                          password: password.text,
+                          displayName: name.text,
+                          disabled: disabled,
+                          admin: admin,
+                        ),
+                  onChanged: onChanged,
+                );
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  email.dispose();
+  name.dispose();
+  password.dispose();
+}
+
+Future<void> _showAssetDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required VoidCallback onChanged,
+  AdminAsset? asset,
+}) async {
+  final value = asset ?? AdminAsset.empty();
+  final title = TextEditingController(text: value.title);
+  final location = TextEditingController(text: value.location);
+  final type = TextEditingController(text: value.type);
+  final fundedPercent = TextEditingController(
+    text: value.fundedPercent.toStringAsFixed(0),
+  );
+  final reviewStatus = TextEditingController(text: value.reviewStatus);
+  final publishedStatus = TextEditingController(text: value.publishedStatus);
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: Text(asset == null ? 'Create asset' : 'Edit asset'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppTextField(controller: title, hintText: 'Asset title'),
+            const SizedBox(height: 10),
+            AppTextField(controller: location, hintText: 'Location'),
+            const SizedBox(height: 10),
+            AppTextField(controller: type, hintText: 'Asset type'),
+            const SizedBox(height: 10),
+            AppTextField(
+              controller: fundedPercent,
+              hintText: 'Funded percent',
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 10),
+            AppTextField(controller: reviewStatus, hintText: 'Review status'),
+            const SizedBox(height: 10),
+            AppTextField(
+              controller: publishedStatus,
+              hintText: 'Published status',
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final payload = AdminAsset(
+              id: value.id,
+              title: title.text,
+              location: location.text,
+              type: type.text,
+              fundedPercent: double.tryParse(fundedPercent.text) ?? 0,
+              reviewStatus: reviewStatus.text,
+              publishedStatus: publishedStatus.text,
+            );
+
+            await _runAdminAction(
+              context,
+              action: () => asset == null
+                  ? repository.createAsset(payload)
+                  : repository.updateAsset(payload),
+              onChanged: onChanged,
+            );
+            if (dialogContext.mounted) {
+              Navigator.pop(dialogContext);
+            }
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+
+  title.dispose();
+  location.dispose();
+  type.dispose();
+  fundedPercent.dispose();
+  reviewStatus.dispose();
+  publishedStatus.dispose();
+}
+
+Future<void> _showPaymentOptionDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required VoidCallback onChanged,
+  CryptoPaymentOption? option,
+}) async {
+  final value = option ?? CryptoPaymentOption.empty();
+  final network = TextEditingController(text: value.network);
+  final assetSymbol = TextEditingController(text: value.assetSymbol);
+  final walletAddress = TextEditingController(text: value.walletAddress);
+  final minimumAmount = TextEditingController(
+    text: value.minimumAmount.toStringAsFixed(2),
+  );
+  var enabled = value.enabled;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        return AlertDialog(
+          backgroundColor: AppColors.panel,
+          title: Text(option == null ? 'Create payment option' : 'Edit option'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppTextField(controller: network, hintText: 'Network'),
+                const SizedBox(height: 10),
+                AppTextField(controller: assetSymbol, hintText: 'Asset symbol'),
+                const SizedBox(height: 10),
+                AppTextField(
+                  controller: walletAddress,
+                  hintText: 'Settlement wallet address',
+                ),
+                const SizedBox(height: 10),
+                AppTextField(
+                  controller: minimumAmount,
+                  hintText: 'Minimum amount',
+                  keyboardType: TextInputType.number,
+                ),
+                SwitchListTile(
+                  value: enabled,
+                  onChanged: (value) => setState(() => enabled = value),
+                  title: const Text('Enabled'),
+                  activeThumbColor: AppColors.gold,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final payload = CryptoPaymentOption(
+                  id: value.id,
+                  network: network.text,
+                  assetSymbol: assetSymbol.text,
+                  walletAddress: walletAddress.text,
+                  enabled: enabled,
+                  minimumAmount: double.tryParse(minimumAmount.text) ?? 0,
+                );
+
+                await _runAdminAction(
+                  context,
+                  action: () => option == null
+                      ? repository.createCryptoPaymentOption(payload)
+                      : repository.updateCryptoPaymentOption(payload),
+                  onChanged: onChanged,
+                );
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  network.dispose();
+  assetSymbol.dispose();
+  walletAddress.dispose();
+  minimumAmount.dispose();
+}
+
+Future<void> _runAdminAction(
+  BuildContext context, {
+  required Future<void> Function() action,
+  required VoidCallback onChanged,
+}) async {
+  try {
+    await action();
+    onChanged();
+    if (context.mounted) {
+      showMessage(context, 'Admin change saved');
+    }
+  } catch (error) {
+    if (context.mounted) {
+      showMessage(context, _adminErrorMessage(error));
+    }
+  }
+}
+
+String _adminErrorMessage(Object error) {
+  if (error is FirebaseFunctionsException) {
+    return switch (error.code) {
+      'unauthenticated' => 'Sign in again to continue.',
+      'permission-denied' =>
+        'Your account does not have permission to make this change.',
+      'invalid-argument' =>
+        'Check the details and try again. Some required information is missing or invalid.',
+      'not-found' => 'We could not find that record. Refresh and try again.',
+      'already-exists' => 'A record with those details already exists.',
+      'unavailable' =>
+        'Admin services are temporarily unavailable. Please try again shortly.',
+      'deadline-exceeded' =>
+        'The request took too long. Please check your connection and try again.',
+      'resource-exhausted' =>
+        'Too many requests right now. Please wait a moment and try again.',
+      'failed-precondition' => _friendlyFirebaseMessage(
+        error.message,
+        fallback: 'This action is not available right now.',
+      ),
+      _ => 'We could not complete that admin action. Please try again.',
+    };
+  }
+
+  return _friendlyUnexpectedMessage(error);
+}
+
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({
     super.key,
@@ -2387,11 +3191,11 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   bool accepted = false;
   bool creatingAccount = false;
-  final firstNameController = TextEditingController(text: 'Joshua');
-  final lastNameController = TextEditingController(text: 'Awule');
-  final emailController = TextEditingController(text: 'joshua@brickclub.ug');
-  final passwordController = TextEditingController(text: 'password10');
-  final confirmPasswordController = TextEditingController(text: 'password10');
+  final firstNameController = TextEditingController();
+  final lastNameController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
 
   @override
   void dispose() {
@@ -2407,6 +3211,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     return PhoneFrame(
       child: Scaffold(
+        backgroundColor: AppColors.background,
         body: Container(
           color: AppColors.background,
           child: SafeArea(
@@ -2415,7 +3220,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const MockStatusBar(),
                   IconButton(
                     onPressed: widget.onBack,
                     icon: const Icon(Icons.chevron_left, size: 34),
@@ -2445,6 +3249,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         const SizedBox(height: 6),
                         AppTextField(
                           controller: firstNameController,
+                          hintText: 'Legal first name',
                           compact: true,
                         ),
                         const SizedBox(height: 8),
@@ -2452,6 +3257,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         const SizedBox(height: 6),
                         AppTextField(
                           controller: lastNameController,
+                          hintText: 'Legal last name',
                           compact: true,
                         ),
                         const SizedBox(height: 8),
@@ -2459,6 +3265,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         const SizedBox(height: 6),
                         AppTextField(
                           controller: emailController,
+                          hintText: 'you@example.com',
                           keyboardType: TextInputType.emailAddress,
                           compact: true,
                         ),
@@ -2467,6 +3274,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         const SizedBox(height: 6),
                         AppTextField(
                           controller: passwordController,
+                          hintText: 'Create a password',
                           obscureText: true,
                           compact: true,
                         ),
@@ -2475,6 +3283,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         const SizedBox(height: 6),
                         AppTextField(
                           controller: confirmPasswordController,
+                          hintText: 'Confirm your password',
                           obscureText: true,
                           compact: true,
                         ),
@@ -2558,7 +3367,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
 }
 
 class BrickClubShell extends StatefulWidget {
-  const BrickClubShell({super.key});
+  const BrickClubShell({
+    super.key,
+    required this.authRepository,
+    required this.kycRepository,
+  });
+
+  final AuthRepository authRepository;
+  final KycRepository kycRepository;
 
   @override
   State<BrickClubShell> createState() => _BrickClubShellState();
@@ -2569,35 +3385,636 @@ class _BrickClubShellState extends State<BrickClubShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      HomeScreen(onInvest: () => setState(() => index = 1)),
-      const InvestScreen(),
-      const WalletScreen(),
-      const PortfolioScreen(),
-      const ProfileScreen(),
-    ];
+    return StreamBuilder<KycProfile>(
+      stream: widget.kycRepository.watchProfile(),
+      builder: (context, snapshot) {
+        final kyc =
+            snapshot.data ??
+            const KycProfile(
+              status: KycStatus.notStarted,
+              emailVerified: false,
+              phoneVerified: false,
+            );
+        final pages = [
+          HomeScreen(
+            kyc: kyc,
+            onInvest: () => setState(() => index = 1),
+            onStartKyc: () => _openKyc(context),
+          ),
+          InvestScreen(kyc: kyc, onStartKyc: () => _openKyc(context)),
+          WalletScreen(kyc: kyc, onStartKyc: () => _openKyc(context)),
+          const PortfolioScreen(),
+          ProfileScreen(
+            user: widget.authRepository.currentUserDetails(),
+            kyc: kyc,
+            onStartKyc: () => _openKyc(context),
+          ),
+        ];
+        return PhoneFrame(
+          child: Scaffold(
+            backgroundColor: AppColors.background,
+            body: IndexedStack(index: index, children: pages),
+            bottomNavigationBar: AppBottomNav(
+              index: index,
+              onChanged: (value) => setState(() => index = value),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openKyc(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => KycScreen(repository: widget.kycRepository),
+      ),
+    );
+  }
+}
+
+void requireApprovedKyc(
+  BuildContext context,
+  KycProfile kyc,
+  VoidCallback onApproved,
+  VoidCallback onStartKyc,
+) {
+  if (kyc.canPerformFinancialActions) {
+    onApproved();
+    return;
+  }
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.panel,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.verified_user_outlined, color: AppColors.gold),
+          const SizedBox(height: 16),
+          const Text('Complete KYC first', style: AppText.h2),
+          const SizedBox(height: 8),
+          Text(
+            'Status: ${kyc.label}. Purchases, withdrawals, wallet changes, '
+            'and crypto settlement unlock after approval.',
+            style: AppText.bodyLarge,
+          ),
+          const SizedBox(height: 20),
+          PrimaryButton(
+            key: const ValueKey('start-kyc-gate'),
+            label: kyc.status == KycStatus.submitted
+                ? 'View KYC status'
+                : 'Complete KYC',
+            onPressed: () {
+              Navigator.pop(sheetContext);
+              onStartKyc();
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class KycStatusCard extends StatelessWidget {
+  const KycStatusCard({
+    super.key,
+    required this.kyc,
+    required this.onStartKyc,
+    this.compact = false,
+    this.showAction = true,
+  });
+
+  final KycProfile kyc;
+  final VoidCallback onStartKyc;
+  final bool compact;
+  final bool showAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final isApproved = kyc.status == KycStatus.approved;
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isApproved
+                    ? Icons.verified_rounded
+                    : Icons.verified_user_outlined,
+                color: isApproved ? AppColors.success : AppColors.gold,
+                size: 30,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('KYC ${kyc.label}', style: AppText.cardHeadingSmall),
+                    const SizedBox(height: 4),
+                    Text(_statusCopy(kyc), style: AppText.body),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ProgressLine(value: kyc.completionRatio.clamp(0, 1), height: 6),
+          if (!compact) ...[
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _KycChip('Email', kyc.emailVerified),
+                _KycChip('Phone', kyc.phoneVerified),
+                _KycChip('Identity', kyc.status == KycStatus.approved),
+              ],
+            ),
+          ],
+          if (showAction) ...[
+            const SizedBox(height: 16),
+            PrimaryButton(
+              key: const ValueKey('kyc-status-cta'),
+              label: isApproved ? 'View KYC details' : 'Complete KYC',
+              height: 44,
+              onPressed: onStartKyc,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _statusCopy(KycProfile kyc) {
+    return switch (kyc.status) {
+      KycStatus.approved => 'Financial actions are unlocked.',
+      KycStatus.submitted => 'Your documents are under review.',
+      KycStatus.rejected =>
+        kyc.rejectionReason ?? 'Review the request and resubmit.',
+      _ => 'Required before purchases and wallet changes.',
+    };
+  }
+}
+
+class _KycChip extends StatelessWidget {
+  const _KycChip(this.label, this.complete);
+
+  final String label;
+  final bool complete;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoicePill(
+      label: '$label ${complete ? 'OK' : 'Needed'}',
+      selected: complete,
+    );
+  }
+}
+
+class KycScreen extends StatefulWidget {
+  const KycScreen({super.key, required this.repository});
+
+  final KycRepository repository;
+
+  @override
+  State<KycScreen> createState() => _KycScreenState();
+}
+
+class _KycScreenState extends State<KycScreen> {
+  final formKey = GlobalKey<FormState>();
+  final fullNameController = TextEditingController();
+  final phoneController = TextEditingController();
+  final phoneCodeController = TextEditingController();
+  final imagePicker = ImagePicker();
+  DateTime? dateOfBirth;
+  KycDocumentFile? governmentId;
+  KycDocumentFile? selfie;
+  KycDocumentFile? addressProof;
+  bool sendingEmail = false;
+  bool sendingPhone = false;
+  bool submitting = false;
+
+  @override
+  void dispose() {
+    fullNameController.dispose();
+    phoneController.dispose();
+    phoneCodeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return PhoneFrame(
       child: Scaffold(
-        body: IndexedStack(index: index, children: pages),
-        bottomNavigationBar: AppBottomNav(
-          index: index,
-          onChanged: (value) => setState(() => index = value),
+        backgroundColor: AppColors.background,
+        appBar: detailAppBar(context, 'Verify identity'),
+        body: StreamBuilder<KycProfile>(
+          stream: widget.repository.watchProfile(),
+          builder: (context, snapshot) {
+            final kyc =
+                snapshot.data ??
+                const KycProfile(
+                  status: KycStatus.notStarted,
+                  emailVerified: false,
+                  phoneVerified: false,
+                );
+            _hydrateOnce(kyc);
+            return Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    KycStatusCard(
+                      kyc: kyc,
+                      onStartKyc: () {},
+                      compact: true,
+                      showAction: false,
+                    ),
+                    const SizedBox(height: 18),
+                    const FieldLabel('Full legal name'),
+                    const SizedBox(height: 8),
+                    AppTextField(
+                      controller: fullNameController,
+                      hintText: 'Name exactly as shown on your ID',
+                    ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Date of birth'),
+                    const SizedBox(height: 8),
+                    _PickerTile(
+                      key: const ValueKey('kyc-dob'),
+                      icon: Icons.calendar_month_outlined,
+                      title: dateOfBirth == null
+                          ? 'Select date'
+                          : DateFormat.yMMMd().format(dateOfBirth!),
+                      onTap: _pickDateOfBirth,
+                    ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Government ID or passport'),
+                    const SizedBox(height: 8),
+                    _PickerTile(
+                      key: const ValueKey('kyc-government-id'),
+                      icon: Icons.badge_outlined,
+                      title: governmentId?.name ?? 'Upload ID document',
+                      onTap: () => _pickFile((file) => governmentId = file),
+                    ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Selfie / face verification'),
+                    const SizedBox(height: 8),
+                    _PickerTile(
+                      key: const ValueKey('kyc-selfie'),
+                      icon: Icons.face_retouching_natural_outlined,
+                      title: selfie?.name ?? 'Capture selfie',
+                      onTap: _pickSelfie,
+                    ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Physical address proof'),
+                    const SizedBox(height: 8),
+                    _PickerTile(
+                      key: const ValueKey('kyc-address-proof'),
+                      icon: Icons.home_work_outlined,
+                      title:
+                          addressProof?.name ?? 'Upload utility bill or lease',
+                      onTap: () => _pickFile((file) => addressProof = file),
+                    ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Phone verification'),
+                    const SizedBox(height: 8),
+                    AppTextField(
+                      key: const ValueKey('kyc-phone'),
+                      controller: phoneController,
+                      hintText: '+256 700 000000',
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 10),
+                    SecondaryButton(
+                      key: const ValueKey('send-phone-code'),
+                      label: sendingPhone ? 'Sending...' : 'Send code',
+                      onPressed: sendingPhone ? null : _sendPhoneCode,
+                    ),
+                    const SizedBox(height: 10),
+                    AppTextField(
+                      key: const ValueKey('kyc-phone-code'),
+                      controller: phoneCodeController,
+                      hintText: 'Verification code',
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Email verification'),
+                    const SizedBox(height: 8),
+                    _VerificationRow(
+                      label: kyc.emailVerified
+                          ? 'Email verified'
+                          : 'Email not verified',
+                      verified: kyc.emailVerified,
+                      action: sendingEmail ? 'Sending...' : 'Send email',
+                      onAction: sendingEmail || kyc.emailVerified
+                          ? null
+                          : _sendEmailVerification,
+                    ),
+                    const SizedBox(height: 26),
+                    PrimaryButton(
+                      key: const ValueKey('submit-kyc'),
+                      label: submitting ? 'Submitting...' : 'Submit for review',
+                      onPressed: submitting ? null : _submit,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Phone codes appear in the Firebase Auth emulator. Development emails appear in Mailpit.',
+                      style: AppText.disclosure,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  var hydrated = false;
+
+  void _hydrateOnce(KycProfile kyc) {
+    if (hydrated) return;
+    fullNameController.text = kyc.fullLegalName ?? fullNameController.text;
+    phoneController.text = kyc.phoneNumber ?? phoneController.text;
+    dateOfBirth = kyc.dateOfBirth;
+    hydrated = true;
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: dateOfBirth ?? DateTime(now.year - 25),
+      firstDate: DateTime(now.year - 100),
+      lastDate: DateTime(now.year - 18, now.month, now.day),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+            primary: AppColors.gold,
+            surface: AppColors.panel,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() => dateOfBirth = picked);
+    }
+  }
+
+  Future<void> _pickFile(ValueChanged<KycDocumentFile> onPicked) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    final file = result?.files.single;
+    if (file?.bytes == null) return;
+    setState(() {
+      onPicked(
+        KycDocumentFile(
+          name: file!.name,
+          bytes: file.bytes!,
+          contentType: _contentTypeFor(file.name),
+        ),
+      );
+    });
+  }
+
+  Future<void> _pickSelfie() async {
+    final source = kIsWeb ? ImageSource.gallery : ImageSource.camera;
+    final image = await imagePicker.pickImage(
+      source: source,
+      preferredCameraDevice: CameraDevice.front,
+      imageQuality: 84,
+    );
+    if (image == null) return;
+    final bytes = await image.readAsBytes();
+    setState(() {
+      selfie = KycDocumentFile(
+        name: image.name,
+        bytes: bytes,
+        contentType: image.mimeType ?? _contentTypeFor(image.name),
+      );
+    });
+  }
+
+  Future<void> _sendEmailVerification() async {
+    setState(() => sendingEmail = true);
+    try {
+      await widget.repository.sendEmailVerification();
+      if (mounted) showMessage(context, 'Verification email sent');
+    } catch (error) {
+      if (mounted) showMessage(context, _kycErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => sendingEmail = false);
+    }
+  }
+
+  Future<void> _sendPhoneCode() async {
+    if (phoneController.text.trim().isEmpty) {
+      showMessage(context, 'Enter your phone number first');
+      return;
+    }
+    setState(() => sendingPhone = true);
+    try {
+      await widget.repository.sendPhoneVerificationCode(phoneController.text);
+      if (mounted) {
+        showMessage(context, 'Code sent. Check the Firebase Auth emulator.');
+      }
+    } catch (error) {
+      if (mounted) showMessage(context, _kycErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => sendingPhone = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    final missing = _missingFields();
+    if (missing != null) {
+      showMessage(context, missing);
+      return;
+    }
+
+    setState(() => submitting = true);
+    try {
+      await widget.repository.submit(
+        KycSubmission(
+          fullLegalName: fullNameController.text,
+          dateOfBirth: dateOfBirth!,
+          phoneNumber: phoneController.text,
+          phoneVerificationCode: phoneCodeController.text,
+          governmentId: governmentId!,
+          selfie: selfie!,
+          addressProof: addressProof!,
+        ),
+      );
+      if (mounted) {
+        showMessage(context, 'KYC submitted for review');
+        Navigator.pop(context);
+      }
+    } catch (error) {
+      if (mounted) showMessage(context, _kycErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => submitting = false);
+    }
+  }
+
+  String? _missingFields() {
+    if (fullNameController.text.trim().isEmpty) return 'Enter your legal name';
+    if (dateOfBirth == null) return 'Select your date of birth';
+    if (governmentId == null) return 'Upload your ID or passport';
+    if (selfie == null) return 'Capture a selfie';
+    if (addressProof == null) return 'Upload address proof';
+    if (phoneController.text.trim().isEmpty) return 'Enter your phone number';
+    if (phoneCodeController.text.trim().isEmpty) {
+      return 'Enter the phone verification code';
+    }
+    return null;
+  }
+
+  String _contentTypeFor(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.png')) return 'image/png';
+    return 'image/jpeg';
+  }
+}
+
+class _PickerTile extends StatelessWidget {
+  const _PickerTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 50),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.gold, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(title, style: AppText.fieldLabel)),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          ],
         ),
       ),
     );
   }
 }
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.onInvest});
+class _VerificationRow extends StatelessWidget {
+  const _VerificationRow({
+    required this.label,
+    required this.verified,
+    required this.action,
+    required this.onAction,
+  });
 
+  final String label;
+  final bool verified;
+  final String action;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Panel(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Icon(
+            verified ? Icons.check_circle_rounded : Icons.mail_outline_rounded,
+            color: verified ? AppColors.success : AppColors.gold,
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: AppText.fieldLabel)),
+          SizedBox(
+            width: 104,
+            child: SecondaryButton(
+              label: action,
+              onPressed: onAction,
+              compact: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _kycErrorMessage(Object error) {
+  if (error is KycValidationException) {
+    return error.message;
+  }
+  if (error is FirebaseException) {
+    return switch (error.code) {
+      'unauthenticated' => 'Sign in again to continue with KYC.',
+      'permission-denied' =>
+        'You do not have permission to update this KYC profile.',
+      'unavailable' =>
+        'KYC services are temporarily unavailable. Please try again shortly.',
+      'deadline-exceeded' =>
+        'The request took too long. Please check your connection and try again.',
+      'storage/unauthorized' =>
+        'You do not have permission to upload this document.',
+      'storage/canceled' => 'Document upload was cancelled.',
+      'storage/retry-limit-exceeded' =>
+        'The upload took too long. Please check your connection and try again.',
+      'storage/quota-exceeded' =>
+        'Document uploads are temporarily unavailable. Please try again later.',
+      _ => 'We could not update your KYC details. Please try again.',
+    };
+  }
+  return _friendlyUnexpectedMessage(error);
+}
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({
+    super.key,
+    required this.kyc,
+    required this.onInvest,
+    required this.onStartKyc,
+  });
+
+  final KycProfile kyc;
   final VoidCallback onInvest;
+  final VoidCallback onStartKyc;
 
   @override
   Widget build(BuildContext context) {
     return AppPage(
       title: 'BrickClub',
       children: [
+        KycStatusCard(kyc: kyc, onStartKyc: onStartKyc, compact: true),
         const _PortfolioOverview(),
         SectionHeading(
           title: 'Featured opportunity',
@@ -2607,7 +4024,7 @@ class HomeScreen extends StatelessWidget {
         InvestmentCard(
           compact: true,
           returnText: '12.4%',
-          onTap: () => openDetail(context),
+          onTap: () => openDetail(context, kyc, onStartKyc),
         ),
         const SectionHeading(title: 'Your holdings', action: 'View all'),
         const Panel(
@@ -2886,7 +4303,10 @@ class _AssetIcon extends StatelessWidget {
 }
 
 class InvestScreen extends StatelessWidget {
-  const InvestScreen({super.key});
+  const InvestScreen({super.key, required this.kyc, required this.onStartKyc});
+
+  final KycProfile kyc;
+  final VoidCallback onStartKyc;
 
   @override
   Widget build(BuildContext context) {
@@ -2926,14 +4346,14 @@ class InvestScreen extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const FiltersScreen()),
           ),
         ),
-        InvestmentCard(onTap: () => openDetail(context)),
+        InvestmentCard(onTap: () => openDetail(context, kyc, onStartKyc)),
         InvestmentCard(
           category: 'REIT',
           title: 'Bugolobi\nLogistics REIT',
           location: 'Income portfolio',
           minimum: 'UGX 500K',
           returnText: '9.6%',
-          onTap: () => openDetail(context),
+          onTap: () => openDetail(context, kyc, onStartKyc),
         ),
       ],
     );
@@ -2941,7 +4361,10 @@ class InvestScreen extends StatelessWidget {
 }
 
 class WalletScreen extends StatelessWidget {
-  const WalletScreen({super.key});
+  const WalletScreen({super.key, required this.kyc, required this.onStartKyc});
+
+  final KycProfile kyc;
+  final VoidCallback onStartKyc;
 
   @override
   Widget build(BuildContext context) {
@@ -2971,7 +4394,8 @@ class WalletScreen extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 118),
+        KycStatusCard(kyc: kyc, onStartKyc: onStartKyc, compact: true),
+        const SizedBox(height: 28),
         Panel(
           child: Column(
             children: [
@@ -2991,8 +4415,12 @@ class WalletScreen extends StatelessWidget {
               PrimaryButton(
                 label: 'Add verified wallet',
                 height: 46,
-                onPressed: () =>
-                    showMessage(context, 'Wallet verification started'),
+                onPressed: () => requireApprovedKyc(
+                  context,
+                  kyc,
+                  () => showMessage(context, 'Wallet verification started'),
+                  onStartKyc,
+                ),
               ),
             ],
           ),
@@ -3056,7 +4484,16 @@ class PortfolioScreen extends StatelessWidget {
 }
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({
+    super.key,
+    required this.user,
+    required this.kyc,
+    required this.onStartKyc,
+  });
+
+  final SignedInUserDetails? user;
+  final KycProfile kyc;
+  final VoidCallback onStartKyc;
 
   @override
   Widget build(BuildContext context) {
@@ -3067,22 +4504,27 @@ class ProfileScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(28),
           color: AppColors.panel,
-          child: const Row(
+          child: Row(
             children: [
-              CircleAvatar(
+              const CircleAvatar(
                 radius: 28,
                 backgroundColor: AppColors.track,
-                child: Text('AJ', style: AppText.goldMetricSmall),
+                child: Icon(
+                  Icons.person_outline_rounded,
+                  color: AppColors.gold,
+                  size: 28,
+                ),
               ),
-              SizedBox(width: 20),
+              const SizedBox(width: 20),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Awule Joshua', style: AppText.h2),
+                    Text(_profileName, style: AppText.h2),
                     Text(
-                      'Your account and BrickShares details',
+                      _profileSubtitle,
                       style: AppText.body,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -3091,31 +4533,7 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
-        Panel(
-          child: const Row(
-            children: [
-              Icon(
-                Icons.verified_user_outlined,
-                color: AppColors.gold,
-                size: 34,
-              ),
-              SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Verify account\nto start investing',
-                      style: AppText.cardHeadingSmall,
-                    ),
-                    SizedBox(height: 8),
-                    Text('KYC required before purchases', style: AppText.body),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        KycStatusCard(kyc: kyc, onStartKyc: onStartKyc),
         for (final item in const [
           ('Settings', 'Theme, currency, alerts'),
           ('Security & privacy', 'Verified wallet and biometrics'),
@@ -3129,6 +4547,23 @@ class ProfileScreen extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  String get _profileName {
+    final signedInName = user?.displayName?.trim();
+    if (signedInName != null && signedInName.isNotEmpty) return signedInName;
+
+    final legalName = kyc.fullLegalName?.trim();
+    if (legalName != null && legalName.isNotEmpty) return legalName;
+
+    return user?.primaryLabel ?? 'BrickClub member';
+  }
+
+  String get _profileSubtitle {
+    final email = user?.email?.trim();
+    if (email != null && email.isNotEmpty) return email;
+
+    return 'Your account and BrickShares details';
   }
 }
 
@@ -3148,6 +4583,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
   Widget build(BuildContext context) {
     return PhoneFrame(
       child: Scaffold(
+        backgroundColor: AppColors.background,
         appBar: detailAppBar(context, 'Filters'),
         body: Padding(
           padding: const EdgeInsets.fromLTRB(22, 30, 22, 14),
@@ -3199,12 +4635,16 @@ class _FiltersScreenState extends State<FiltersScreen> {
 }
 
 class DetailScreen extends StatelessWidget {
-  const DetailScreen({super.key});
+  const DetailScreen({super.key, required this.kyc, required this.onStartKyc});
+
+  final KycProfile kyc;
+  final VoidCallback onStartKyc;
 
   @override
   Widget build(BuildContext context) {
     return PhoneFrame(
       child: Scaffold(
+        backgroundColor: AppColors.background,
         appBar: detailAppBar(context, 'BrickShares'),
         body: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -3290,9 +4730,14 @@ class DetailScreen extends StatelessWidget {
               PrimaryButton(
                 key: const ValueKey('invest-with-crypto'),
                 label: 'Invest with crypto funding',
-                onPressed: () => Navigator.push(
+                onPressed: () => requireApprovedKyc(
                   context,
-                  MaterialPageRoute(builder: (_) => const PaymentScreen()),
+                  kyc,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => PaymentScreen(kyc: kyc)),
+                  ),
+                  onStartKyc,
                 ),
               ),
             ],
@@ -3304,12 +4749,15 @@ class DetailScreen extends StatelessWidget {
 }
 
 class PaymentScreen extends StatelessWidget {
-  const PaymentScreen({super.key});
+  const PaymentScreen({super.key, required this.kyc});
+
+  final KycProfile kyc;
 
   @override
   Widget build(BuildContext context) {
     return PhoneFrame(
       child: Scaffold(
+        backgroundColor: AppColors.background,
         appBar: detailAppBar(context, 'Confirm funding'),
         body: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -3377,10 +4825,14 @@ class PaymentScreen extends StatelessWidget {
               PrimaryButton(
                 key: const ValueKey('confirm-purchase'),
                 label: 'Confirm purchase',
-                onPressed: () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SuccessScreen()),
-                ),
+                onPressed: kyc.canPerformFinancialActions
+                    ? () => Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SuccessScreen(),
+                        ),
+                      )
+                    : null,
               ),
               const SizedBox(height: 14),
               SecondaryButton(
@@ -3402,6 +4854,7 @@ class SuccessScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return PhoneFrame(
       child: Scaffold(
+        backgroundColor: AppColors.background,
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 80, 20, 24),
@@ -3483,12 +4936,10 @@ class AppPage extends StatelessWidget {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const MockStatusBar(),
-                  const SizedBox(height: 8),
                   if (simpleHeader)
                     Center(child: Text(title, style: AppText.topTitle))
                   else
@@ -3551,7 +5002,11 @@ class AppHeader extends StatelessWidget {
           ),
           const SizedBox(width: 9),
           HeaderCircle(
-            child: const Text('AJ', style: AppText.headerInitials),
+            child: const Icon(
+              Icons.person_outline_rounded,
+              color: AppColors.gold,
+              size: 17,
+            ),
             onTap: () => showMessage(context, 'Profile is in More'),
           ),
         ],
@@ -3985,11 +5440,12 @@ class SecondaryButton extends StatelessWidget {
   }
 }
 
-class AppTextField extends StatelessWidget {
+class AppTextField extends StatefulWidget {
   const AppTextField({
     super.key,
     this.initialValue,
     this.controller,
+    this.hintText,
     this.obscureText = false,
     this.compact = false,
     this.keyboardType,
@@ -3997,31 +5453,72 @@ class AppTextField extends StatelessWidget {
 
   final String? initialValue;
   final TextEditingController? controller;
+  final String? hintText;
   final bool obscureText;
   final bool compact;
   final TextInputType? keyboardType;
 
   @override
+  State<AppTextField> createState() => _AppTextFieldState();
+}
+
+class _AppTextFieldState extends State<AppTextField> {
+  late bool obscured;
+
+  @override
+  void initState() {
+    super.initState();
+    obscured = widget.obscureText;
+  }
+
+  @override
+  void didUpdateWidget(covariant AppTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.obscureText != widget.obscureText) {
+      obscured = widget.obscureText;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: compact ? 44 : 50,
+      height: widget.compact ? 44 : 50,
       child: TextFormField(
-        controller: controller,
-        initialValue: controller == null ? initialValue : null,
-        obscureText: obscureText,
-        keyboardType: keyboardType,
+        controller: widget.controller,
+        initialValue: widget.controller == null ? widget.initialValue : null,
+        obscureText: obscured,
+        keyboardType: widget.keyboardType,
         style: const TextStyle(fontSize: 14, color: AppColors.primary),
         decoration: InputDecoration(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
           filled: true,
           fillColor: AppColors.background,
+          hintText: widget.hintText,
+          hintStyle: AppText.placeholder,
+          suffixIcon: widget.obscureText
+              ? IconButton(
+                  tooltip: obscured ? 'Show password' : 'Hide password',
+                  onPressed: () => setState(() => obscured = !obscured),
+                  icon: Icon(
+                    obscured
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: AppColors.muted,
+                    size: 20,
+                  ),
+                )
+              : null,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(compact ? 12 : 14),
+            borderRadius: BorderRadius.circular(widget.compact ? 12 : 14),
             borderSide: const BorderSide(color: AppColors.border),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(compact ? 12 : 14),
+            borderRadius: BorderRadius.circular(widget.compact ? 12 : 14),
             borderSide: const BorderSide(color: AppColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(widget.compact ? 12 : 14),
+            borderSide: const BorderSide(color: AppColors.gold),
           ),
         ),
       ),
@@ -4114,11 +5611,13 @@ class ProgressLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
-      child: LinearProgressIndicator(
-        value: value,
-        minHeight: height,
-        color: color,
-        backgroundColor: AppColors.track,
+      child: SizedBox(
+        height: height,
+        child: LinearProgressIndicator(
+          value: value,
+          color: color,
+          backgroundColor: AppColors.track,
+        ),
       ),
     );
   }
@@ -4178,49 +5677,6 @@ class QuoteRow extends StatelessWidget {
   }
 }
 
-class MockStatusBar extends StatelessWidget {
-  const MockStatusBar({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox(
-      height: 18,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('9:41', style: AppText.status),
-          Row(
-            children: [
-              StatusBlock(width: 18),
-              SizedBox(width: 6),
-              StatusBlock(width: 15),
-              SizedBox(width: 7),
-              StatusBlock(width: 22, height: 12),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class StatusBlock extends StatelessWidget {
-  const StatusBlock({super.key, required this.width, this.height = 8});
-
-  final double width;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: width,
-    height: height,
-    decoration: BoxDecoration(
-      color: AppColors.secondary,
-      borderRadius: BorderRadius.circular(3),
-    ),
-  );
-}
-
 class HeaderPill extends StatelessWidget {
   const HeaderPill(this.label, {super.key});
   final String label;
@@ -4274,7 +5730,7 @@ class PhoneFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: Colors.black,
+      color: AppColors.background,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 393),
@@ -4303,10 +5759,12 @@ PreferredSizeWidget detailAppBar(BuildContext context, String title) {
   );
 }
 
-void openDetail(BuildContext context) {
+void openDetail(BuildContext context, KycProfile kyc, VoidCallback onStartKyc) {
   Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => const DetailScreen()),
+    MaterialPageRoute(
+      builder: (_) => DetailScreen(kyc: kyc, onStartKyc: onStartKyc),
+    ),
   );
 }
 
@@ -4319,21 +5777,82 @@ void showMessage(BuildContext context, String message) {
 }
 
 String _authErrorMessage(Object error) {
+  if (error is AuthValidationException) {
+    return error.message;
+  }
   if (error is FirebaseAuthException) {
     return switch (error.code) {
       'invalid-email' => 'Enter a valid email address.',
+      'missing-email' => 'Enter your email address.',
+      'missing-password' => 'Enter your password.',
       'user-not-found' => 'No account exists for that email.',
       'wrong-password' ||
       'invalid-credential' => 'Email or password is incorrect.',
       'email-already-in-use' => 'An account already exists for that email.',
-      'weak-password' => 'Use a stronger password.',
+      'weak-password' => 'Use a stronger password with at least 6 characters.',
+      'operation-not-allowed' =>
+        'Email sign in is not enabled yet. Contact support.',
+      'user-disabled' =>
+        'This account has been disabled. Contact support for help.',
+      'too-many-requests' =>
+        'Too many attempts. Please wait a moment before trying again.',
       'network-request-failed' =>
-        'Firebase is unreachable. Check that the emulator is running.',
-      _ => error.message ?? 'Authentication failed. Please try again.',
+        'We could not connect. Check your internet and try again.',
+      'requires-recent-login' => 'Sign in again before making this change.',
+      'expired-action-code' =>
+        'This link has expired. Request a new one and try again.',
+      'invalid-action-code' =>
+        'This link is no longer valid. Request a new one and try again.',
+      _ => 'We could not complete sign in. Please try again.',
     };
   }
 
-  return error.toString().replaceFirst('Exception: ', '');
+  if (error is FirebaseFunctionsException) {
+    return switch (error.code) {
+      'invalid-argument' => 'Enter a valid email address.',
+      'unavailable' =>
+        'Password reset email is temporarily unavailable. Please try again shortly.',
+      'failed-precondition' => _friendlyFirebaseMessage(
+        error.message,
+        fallback: 'Password reset is not available right now.',
+      ),
+      _ => 'We could not send the reset email. Please try again.',
+    };
+  }
+
+  return _friendlyUnexpectedMessage(error);
+}
+
+String _friendlyFirebaseMessage(String? message, {required String fallback}) {
+  final normalized = message?.trim();
+  if (normalized == null || normalized.isEmpty) return fallback;
+
+  return switch (normalized) {
+    'Authentication is required.' => 'Sign in again to continue.',
+    'Admin access is required.' =>
+      'Your account does not have permission to do that.',
+    'Development email is only available in the Functions emulator.' =>
+      'Email sending is not available in this environment.',
+    'User has no email address.' =>
+      'Add an email address to your account first.',
+    _ => fallback,
+  };
+}
+
+String _friendlyUnexpectedMessage(Object error) {
+  final text = error.toString().toLowerCase();
+  if (text.contains('network') ||
+      text.contains('socket') ||
+      text.contains('host lookup') ||
+      text.contains('unavailable')) {
+    return 'We could not connect. Check your internet and try again.';
+  }
+
+  if (text.contains('permission-denied') || text.contains('permission denied')) {
+    return 'You do not have permission to do that.';
+  }
+
+  return 'Something went wrong. Please try again.';
 }
 
 abstract final class AppColors {
@@ -4413,6 +5932,11 @@ abstract final class AppText {
     color: AppColors.secondary,
     fontSize: 12,
     fontWeight: FontWeight.w600,
+  );
+  static const placeholder = TextStyle(
+    color: AppColors.muted,
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
   );
   static const eyebrow = TextStyle(
     color: AppColors.gold,
