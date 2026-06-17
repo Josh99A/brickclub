@@ -40,6 +40,145 @@ class InvestmentOpportunity {
   String get returnText => '${targetReturn.toStringAsFixed(1)}%';
 }
 
+class MemberDashboardData {
+  const MemberDashboardData({
+    required this.portfolioValueUgx,
+    required this.walletBalanceUgx,
+    required this.yearReturnPercent,
+    required this.cryptoRails,
+    required this.holdings,
+    required this.activity,
+    required this.allocation,
+    required this.chartValues,
+    required this.chartLabels,
+  });
+
+  factory MemberDashboardData.empty() {
+    return const MemberDashboardData(
+      portfolioValueUgx: 0,
+      walletBalanceUgx: 0,
+      yearReturnPercent: 0,
+      cryptoRails: [],
+      holdings: [],
+      activity: [],
+      allocation: [],
+      chartValues: [],
+      chartLabels: [],
+    );
+  }
+
+  factory MemberDashboardData.fromJson(Map<String, dynamic> json) {
+    return MemberDashboardData(
+      portfolioValueUgx: (json['portfolioValueUgx'] as num?)?.toDouble() ?? 0,
+      walletBalanceUgx: (json['walletBalanceUgx'] as num?)?.toDouble() ?? 0,
+      yearReturnPercent: (json['yearReturnPercent'] as num?)?.toDouble() ?? 0,
+      cryptoRails: _stringList(json['cryptoRails']),
+      holdings: _jsonList(json['holdings'], MemberHolding.fromJson),
+      activity: _jsonList(json['activity'], MemberActivity.fromJson),
+      allocation: _jsonList(json['allocation'], MemberAllocation.fromJson),
+      chartValues: _doubleList(json['chartValues']),
+      chartLabels: _stringList(json['chartLabels']),
+    );
+  }
+
+  final double portfolioValueUgx;
+  final double walletBalanceUgx;
+  final double yearReturnPercent;
+  final List<String> cryptoRails;
+  final List<MemberHolding> holdings;
+  final List<MemberActivity> activity;
+  final List<MemberAllocation> allocation;
+  final List<double> chartValues;
+  final List<String> chartLabels;
+
+  String get portfolioValueText => _formatUgx(portfolioValueUgx);
+  String get walletBalanceText => _formatUgx(walletBalanceUgx);
+  String get yearReturnText {
+    final prefix = yearReturnPercent >= 0 ? '+' : '';
+    return '$prefix${yearReturnPercent.toStringAsFixed(1)}% this year';
+  }
+
+  String get cryptoRailsText {
+    if (cryptoRails.isEmpty) return 'No crypto rails enabled';
+    return 'Crypto rails: ${cryptoRails.join(' / ')}';
+  }
+
+  bool get hasPortfolio => portfolioValueUgx > 0 || holdings.isNotEmpty;
+}
+
+class MemberHolding {
+  const MemberHolding({
+    required this.opportunityId,
+    required this.title,
+    required this.assetClass,
+    required this.brickShares,
+    required this.valueUgx,
+    required this.returnPercent,
+  });
+
+  factory MemberHolding.fromJson(Map<String, dynamic> json) {
+    return MemberHolding(
+      opportunityId: json['opportunityId'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      assetClass: json['assetClass'] as String? ?? 'BrickShares',
+      brickShares: (json['brickShares'] as num?)?.toDouble() ?? 0,
+      valueUgx: (json['valueUgx'] as num?)?.toDouble() ?? 0,
+      returnPercent: (json['returnPercent'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  final String opportunityId;
+  final String title;
+  final String assetClass;
+  final double brickShares;
+  final double valueUgx;
+  final double returnPercent;
+
+  String get sharesText => '${brickShares.toStringAsFixed(2)} BrickShares';
+  String get valueText => _formatUgx(valueUgx);
+  String get returnText {
+    final prefix = returnPercent >= 0 ? '+' : '';
+    return '$prefix${returnPercent.toStringAsFixed(1)}%';
+  }
+}
+
+class MemberActivity {
+  const MemberActivity({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.status,
+  });
+
+  factory MemberActivity.fromJson(Map<String, dynamic> json) {
+    return MemberActivity(
+      title: json['title'] as String? ?? '',
+      subtitle: json['subtitle'] as String? ?? '',
+      value: json['value'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+    );
+  }
+
+  final String title;
+  final String subtitle;
+  final String value;
+  final String status;
+}
+
+class MemberAllocation {
+  const MemberAllocation({required this.label, required this.percent});
+
+  factory MemberAllocation.fromJson(Map<String, dynamic> json) {
+    return MemberAllocation(
+      label: json['label'] as String? ?? '',
+      percent: (json['percent'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  final String label;
+  final double percent;
+}
+
 class PurchaseOrder {
   const PurchaseOrder({
     required this.id,
@@ -123,6 +262,22 @@ class PurchaseRequest {
 List<String> _stringList(Object? value) {
   if (value is! List) return const [];
   return value.whereType<String>().toList(growable: false);
+}
+
+List<double> _doubleList(Object? value) {
+  if (value is! List) return const [];
+  return value.whereType<num>().map((item) => item.toDouble()).toList();
+}
+
+List<T> _jsonList<T>(
+  Object? value,
+  T Function(Map<String, dynamic> json) fromJson,
+) {
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((item) => fromJson(Map<String, dynamic>.from(item)))
+      .toList(growable: false);
 }
 
 String _formatUgx(double value) {

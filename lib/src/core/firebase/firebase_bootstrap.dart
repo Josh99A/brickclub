@@ -19,6 +19,9 @@ class FirebaseBootstrap {
     'FIREBASE_EMULATOR_HOST',
   );
 
+  static String get emulatorHost =>
+      emulatorHostOverride.isNotEmpty ? emulatorHostOverride : _defaultHost;
+
   static Future<void> initialize() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -30,9 +33,12 @@ class FirebaseBootstrap {
   }
 
   static Future<void> _connectEmulators() async {
-    final host = emulatorHostOverride.isNotEmpty
-        ? emulatorHostOverride
-        : _defaultHost;
+    final host = emulatorHost;
+
+    debugPrint(
+      'BrickClub Firebase emulators enabled on $host '
+      '(auth:9099, functions:5001, firestore:8080, storage:9199)',
+    );
 
     await FirebaseAuth.instance.useAuthEmulator(host, 9099);
     FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);

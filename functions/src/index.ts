@@ -5,6 +5,8 @@ import {initializeApp} from "firebase-admin/app";
 import {getAuth, UserRecord} from "firebase-admin/auth";
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {getMessaging} from "firebase-admin/messaging";
+import {getStorage} from "firebase-admin/storage";
+import {ImageAnnotatorClient} from "@google-cloud/vision";
 import * as nodemailer from "nodemailer";
 
 initializeApp();
@@ -12,6 +14,8 @@ initializeApp();
 const db = getFirestore();
 const auth = getAuth();
 const messaging = getMessaging();
+const storage = getStorage();
+const vision = new ImageAnnotatorClient();
 
 type AdminAsset = {
   id: string;
@@ -45,12 +49,51 @@ type MemberOpportunity = {
   fundedPercent: number;
 };
 
+type WithdrawalPolicy = {
+  minimumAmountUgx: number;
+  flatFeeUgx: number;
+  percentageFee: number;
+  requiresDestinationWalletVerification: boolean;
+  requiredApprovals: number;
+  processingTime: string;
+  enabled: boolean;
+  notes: string;
+};
+
 type UserPayload = {
   email: string;
   password?: string;
   displayName?: string;
   disabled?: boolean;
   admin?: boolean;
+};
+
+type KycDocumentPayload = {
+  path: string;
+  downloadUrl: string;
+  contentType: string;
+  originalName: string;
+};
+
+type KycDocumentSet = {
+  governmentId: KycDocumentPayload;
+  selfie: KycDocumentPayload;
+  addressProof: KycDocumentPayload;
+};
+
+type KycAutomationResult = {
+  status: "approved" | "rejected" | "manual_review";
+  checks: {
+    selfieFaceDetected: boolean;
+    selfieSingleFace: boolean;
+    idTextDetected: boolean;
+    idNameMatched: boolean;
+    idDateOfBirthMatched: boolean;
+    idFaceDetected: boolean;
+    addressProofUploaded: boolean;
+  };
+  confidence: number;
+  reasons: string[];
 };
 
 const assetsCollection = db.collection("adminAssets");
@@ -61,6 +104,7 @@ const notificationTokensCollection = db.collection("notificationTokens");
 const adminNotificationsCollection = db.collection("adminNotifications");
 const withdrawalRequestsCollection = db.collection("withdrawalRequests");
 const supportTicketsCollection = db.collection("supportTickets");
+const withdrawalPolicyDoc = db.collection("platformSettings").doc("withdrawals");
 const devMailFrom = "BrickClub Dev <no-reply@brickclub.local>";
 
 export const getMemberProfile = onCall(async (request) => {
@@ -152,6 +196,7 @@ export const listAdminDashboard = onAdminCall(async () => {
     .orderBy("updatedAt", "desc")
     .limit(100)
     .get();
+  const withdrawalPolicy = await loadWithdrawalPolicy();
 
   return {
     users: usersResult.users.map(userToJson),
@@ -159,6 +204,7 @@ export const listAdminDashboard = onAdminCall(async () => {
     cryptoPaymentOptions: paymentOptionsSnapshot.docs.map(paymentOptionFromDoc),
     depositRequests: depositRequestsSnapshot.docs.map(depositRequestFromDoc),
     supportTickets: supportTicketsSnapshot.docs.map(supportTicketFromDoc),
+    withdrawalPolicy,
   };
 });
 
@@ -179,6 +225,50 @@ export const listMemberOpportunities = onMemberCall(async () => {
     opportunities: assetsSnapshot.docs.map((doc) =>
       opportunityFromDoc(doc, paymentMethods),
     ),
+  };
+});
+
+export const getMemberDashboard = onMemberCall(async (request) => {
+  const uid = request.auth!.uid;
+  const [ordersSnapshot, assetsSnapshot, paymentOptionsSnapshot] =
+    await Promise.all([
+      purchaseOrdersCollection.where("uid", "==", uid).get(),
+      assetsCollection.get(),
+      paymentOptionsCollection.where("enabled", "==", true).get(),
+    ]);
+
+  const assetsById = new Map(
+    assetsSnapshot.docs.map((doc) => [doc.id, opportunityFromDoc(doc, [])]),
+  );
+  const orders = ordersSnapshot.docs
+    .map((doc) => memberOrderFromDoc(doc))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const verifiedOrders = orders.filter(
+    (order) => order.status === "deposit_verified",
+  );
+  const holdings = buildMemberHoldings(verifiedOrders, assetsById);
+  const portfolioValueUgx = roundMoney(
+    holdings.reduce((total, holding) => total + holding.valueUgx, 0),
+  );
+  const yearReturnPercent = portfolioValueUgx === 0 ? 0 : roundMoney(
+    holdings.reduce(
+      (total, holding) => total + holding.returnPercent * holding.valueUgx,
+      0,
+    ) / portfolioValueUgx,
+  );
+
+  return {
+    portfolioValueUgx,
+    walletBalanceUgx: 0,
+    yearReturnPercent,
+    cryptoRails: paymentOptionsSnapshot.docs
+      .map((doc) => paymentOptionFromDoc(doc))
+      .map((option) => `${option.assetSymbol} on ${option.network}`),
+    holdings,
+    activity: orders.slice(0, 6).map(memberActivityFromOrder),
+    allocation: buildMemberAllocation(holdings),
+    chartValues: buildMemberChartValues(verifiedOrders),
+    chartLabels: buildMemberChartLabels(),
   };
 });
 
@@ -401,15 +491,45 @@ export const createWithdrawalRequest = onMemberCall(async (request) => {
   const destinationAddress = readString(data, "destinationAddress");
   const assetSymbol = readString(data, "assetSymbol").toUpperCase();
   const uid = request.auth!.uid;
+  const policy = await loadWithdrawalPolicy();
+  if (!policy.enabled) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Withdrawals are temporarily disabled.",
+    );
+  }
+  if (amountUgx < policy.minimumAmountUgx) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Amount is below the withdrawal minimum.",
+    );
+  }
+  if (
+    policy.requiresDestinationWalletVerification &&
+    !isLikelyWalletAddress(destinationAddress)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Enter a valid destination wallet address.",
+    );
+  }
   const id = randomUUID();
+  const feeUgx = roundMoney(
+    policy.flatFeeUgx + (amountUgx * policy.percentageFee / 100),
+  );
 
   const requestData = {
     id,
     uid,
     amountUgx,
+    feeUgx,
+    netAmountUgx: roundMoney(amountUgx - feeUgx),
     destinationAddress,
     assetSymbol,
     status: "submitted",
+    requiredApprovals: policy.requiredApprovals,
+    approvalsCompleted: 0,
+    processingTime: policy.processingTime,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -423,6 +543,19 @@ export const createWithdrawalRequest = onMemberCall(async (request) => {
   });
 
   return requestData;
+});
+
+export const updateWithdrawalPolicy = onAdminCall(async (data) => {
+  const policy = readWithdrawalPolicy(data);
+  await withdrawalPolicyDoc.set(
+    {
+      ...policy,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  return policy;
 });
 
 export const registerMessagingToken = onMemberCall(async (request) => {
@@ -659,6 +792,79 @@ export const setUserAdmin = onAdminCall(async (data) => {
   return userToJson(await auth.getUser(uid));
 });
 
+export const submitKycProfile = onMemberCall(async (request) => {
+  const uid = request.auth!.uid;
+  const data = readObject(request.data);
+  const fullLegalName = readString(data, "fullLegalName");
+  const dateOfBirth = readDateString(data, "dateOfBirth");
+  const phoneNumber = readString(data, "phoneNumber");
+  const documents = readKycDocumentSet(readObject(data.documents));
+  validateKycDocumentOwnership(uid, documents);
+
+  const user = await auth.getUser(uid);
+  const automation = await runKycAutomation({
+    fullLegalName,
+    dateOfBirth,
+    documents,
+  });
+  const identityVerified = user.emailVerified && user.phoneNumber === phoneNumber;
+  const approved =
+    automation.status === "approved" &&
+    identityVerified;
+  const status = approved ?
+    "approved" :
+    automation.status === "approved" ?
+      "manual_review" :
+      automation.status;
+  const rejectionReason = status === "rejected" ?
+    automation.reasons.join(" ") :
+    undefined;
+
+  await kycProfilesCollection.doc(uid).set(
+    {
+      uid,
+      fullLegalName,
+      dateOfBirth: new Date(dateOfBirth),
+      phoneNumber,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      phoneVerified: user.phoneNumber === phoneNumber,
+      status,
+      documents: {
+        governmentIdUrl: documents.governmentId.downloadUrl,
+        governmentIdPath: documents.governmentId.path,
+        selfieUrl: documents.selfie.downloadUrl,
+        selfiePath: documents.selfie.path,
+        addressProofUrl: documents.addressProof.downloadUrl,
+        addressProofPath: documents.addressProof.path,
+      },
+      automatedKyc: {
+        ...automation,
+        provider: "google-cloud-vision",
+        reviewedAt: FieldValue.serverTimestamp(),
+      },
+      rejectionReason: rejectionReason ?? FieldValue.delete(),
+      submittedAt: FieldValue.serverTimestamp(),
+      reviewedAt: status === "manual_review" ?
+        FieldValue.delete() :
+        FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  if (status === "manual_review") {
+    await notifyAdmins({
+      type: "kyc_manual_review_required",
+      title: "KYC needs manual review",
+      body: `${fullLegalName} submitted KYC documents that need review.`,
+      data: {uid},
+    });
+  }
+
+  return {uid, status, automation};
+});
+
 export const approveKycProfile = onAdminCall(async (data) => {
   const uid = readString(data, "uid");
   await kycProfilesCollection.doc(uid).set(
@@ -893,6 +1099,145 @@ function depositRequestFromDoc(
   };
 }
 
+function memberOrderFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    opportunityId: String(data.opportunityId ?? ""),
+    opportunityTitle: String(data.opportunityTitle ?? ""),
+    amountUgx: Number(data.amountUgx ?? 0),
+    paymentAsset: String(data.paymentAsset ?? ""),
+    paymentNetwork: String(data.paymentNetwork ?? ""),
+    status: String(data.status ?? "pending_payment"),
+    updatedAt: readSerializableDate(data.updatedAt ?? data.createdAt),
+    createdAt: readSerializableDate(data.createdAt),
+  };
+}
+
+function buildMemberHoldings(
+  orders: ReturnType<typeof memberOrderFromDoc>[],
+  assetsById: Map<string, MemberOpportunity>,
+) {
+  const holdingsByOpportunity = new Map<string, {
+    opportunityId: string;
+    title: string;
+    assetClass: string;
+    brickShares: number;
+    valueUgx: number;
+    returnPercent: number;
+  }>();
+
+  for (const order of orders) {
+    const asset = assetsById.get(order.opportunityId);
+    const current = holdingsByOpportunity.get(order.opportunityId);
+    const minimumInvestment = asset?.minimumInvestment ?? order.amountUgx;
+    const brickShares = minimumInvestment > 0 ?
+      order.amountUgx / minimumInvestment :
+      0;
+    holdingsByOpportunity.set(order.opportunityId, {
+      opportunityId: order.opportunityId,
+      title: asset?.title ?? order.opportunityTitle,
+      assetClass: asset?.assetClass ?? "BrickShares",
+      brickShares: roundMoney((current?.brickShares ?? 0) + brickShares),
+      valueUgx: roundMoney((current?.valueUgx ?? 0) + order.amountUgx),
+      returnPercent: asset?.targetReturn ?? current?.returnPercent ?? 0,
+    });
+  }
+
+  return Array.from(holdingsByOpportunity.values());
+}
+
+function buildMemberAllocation(
+  holdings: ReturnType<typeof buildMemberHoldings>,
+) {
+  const total = holdings.reduce((sum, holding) => sum + holding.valueUgx, 0);
+  if (total <= 0) return [];
+
+  const values = new Map<string, number>();
+  for (const holding of holdings) {
+    values.set(
+      holding.assetClass,
+      (values.get(holding.assetClass) ?? 0) + holding.valueUgx,
+    );
+  }
+
+  return Array.from(values.entries()).map(([label, value]) => ({
+    label,
+    percent: roundMoney(value / total),
+  }));
+}
+
+function buildMemberChartValues(
+  orders: ReturnType<typeof memberOrderFromDoc>[],
+) {
+  const labels = buildMemberChartLabels();
+  const totals = labels.map(() => 0);
+  for (const order of orders) {
+    const date = order.createdAt ? new Date(order.createdAt) : null;
+    if (!date || Number.isNaN(date.getTime())) continue;
+    const label = date.toLocaleString("en-US", {month: "short"});
+    const index = labels.indexOf(label);
+    if (index >= 0) {
+      totals[index] += order.amountUgx;
+    }
+  }
+
+  let runningTotal = 0;
+  return totals.map((value) => {
+    runningTotal += value;
+    return roundMoney(runningTotal);
+  });
+}
+
+function buildMemberChartLabels() {
+  const labels: string[] = [];
+  const now = new Date();
+  for (let offset = 5; offset >= 0; offset--) {
+    labels.push(
+      new Date(now.getFullYear(), now.getMonth() - offset, 1)
+        .toLocaleString("en-US", {month: "short"}),
+    );
+  }
+  return labels;
+}
+
+function memberActivityFromOrder(order: ReturnType<typeof memberOrderFromDoc>) {
+  return {
+    title: memberOrderStatusTitle(order.status),
+    subtitle: order.opportunityTitle,
+    value: order.status === "deposit_verified" ?
+      formatUgx(order.amountUgx) :
+      memberOrderStatusLabel(order.status),
+    status: order.status,
+  };
+}
+
+function memberOrderStatusTitle(status: string): string {
+  switch (status) {
+  case "deposit_verified":
+    return "Deposit verified";
+  case "proof_submitted":
+    return "Proof submitted";
+  case "deposit_rejected":
+    return "Proof needs attention";
+  default:
+    return "Deposit request created";
+  }
+}
+
+function memberOrderStatusLabel(status: string): string {
+  switch (status) {
+  case "proof_submitted":
+    return "Under review";
+  case "deposit_rejected":
+    return "Rejected";
+  case "pending_payment":
+    return "Awaiting proof";
+  default:
+    return status.replace(/_/g, " ");
+  }
+}
+
 function supportTicketFromDoc(
   doc: FirebaseFirestore.QueryDocumentSnapshot,
 ) {
@@ -923,6 +1268,191 @@ function supportMessage(message: {
     id: randomUUID(),
     ...message,
   };
+}
+
+async function runKycAutomation(input: {
+  fullLegalName: string;
+  dateOfBirth: string;
+  documents: KycDocumentSet;
+}): Promise<KycAutomationResult> {
+  try {
+    const [
+      selfieFaceCount,
+      idFaceCount,
+      idText,
+      addressProofUploaded,
+    ] = await Promise.all([
+      detectFaceCount(input.documents.selfie),
+      detectFaceCount(input.documents.governmentId),
+      detectText(input.documents.governmentId),
+      storageFileExists(input.documents.addressProof.path),
+    ]);
+    const idNameMatched = textContainsName(idText, input.fullLegalName);
+    const idDateOfBirthMatched = textContainsDateOfBirth(
+      idText,
+      input.dateOfBirth,
+    );
+    const checks = {
+      selfieFaceDetected: selfieFaceCount > 0,
+      selfieSingleFace: selfieFaceCount === 1,
+      idTextDetected: idText.trim().length > 20,
+      idNameMatched,
+      idDateOfBirthMatched,
+      idFaceDetected: idFaceCount > 0,
+      addressProofUploaded,
+    };
+    const reasons = kycAutomationReasons(checks);
+    const passed = Object.values(checks).filter(Boolean).length;
+    return {
+      status: reasons.length === 0 ? "approved" : "rejected",
+      checks,
+      confidence: roundMoney(passed / Object.values(checks).length),
+      reasons,
+    };
+  } catch (error) {
+    logger.warn("KYC automation could not complete", {error});
+    return {
+      status: "manual_review",
+      checks: {
+        selfieFaceDetected: false,
+        selfieSingleFace: false,
+        idTextDetected: false,
+        idNameMatched: false,
+        idDateOfBirthMatched: false,
+        idFaceDetected: false,
+        addressProofUploaded: false,
+      },
+      confidence: 0,
+      reasons: [
+        "Automatic KYC checks could not complete. Manual review is required.",
+      ],
+    };
+  }
+}
+
+async function detectFaceCount(document: KycDocumentPayload): Promise<number> {
+  if (!document.contentType.startsWith("image/")) {
+    return 0;
+  }
+  const [buffer] = await storage.bucket().file(document.path).download();
+  const [result] = await vision.faceDetection({image: {content: buffer}});
+  return result.faceAnnotations?.length ?? 0;
+}
+
+async function detectText(document: KycDocumentPayload): Promise<string> {
+  if (!document.contentType.startsWith("image/")) {
+    return "";
+  }
+  const [buffer] = await storage.bucket().file(document.path).download();
+  const [result] = await vision.textDetection({image: {content: buffer}});
+  return result.fullTextAnnotation?.text ??
+    result.textAnnotations?.[0]?.description ??
+    "";
+}
+
+async function storageFileExists(path: string): Promise<boolean> {
+  const [exists] = await storage.bucket().file(path).exists();
+  return exists;
+}
+
+function textContainsName(text: string, fullLegalName: string): boolean {
+  const normalizedText = normalizeIdentityText(text);
+  const tokens = normalizeIdentityText(fullLegalName)
+    .split(" ")
+    .filter((token) => token.length >= 3);
+  if (tokens.length < 2) return false;
+  return tokens.every((token) => normalizedText.includes(token));
+}
+
+function textContainsDateOfBirth(text: string, dateOfBirth: string): boolean {
+  const birthDate = new Date(dateOfBirth);
+  if (Number.isNaN(birthDate.getTime())) return false;
+  const year = String(birthDate.getUTCFullYear());
+  const month = String(birthDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(birthDate.getUTCDate()).padStart(2, "0");
+  const normalizedText = normalizeIdentityText(text);
+  const compactText = normalizedText.replace(/\s/g, "");
+  const variants = [
+    `${year}-${month}-${day}`,
+    `${day}-${month}-${year}`,
+    `${day}/${month}/${year}`,
+    `${month}/${day}/${year}`,
+    `${day}${month}${year}`,
+    `${year}${month}${day}`,
+  ].map((value) => normalizeIdentityText(value).replace(/\s/g, ""));
+
+  return variants.some((variant) => compactText.includes(variant)) ||
+    normalizedText.includes(year);
+}
+
+function normalizeIdentityText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function kycAutomationReasons(
+  checks: KycAutomationResult["checks"],
+): string[] {
+  const reasons: string[] = [];
+  if (!checks.selfieFaceDetected) {
+    reasons.push("No face was detected in the selfie.");
+  } else if (!checks.selfieSingleFace) {
+    reasons.push("The selfie must contain exactly one face.");
+  }
+  if (!checks.idTextDetected) {
+    reasons.push("Readable ID text was not detected.");
+  }
+  if (!checks.idNameMatched) {
+    reasons.push("The legal name did not match the ID document text.");
+  }
+  if (!checks.idDateOfBirthMatched) {
+    reasons.push("The date of birth did not match the ID document text.");
+  }
+  if (!checks.idFaceDetected) {
+    reasons.push("No face was detected on the ID document image.");
+  }
+  if (!checks.addressProofUploaded) {
+    reasons.push("Address proof could not be found in Storage.");
+  }
+  return reasons;
+}
+
+function readKycDocumentSet(data: Record<string, unknown>): KycDocumentSet {
+  return {
+    governmentId: readKycDocumentPayload(data.governmentId),
+    selfie: readKycDocumentPayload(data.selfie),
+    addressProof: readKycDocumentPayload(data.addressProof),
+  };
+}
+
+function readKycDocumentPayload(data: unknown): KycDocumentPayload {
+  const value = readObject(data);
+  return {
+    path: readString(value, "path"),
+    downloadUrl: readString(value, "downloadUrl"),
+    contentType: readString(value, "contentType"),
+    originalName: readString(value, "originalName"),
+  };
+}
+
+function validateKycDocumentOwnership(uid: string, documents: KycDocumentSet) {
+  for (const document of Object.values(documents)) {
+    if (!document.path.startsWith(`kyc/${uid}/`)) {
+      throw new HttpsError(
+        "permission-denied",
+        "KYC documents must be uploaded under your account.",
+      );
+    }
+    if (!/^(image\/.+|application\/pdf)$/.test(document.contentType)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "KYC documents must be images or PDFs.",
+      );
+    }
+  }
 }
 
 function ensureFunctionsEmulator() {
@@ -1005,6 +1535,82 @@ function readPaymentOptionPayload(
     enabled: readBoolean(value, "enabled"),
     minimumAmount: readNumber(value, "minimumAmount"),
   };
+}
+
+async function loadWithdrawalPolicy(): Promise<WithdrawalPolicy> {
+  const snapshot = await withdrawalPolicyDoc.get();
+  return withdrawalPolicyFromData(snapshot.data());
+}
+
+function withdrawalPolicyFromData(
+  data: FirebaseFirestore.DocumentData | undefined,
+): WithdrawalPolicy {
+  const defaults = defaultWithdrawalPolicy();
+  if (!data) return defaults;
+
+  return {
+    minimumAmountUgx: Number(
+      data.minimumAmountUgx ?? defaults.minimumAmountUgx,
+    ),
+    flatFeeUgx: Number(data.flatFeeUgx ?? defaults.flatFeeUgx),
+    percentageFee: Number(data.percentageFee ?? defaults.percentageFee),
+    requiresDestinationWalletVerification:
+      Boolean(
+        data.requiresDestinationWalletVerification ??
+          defaults.requiresDestinationWalletVerification,
+      ),
+    requiredApprovals: Number(
+      data.requiredApprovals ?? defaults.requiredApprovals,
+    ),
+    processingTime: String(data.processingTime ?? defaults.processingTime),
+    enabled: Boolean(data.enabled ?? defaults.enabled),
+    notes: String(data.notes ?? defaults.notes),
+  };
+}
+
+function defaultWithdrawalPolicy(): WithdrawalPolicy {
+  return {
+    minimumAmountUgx: 50000,
+    flatFeeUgx: 0,
+    percentageFee: 0,
+    requiresDestinationWalletVerification: true,
+    requiredApprovals: 1,
+    processingTime: "1-2 business days",
+    enabled: true,
+    notes: "Admin verification is required before release.",
+  };
+}
+
+function readWithdrawalPolicy(data: unknown): WithdrawalPolicy {
+  const value = readObject(data);
+  const policy: WithdrawalPolicy = {
+    minimumAmountUgx: readPositiveNumber(value, "minimumAmountUgx"),
+    flatFeeUgx: readNonNegativeNumber(value, "flatFeeUgx"),
+    percentageFee: readNonNegativeNumber(value, "percentageFee"),
+    requiresDestinationWalletVerification: readBoolean(
+      value,
+      "requiresDestinationWalletVerification",
+    ),
+    requiredApprovals: readPositiveInteger(value, "requiredApprovals"),
+    processingTime: readString(value, "processingTime"),
+    enabled: readBoolean(value, "enabled"),
+    notes: readOptionalString(value, "notes") ?? "",
+  };
+
+  if (policy.percentageFee > 25) {
+    throw new HttpsError(
+      "invalid-argument",
+      "percentageFee must be 25 or lower.",
+    );
+  }
+  if (policy.requiredApprovals > 3) {
+    throw new HttpsError(
+      "invalid-argument",
+      "requiredApprovals must be 3 or lower.",
+    );
+  }
+
+  return policy;
 }
 
 async function notifyAdmins(notification: {
@@ -1140,6 +1746,16 @@ function readString(data: unknown, key: string): string {
   return value.trim();
 }
 
+function readDateString(data: unknown, key: string): string {
+  const value = readString(data, key);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpsError("invalid-argument", `${key} must be a valid date.`);
+  }
+
+  return date.toISOString();
+}
+
 function readEmail(data: unknown, key: string): string {
   const value = readString(data, key).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
@@ -1208,6 +1824,24 @@ function readPositiveNumber(data: unknown, key: string): number {
   return value;
 }
 
+function readNonNegativeNumber(data: unknown, key: string): number {
+  const value = readNumber(data, key);
+  if (value < 0) {
+    throw new HttpsError("invalid-argument", `${key} must be 0 or greater.`);
+  }
+
+  return value;
+}
+
+function readPositiveInteger(data: unknown, key: string): number {
+  const value = readPositiveNumber(data, key);
+  if (!Number.isInteger(value)) {
+    throw new HttpsError("invalid-argument", `${key} must be a whole number.`);
+  }
+
+  return value;
+}
+
 function readStringArrayOrDefault(
   value: unknown,
   fallback: string[],
@@ -1236,4 +1870,13 @@ function readSerializableDate(value: unknown): string {
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function formatUgx(value: number): string {
+  return `UGX ${Math.round(value).toLocaleString("en-US")}`;
+}
+
+function isLikelyWalletAddress(value: string): boolean {
+  const trimmed = value.trim();
+  return /^(0x[a-fA-F0-9]{40}|T[A-Za-z0-9]{25,40}|bc1[A-Za-z0-9]{25,90}|[13][A-Za-z0-9]{25,40})$/.test(trimmed);
 }

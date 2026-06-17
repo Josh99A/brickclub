@@ -5,6 +5,7 @@ class AdminDashboardData {
     required this.cryptoPaymentOptions,
     required this.depositRequests,
     required this.supportTickets,
+    required this.withdrawalPolicy,
   });
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
@@ -23,6 +24,9 @@ class AdminDashboardData {
         json['supportTickets'],
         AdminSupportTicket.fromJson,
       ),
+      withdrawalPolicy: WithdrawalPolicy.fromJson(
+        Map<String, dynamic>.from(json['withdrawalPolicy'] as Map? ?? {}),
+      ),
     );
   }
 
@@ -31,6 +35,7 @@ class AdminDashboardData {
   final List<CryptoPaymentOption> cryptoPaymentOptions;
   final List<AdminDepositRequest> depositRequests;
   final List<AdminSupportTicket> supportTickets;
+  final WithdrawalPolicy withdrawalPolicy;
 }
 
 class AdminUser {
@@ -284,6 +289,82 @@ class AdminSupportTicket {
       'closed' => 'Closed',
       _ => 'Open',
     };
+  }
+}
+
+class WithdrawalPolicy {
+  const WithdrawalPolicy({
+    required this.minimumAmountUgx,
+    required this.flatFeeUgx,
+    required this.percentageFee,
+    required this.requiresDestinationWalletVerification,
+    required this.requiredApprovals,
+    required this.processingTime,
+    required this.enabled,
+    required this.notes,
+  });
+
+  factory WithdrawalPolicy.defaults() {
+    return const WithdrawalPolicy(
+      minimumAmountUgx: 50000,
+      flatFeeUgx: 0,
+      percentageFee: 0,
+      requiresDestinationWalletVerification: true,
+      requiredApprovals: 1,
+      processingTime: '1-2 business days',
+      enabled: true,
+      notes: 'Admin verification is required before release.',
+    );
+  }
+
+  factory WithdrawalPolicy.fromJson(Map<String, dynamic> json) {
+    final defaults = WithdrawalPolicy.defaults();
+    return WithdrawalPolicy(
+      minimumAmountUgx:
+          (json['minimumAmountUgx'] as num?)?.toDouble() ??
+          defaults.minimumAmountUgx,
+      flatFeeUgx:
+          (json['flatFeeUgx'] as num?)?.toDouble() ?? defaults.flatFeeUgx,
+      percentageFee:
+          (json['percentageFee'] as num?)?.toDouble() ?? defaults.percentageFee,
+      requiresDestinationWalletVerification:
+          json['requiresDestinationWalletVerification'] as bool? ??
+          defaults.requiresDestinationWalletVerification,
+      requiredApprovals:
+          (json['requiredApprovals'] as num?)?.toInt() ??
+          defaults.requiredApprovals,
+      processingTime:
+          json['processingTime'] as String? ?? defaults.processingTime,
+      enabled: json['enabled'] as bool? ?? defaults.enabled,
+      notes: json['notes'] as String? ?? defaults.notes,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'minimumAmountUgx': minimumAmountUgx,
+      'flatFeeUgx': flatFeeUgx,
+      'percentageFee': percentageFee,
+      'requiresDestinationWalletVerification':
+          requiresDestinationWalletVerification,
+      'requiredApprovals': requiredApprovals,
+      'processingTime': processingTime,
+      'enabled': enabled,
+      'notes': notes,
+    };
+  }
+
+  final double minimumAmountUgx;
+  final double flatFeeUgx;
+  final double percentageFee;
+  final bool requiresDestinationWalletVerification;
+  final int requiredApprovals;
+  final String processingTime;
+  final bool enabled;
+  final String notes;
+
+  double feeFor(double amountUgx) {
+    return flatFeeUgx + (amountUgx * percentageFee / 100);
   }
 }
 

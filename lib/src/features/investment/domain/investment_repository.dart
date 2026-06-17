@@ -1,6 +1,8 @@
 import 'investment_models.dart';
 
 abstract interface class InvestmentRepository {
+  Future<MemberDashboardData> loadMemberDashboard();
+
   Future<List<InvestmentOpportunity>> listOpportunities();
 
   Future<PurchaseOrder> createPurchaseOrder(PurchaseRequest request);

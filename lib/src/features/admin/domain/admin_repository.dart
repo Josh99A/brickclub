@@ -51,4 +51,6 @@ abstract interface class AdminRepository {
   });
 
   Future<void> closeSupportTicket(String id);
+
+  Future<void> updateWithdrawalPolicy(WithdrawalPolicy policy);
 }

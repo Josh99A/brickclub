@@ -34,6 +34,11 @@ class BackendFunctions {
     final callable = _functions.httpsCallable('registerMessagingToken');
     await callable.call<void>({'token': token, 'platform': platform});
   }
+
+  Future<void> submitKycProfile(Map<String, dynamic> data) async {
+    final callable = _functions.httpsCallable('submitKycProfile');
+    await callable.call<void>(data);
+  }
 }
 
 class MemberProfileDto {

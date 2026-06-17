@@ -143,6 +143,11 @@ class FirebaseAdminRepository implements AdminRepository {
     return _callVoid('closeSupportTicket', {'ticketId': id});
   }
 
+  @override
+  Future<void> updateWithdrawalPolicy(WithdrawalPolicy policy) {
+    return _callVoid('updateWithdrawalPolicy', policy.toJson());
+  }
+
   Future<Map<String, dynamic>> _callMap(
     String name, [
     Map<String, dynamic>? data,

@@ -17,6 +17,15 @@ class FirebaseInvestmentRepository implements InvestmentRepository {
   final FirebaseStorage _storage;
 
   @override
+  Future<MemberDashboardData> loadMemberDashboard() async {
+    final callable = _functions.httpsCallable('getMemberDashboard');
+    final result = await callable.call<Object?>();
+    return MemberDashboardData.fromJson(
+      Map<String, dynamic>.from(result.data! as Map),
+    );
+  }
+
+  @override
   Future<List<InvestmentOpportunity>> listOpportunities() async {
     final callable = _functions.httpsCallable('listMemberOpportunities');
     final result = await callable.call<Object?>();

@@ -43,29 +43,22 @@ class FirebaseKycRepository implements KycRepository {
     await _verifyPhoneCode(submission);
 
     final basePath = 'kyc/${user.uid}/${DateTime.now().millisecondsSinceEpoch}';
-    final documentUrls = await Future.wait([
+    final documents = await Future.wait([
       _upload('$basePath/government-id', submission.governmentId),
       _upload('$basePath/selfie', submission.selfie),
       _upload('$basePath/address-proof', submission.addressProof),
     ]);
 
-    await _firestore.collection('kycProfiles').doc(user.uid).set({
-      'uid': user.uid,
+    await _backendFunctions.submitKycProfile({
       'fullLegalName': submission.fullLegalName.trim(),
-      'dateOfBirth': Timestamp.fromDate(submission.dateOfBirth),
+      'dateOfBirth': submission.dateOfBirth.toIso8601String(),
       'phoneNumber': submission.phoneNumber.trim(),
-      'email': user.email,
-      'emailVerified': user.emailVerified,
-      'phoneVerified': true,
-      'status': 'submitted',
       'documents': {
-        'governmentIdUrl': documentUrls[0],
-        'selfieUrl': documentUrls[1],
-        'addressProofUrl': documentUrls[2],
+        'governmentId': documents[0].toJson(),
+        'selfie': documents[1].toJson(),
+        'addressProof': documents[2].toJson(),
       },
-      'submittedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   @override
@@ -110,14 +103,22 @@ class FirebaseKycRepository implements KycRepository {
     return user;
   }
 
-  Future<String> _upload(String path, KycDocumentFile file) async {
+  Future<_UploadedKycDocument> _upload(
+    String path,
+    KycDocumentFile file,
+  ) async {
     final metadata = SettableMetadata(
       contentType: file.contentType,
       customMetadata: {'originalName': file.name},
     );
     final reference = _storage.ref(path);
     await reference.putData(file.bytes, metadata);
-    return reference.getDownloadURL();
+    return _UploadedKycDocument(
+      path: reference.fullPath,
+      downloadUrl: await reference.getDownloadURL(),
+      contentType: file.contentType,
+      originalName: file.name,
+    );
   }
 
   Future<void> _startPhoneVerification(String phoneNumber) async {
@@ -228,6 +229,29 @@ class FirebaseKycRepository implements KycRepository {
       'approved' => KycStatus.approved,
       'rejected' => KycStatus.rejected,
       _ => KycStatus.notStarted,
+    };
+  }
+}
+
+class _UploadedKycDocument {
+  const _UploadedKycDocument({
+    required this.path,
+    required this.downloadUrl,
+    required this.contentType,
+    required this.originalName,
+  });
+
+  final String path;
+  final String downloadUrl;
+  final String contentType;
+  final String originalName;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'path': path,
+      'downloadUrl': downloadUrl,
+      'contentType': contentType,
+      'originalName': originalName,
     };
   }
 }

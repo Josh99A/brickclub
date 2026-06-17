@@ -53,7 +53,31 @@ flutter run --dart-define=USE_FIREBASE_EMULATORS=true
 
 The app defaults to emulators in debug builds. For Android emulator runs it uses `10.0.2.2`; for web, Windows, iOS simulator, and macOS it uses `localhost`.
 
-For a physical device on the same network, pass your machine IP:
+For a physical Android device connected over USB, use the helper script. It
+sets up local reverse ports for convenience, detects this machine's LAN IPv4
+address, then runs Flutter against that address. A LAN address is required
+because FlutterFire remaps `127.0.0.1` to `10.0.2.2` on Android for emulator
+support, which is wrong for a physical phone:
+
+```powershell
+.\scripts\run-physical-device.ps1
+```
+
+You can pass normal Flutter arguments after the script name:
+
+```powershell
+.\scripts\run-physical-device.ps1 -d <device-id>
+```
+
+If the script selects the wrong network adapter, pass the host explicitly:
+
+```powershell
+.\scripts\run-physical-device.ps1 -d <device-id> -EmulatorHost 192.168.1.20
+```
+
+For a physical device on the same Wi-Fi network instead, pass your machine IP.
+The Firebase emulators are configured to listen on `0.0.0.0` for this workflow,
+but Windows Firewall may still need to allow the emulator ports:
 
 ```powershell
 flutter run --dart-define=USE_FIREBASE_EMULATORS=true --dart-define=FIREBASE_EMULATOR_HOST=192.168.1.20

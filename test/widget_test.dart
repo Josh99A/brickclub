@@ -16,6 +16,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late FilePickerPlatform originalFilePicker;
@@ -32,6 +33,10 @@ void main() {
 
   tearDownAll(() {
     FilePickerPlatform.instance = originalFilePicker;
+  });
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
   });
 
   Future<void> signIn(WidgetTester tester) async {
@@ -230,15 +235,15 @@ void main() {
   testWidgets('matches the BrickClub authenticated navigation', (tester) async {
     await signIn(tester);
 
-    expect(find.text('UGX 18.6M'), findsOneWidget);
+    expect(find.text('UGX 11M'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-invest')));
     await tester.pumpAndSettle();
-    expect(find.text('1 opportunities'), findsOneWidget);
+    expect(find.text('5 opportunities'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-wallet')));
     await tester.pumpAndSettle();
-    expect(find.text('UGX 4.2M'), findsOneWidget);
+    expect(find.text('UGX 0'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-portfolio')));
     await tester.pumpAndSettle();
@@ -257,6 +262,32 @@ void main() {
 
     expect(find.text('Profile'), findsOneWidget);
     expect(find.text('Amina Kato'), findsOneWidget);
+  });
+
+  testWidgets('member can control the app theme from settings', (tester) async {
+    await signIn(tester);
+
+    await tester.tap(find.byKey(const ValueKey('nav-more')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('profile-settings')),
+      120,
+    );
+    await tester.pumpAndSettle();
+    final settingsTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('profile-settings')),
+    );
+    await tester.tapAt(settingsTopLeft + const Offset(32, 29));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byKey(const ValueKey('theme-system')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('theme-light')));
+    await tester.pumpAndSettle();
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('brickclub.themeMode'), 'light');
   });
 
   testWidgets('member can open support and create a request', (tester) async {
@@ -400,6 +431,7 @@ void main() {
       const Offset(0, -300),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('confirm-purchase')));
     await tester.tap(find.byKey(const ValueKey('confirm-purchase')));
     await tester.pumpAndSettle();
     expect(find.text('Deposit instructions'), findsOneWidget);
@@ -411,6 +443,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('payment-proof')));
     await tester.tap(find.byKey(const ValueKey('payment-proof')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('confirm-purchase')));
     await tester.tap(find.byKey(const ValueKey('confirm-purchase')));
     await tester.pumpAndSettle();
 
@@ -617,6 +650,16 @@ class FakeAdminRepository implements AdminRepository {
         updatedAt: '2026-06-16T10:00:00.000Z',
       ),
     ],
+    withdrawalPolicy: WithdrawalPolicy(
+      minimumAmountUgx: 50000,
+      flatFeeUgx: 2500,
+      percentageFee: 1.5,
+      requiresDestinationWalletVerification: true,
+      requiredApprovals: 2,
+      processingTime: '1-2 business days',
+      enabled: true,
+      notes: 'Withdrawals are reviewed by operations.',
+    ),
   );
 
   @override
@@ -686,6 +729,9 @@ class FakeAdminRepository implements AdminRepository {
 
   @override
   Future<void> closeSupportTicket(String id) async {}
+
+  @override
+  Future<void> updateWithdrawalPolicy(WithdrawalPolicy policy) async {}
 }
 
 class FakeSupportRepository implements SupportRepository {
@@ -793,6 +839,48 @@ class FakeInvestmentRepository implements InvestmentRepository {
       fundedPercent: 29,
     ),
   ];
+
+  @override
+  Future<MemberDashboardData> loadMemberDashboard() async {
+    return const MemberDashboardData(
+      portfolioValueUgx: 11000000,
+      walletBalanceUgx: 0,
+      yearReturnPercent: 10.2,
+      cryptoRails: ['USDT on Tron', 'USDC on Ethereum'],
+      holdings: [
+        MemberHolding(
+          opportunityId: 'asset-1',
+          title: 'Kololo Heights Income Fund',
+          assetClass: 'Real Estate',
+          brickShares: 32.45,
+          valueUgx: 6800000,
+          returnPercent: 12.1,
+        ),
+        MemberHolding(
+          opportunityId: 'asset-2',
+          title: 'Bugolobi Logistics REIT',
+          assetClass: 'REIT',
+          brickShares: 18.72,
+          valueUgx: 4200000,
+          returnPercent: 7.3,
+        ),
+      ],
+      activity: [
+        MemberActivity(
+          title: 'Deposit verified',
+          subtitle: 'Kololo Heights Income Fund',
+          value: 'UGX 6,800,000',
+          status: 'deposit_verified',
+        ),
+      ],
+      allocation: [
+        MemberAllocation(label: 'Real Estate', percent: .62),
+        MemberAllocation(label: 'REIT', percent: .38),
+      ],
+      chartValues: [0, 0, 2500000, 6800000, 9000000, 11000000],
+      chartLabels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    );
+  }
 
   @override
   Future<PurchaseOrder> createPurchaseOrder(PurchaseRequest request) async {

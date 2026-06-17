@@ -3,8 +3,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/admin/domain/admin_models.dart';
 import '../features/admin/domain/admin_repository.dart';
@@ -19,7 +21,9 @@ import '../features/support/domain/support_repository.dart';
 
 final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
-class BrickClubApp extends StatelessWidget {
+const _themeModePreferenceKey = 'brickclub.themeMode';
+
+class BrickClubApp extends StatefulWidget {
   const BrickClubApp({
     super.key,
     required this.authRepository,
@@ -40,31 +44,102 @@ class BrickClubApp extends StatelessWidget {
   final Duration splashDuration;
 
   @override
+  State<BrickClubApp> createState() => _BrickClubAppState();
+}
+
+class _BrickClubAppState extends State<BrickClubApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemeMode();
+  }
+
+  Future<void> _loadThemeMode() async {
+    final preferences = await SharedPreferences.getInstance();
+    final storedMode = preferences.getString(_themeModePreferenceKey);
+    final mode = switch (storedMode) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+    if (mounted) {
+      setState(() => _themeMode = mode);
+    }
+  }
+
+  Future<void> _setThemeMode(ThemeMode mode) async {
+    setState(() => _themeMode = mode);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_themeModePreferenceKey, mode.name);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    AppColors.useBrightness(_effectiveBrightness(context));
     return MaterialApp(
       title: 'BrickClub',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: rootScaffoldMessengerKey,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: const ColorScheme.dark(
-          primary: AppColors.gold,
-          surface: AppColors.panel,
-        ),
-        fontFamily: 'Inter',
-        useMaterial3: true,
-      ),
+      themeMode: _themeMode,
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
+      builder: (context, child) {
+        AppColors.useBrightness(Theme.of(context).brightness);
+        return child ?? const SizedBox.shrink();
+      },
       home: AppGate(
-        authRepository: authRepository,
-        adminRepository: adminRepository,
-        investmentRepository: investmentRepository,
-        kycRepository: kycRepository,
-        supportRepository: supportRepository,
-        showLandingPage: showLandingPage,
-        splashDuration: splashDuration,
+        authRepository: widget.authRepository,
+        adminRepository: widget.adminRepository,
+        investmentRepository: widget.investmentRepository,
+        kycRepository: widget.kycRepository,
+        supportRepository: widget.supportRepository,
+        showLandingPage: widget.showLandingPage,
+        splashDuration: widget.splashDuration,
+        themeMode: _themeMode,
+        onThemeModeChanged: _setThemeMode,
       ),
     );
+  }
+
+  ThemeData _buildTheme(Brightness brightness) {
+    final palette = AppPalette.forBrightness(brightness);
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: palette.gold,
+      brightness: brightness,
+      primary: palette.gold,
+      surface: palette.panel,
+    );
+    return ThemeData(
+      brightness: brightness,
+      scaffoldBackgroundColor: palette.background,
+      colorScheme: colorScheme,
+      fontFamily: 'Inter',
+      useMaterial3: true,
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: palette.surface,
+        hintStyle: TextStyle(color: palette.muted),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: palette.panel,
+        contentTextStyle: TextStyle(color: palette.primary),
+        behavior: SnackBarBehavior.floating,
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+
+  Brightness _effectiveBrightness(BuildContext context) {
+    return switch (_themeMode) {
+      ThemeMode.light => Brightness.light,
+      ThemeMode.dark => Brightness.dark,
+      ThemeMode.system =>
+        MediaQuery.maybePlatformBrightnessOf(context) ??
+            View.of(context).platformDispatcher.platformBrightness,
+    };
   }
 }
 
@@ -78,6 +153,8 @@ class AppGate extends StatefulWidget {
     required this.supportRepository,
     required this.showLandingPage,
     required this.splashDuration,
+    required this.themeMode,
+    required this.onThemeModeChanged,
   });
 
   final AuthRepository authRepository;
@@ -87,6 +164,8 @@ class AppGate extends StatefulWidget {
   final SupportRepository supportRepository;
   final bool showLandingPage;
   final Duration splashDuration;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   State<AppGate> createState() => _AppGateState();
@@ -146,6 +225,8 @@ class _AppGateState extends State<AppGate> {
         investmentRepository: widget.investmentRepository,
         kycRepository: widget.kycRepository,
         supportRepository: widget.supportRepository,
+        themeMode: widget.themeMode,
+        onThemeModeChanged: widget.onThemeModeChanged,
       ),
       AppDestination.admin => AdminDashboard(
         authRepository: widget.authRepository,
@@ -166,17 +247,55 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const PhoneFrame(
+    return PhoneFrame(
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _BrandLockup(height: 160),
-              SizedBox(height: 8),
-              Text('Property-backed ownership', style: AppText.bodyLarge),
-            ],
+        body: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [AppColors.surface, AppColors.background],
+            ),
+          ),
+          child: Center(
+            child: Container(
+              width: 248,
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
+              decoration: BoxDecoration(
+                color: AppColors.panel,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: .18),
+                    blurRadius: 36,
+                    offset: const Offset(0, 22),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _BrandLockup(height: 128),
+                  SizedBox(height: 12),
+                  Text(
+                    'Property-backed ownership',
+                    textAlign: TextAlign.center,
+                    style: AppText.bodyLarge,
+                  ),
+                  SizedBox(height: 24),
+                  SizedBox(
+                    width: 96,
+                    child: LinearProgressIndicator(
+                      minHeight: 3,
+                      backgroundColor: AppColors.track,
+                      color: AppColors.gold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -237,7 +356,7 @@ class _LandingHeader extends StatelessWidget {
     return Container(
       height: 82,
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.background,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
@@ -252,7 +371,7 @@ class _LandingHeader extends StatelessWidget {
                   const _BrandLockup(),
                   const Spacer(),
                   if (!compact) ...[
-                    for (final item in const [
+                    for (final item in [
                       ('Features', 'features'),
                       ('How it works', 'how-it-works'),
                       ('Testimonials', 'testimonials'),
@@ -261,7 +380,7 @@ class _LandingHeader extends StatelessWidget {
                         padding: const EdgeInsets.only(right: 28),
                         child: Text(
                           item.$1,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: AppColors.secondary,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -272,9 +391,9 @@ class _LandingHeader extends StatelessWidget {
                   TextButton(
                     key: const ValueKey('landing-sign-in'),
                     onPressed: onSignIn,
-                    child: const Text('Sign in'),
+                    child: Text('Sign in'),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   _WebButton(
                     label: compact ? 'Join' : 'Create account',
                     onPressed: onSignUp,
@@ -330,7 +449,7 @@ class _HeroSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: RadialGradient(
           center: Alignment(.75, -.15),
           radius: 1.2,
@@ -352,15 +471,15 @@ class _HeroSection extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       copy,
-                      const SizedBox(height: 54),
-                      const Center(child: visual),
+                      SizedBox(height: 54),
+                      Center(child: visual),
                     ],
                   );
                 }
                 return Row(
                   children: [
                     Expanded(flex: 10, child: copy),
-                    const SizedBox(width: 60),
+                    SizedBox(width: 60),
                     const Expanded(flex: 9, child: visual),
                   ],
                 );
@@ -383,7 +502,7 @@ class _HeroCopy extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Own more than\na dream.',
           style: TextStyle(
             color: AppColors.primary,
@@ -393,10 +512,10 @@ class _HeroCopy extends StatelessWidget {
             letterSpacing: -3.1,
           ),
         ),
-        const SizedBox(height: 28),
+        SizedBox(height: 28),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: const Text(
+          child: Text(
             'Build real ownership through verified property-backed '
             'BrickShares, with transparent performance and trusted crypto '
             'settlement from one secure app.',
@@ -407,7 +526,7 @@ class _HeroCopy extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 34),
+        SizedBox(height: 34),
         Wrap(
           spacing: 14,
           runSpacing: 14,
@@ -429,7 +548,7 @@ class _HeroCopy extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 34),
+        SizedBox(height: 34),
         const Wrap(
           spacing: 28,
           runSpacing: 12,
@@ -456,10 +575,10 @@ class _ProofPoint extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: AppColors.gold, size: 18),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.secondary,
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -532,7 +651,7 @@ class _HeroVisual extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: AppColors.border),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Target annual return', style: AppText.small),
@@ -562,10 +681,10 @@ class _PhonePreview extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'BrickClub',
                     style: TextStyle(
@@ -584,7 +703,7 @@ class _PhonePreview extends StatelessWidget {
                     border: Border.all(color: AppColors.border),
                     borderRadius: BorderRadius.circular(13),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.person_outline_rounded,
                     color: AppColors.secondary,
                     size: 15,
@@ -592,10 +711,10 @@ class _PhonePreview extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
-            const Text('Portfolio value', style: AppText.small),
-            const SizedBox(height: 4),
-            const Text(
+            SizedBox(height: 18),
+            Text('Portfolio value', style: AppText.small),
+            SizedBox(height: 4),
+            Text(
               'UGX 18.6M',
               style: TextStyle(
                 color: AppColors.primary,
@@ -603,7 +722,7 @@ class _PhonePreview extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Image.asset(
@@ -613,8 +732,8 @@ class _PhonePreview extends StatelessWidget {
                 fit: BoxFit.cover,
               ),
             ),
-            const SizedBox(height: 12),
-            const Text(
+            SizedBox(height: 12),
+            Text(
               'Kololo Heights\nIncome Fund',
               style: TextStyle(
                 color: AppColors.primary,
@@ -624,15 +743,15 @@ class _PhonePreview extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Minimum', style: AppText.tinyLight),
                 Text('Target return', style: AppText.tinyLight),
               ],
             ),
-            const SizedBox(height: 4),
-            const Row(
+            SizedBox(height: 4),
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('UGX 250K', style: AppText.goldBody),
@@ -678,7 +797,7 @@ class _DarkProof extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         color: AppColors.background,
         fontSize: 12,
         fontWeight: FontWeight.w800,
@@ -750,25 +869,25 @@ class _Step extends StatelessWidget {
         children: [
           Text(
             number,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.gold,
               fontSize: 15,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 34),
+          SizedBox(height: 34),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.primary,
               fontSize: 22,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text(
             body,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.secondary,
               fontSize: 15,
               height: 1.55,
@@ -798,12 +917,12 @@ class _FeatureSection extends StatelessWidget {
                 final details = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Built for clarity,\nnot speculation.',
                       style: _LandingSection.headingStyle,
                     ),
-                    const SizedBox(height: 22),
-                    const Text(
+                    SizedBox(height: 22),
+                    Text(
                       'Every opportunity brings the important information '
                       'forward: ownership structure, asset verification, '
                       'target returns, risks, funding network, and settlement '
@@ -814,7 +933,7 @@ class _FeatureSection extends StatelessWidget {
                         height: 1.55,
                       ),
                     ),
-                    const SizedBox(height: 34),
+                    SizedBox(height: 34),
                     for (final feature in const [
                       (
                         Icons.fact_check_outlined,
@@ -838,13 +957,13 @@ class _FeatureSection extends StatelessWidget {
                 const visual = _AssetReviewPanel();
                 if (constraints.maxWidth < 820) {
                   return Column(
-                    children: [details, const SizedBox(height: 50), visual],
+                    children: [details, SizedBox(height: 50), visual],
                   );
                 }
                 return Row(
                   children: [
                     Expanded(child: details),
-                    const SizedBox(width: 74),
+                    SizedBox(width: 74),
                     const Expanded(child: visual),
                   ],
                 );
@@ -875,11 +994,11 @@ class _FeatureRow extends StatelessWidget {
           ),
           child: Icon(icon, color: AppColors.gold, size: 20),
         ),
-        const SizedBox(width: 14),
+        SizedBox(width: 14),
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.primary,
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -915,21 +1034,21 @@ class _AssetReviewPanel extends StatelessWidget {
               fit: BoxFit.cover,
             ),
           ),
-          const SizedBox(height: 22),
-          const Row(
+          SizedBox(height: 22),
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Kololo Heights', style: AppText.cardHeading),
               Text('VERIFIED', style: AppText.eyebrow),
             ],
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Income-producing residential property',
             style: AppText.bodyLarge,
           ),
-          const SizedBox(height: 22),
-          const Row(
+          SizedBox(height: 22),
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Metric('12.4%', 'Target return', gold: true),
@@ -1014,27 +1133,27 @@ class _Testimonial extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.format_quote_rounded, color: AppColors.gold),
-          const SizedBox(height: 20),
+          Icon(Icons.format_quote_rounded, color: AppColors.gold),
+          SizedBox(height: 20),
           Text(
             quote,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.primary,
               fontSize: 16,
               height: 1.55,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 28),
+          SizedBox(height: 28),
           Text(
             name,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.primary,
               fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(role, style: AppText.small),
         ],
       ),
@@ -1053,12 +1172,12 @@ class _LandingSection extends StatelessWidget {
   final String subtitle;
   final Widget child;
 
-  static const headingStyle = TextStyle(
+  static TextStyle get headingStyle => TextStyle(
     color: AppColors.primary,
     fontSize: 43,
     height: 1.08,
     fontWeight: FontWeight.w800,
-    letterSpacing: -1.6,
+    letterSpacing: 0,
   );
 
   @override
@@ -1075,19 +1194,19 @@ class _LandingSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: headingStyle),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 620),
                   child: Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.secondary,
                       fontSize: 17,
                       height: 1.5,
                     ),
                   ),
                 ),
-                const SizedBox(height: 54),
+                SizedBox(height: 54),
                 child,
               ],
             ),
@@ -1120,7 +1239,7 @@ class _FinalCta extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 900),
           child: Column(
             children: [
-              const Text(
+              Text(
                 'Your next asset can start here.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -1131,8 +1250,8 @@ class _FinalCta extends StatelessWidget {
                   letterSpacing: -2,
                 ),
               ),
-              const SizedBox(height: 18),
-              const Text(
+              SizedBox(height: 18),
+              Text(
                 'Install BrickClub, create your account, and explore verified '
                 'BrickShares built for long-term ownership.',
                 textAlign: TextAlign.center,
@@ -1143,7 +1262,7 @@ class _FinalCta extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 12,
@@ -1165,7 +1284,7 @@ class _FinalCta extends StatelessWidget {
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.background,
                     ),
-                    child: const Text('Sign in'),
+                    child: Text('Sign in'),
                   ),
                 ],
               ),
@@ -1195,10 +1314,10 @@ class _LandingFooter extends StatelessWidget {
             children: [
               const _BrandLockup(),
               const Spacer(),
-              TextButton(onPressed: onSignIn, child: const Text('Sign in')),
-              TextButton(onPressed: onSignUp, child: const Text('Sign up')),
-              const SizedBox(width: 10),
-              const Text('© 2026 BrickClub', style: AppText.small),
+              TextButton(onPressed: onSignIn, child: Text('Sign in')),
+              TextButton(onPressed: onSignUp, child: Text('Sign up')),
+              SizedBox(width: 10),
+              Text('© 2026 BrickClub', style: AppText.small),
             ],
           ),
         ),
@@ -1257,7 +1376,7 @@ class _WebButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          textStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -1330,62 +1449,62 @@ class _SignInScreenState extends State<SignInScreen> {
                             alignment: Alignment.centerLeft,
                             child: IconButton(
                               onPressed: widget.onBack,
-                              icon: const Icon(Icons.arrow_back_rounded),
+                              icon: Icon(Icons.arrow_back_rounded),
                             ),
                           ),
-                          const SizedBox(height: 18),
+                          SizedBox(height: 18),
                           const _BrandLockup(height: 72),
-                          const SizedBox(height: 30),
+                          SizedBox(height: 30),
                           Text(
                             adminAccess ? 'Admin sign in' : 'Welcome back',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.primary,
                               fontSize: 36,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -1.2,
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          SizedBox(height: 10),
                           Text(
                             adminAccess
                                 ? 'Access user, asset, and crypto payment operations.'
                                 : 'Continue to your BrickShares portfolio.',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.secondary,
                               fontSize: 15,
                               height: 1.5,
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          SizedBox(height: 24),
                           const FieldLabel('Email'),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           AppTextField(
                             key: const ValueKey('email-field'),
                             controller: emailController,
                             hintText: 'you@example.com',
                             keyboardType: TextInputType.emailAddress,
                           ),
-                          const SizedBox(height: 18),
+                          SizedBox(height: 18),
                           const FieldLabel('Password'),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           AppTextField(
                             key: const ValueKey('password-field'),
                             controller: passwordController,
                             hintText: 'Enter your password',
                             obscureText: true,
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
                               onPressed: _sendPasswordReset,
-                              child: const Text('Forgot password?'),
+                              child: Text('Forgot password?'),
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          SizedBox(height: 10),
                           if (authMessage != null) ...[
                             _AuthMessageBanner(message: authMessage!),
-                            const SizedBox(height: 14),
+                            SizedBox(height: 14),
                           ],
                           PrimaryButton(
                             key: const ValueKey('sign-in'),
@@ -1396,7 +1515,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 : 'Sign in securely',
                             onPressed: signingIn ? null : _signIn,
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: 12),
                           GoogleAuthButton(
                             key: const ValueKey('google-sign-in'),
                             label: signingInWithGoogle
@@ -1408,7 +1527,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 ? null
                                 : _signInWithGoogle,
                           ),
-                          const SizedBox(height: 24),
+                          SizedBox(height: 24),
                           Center(
                             child: TextButton.icon(
                               key: const ValueKey('admin-access'),
@@ -1432,12 +1551,12 @@ class _SignInScreenState extends State<SignInScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          SizedBox(height: 10),
                           Center(
                             child: TextButton(
                               key: const ValueKey('create-account-link'),
                               onPressed: widget.onCreateAccount,
-                              child: const Text('Create a BrickClub account'),
+                              child: Text('Create a BrickClub account'),
                             ),
                           ),
                         ],
@@ -1577,16 +1696,12 @@ class _AuthMessageBanner extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.info_outline_rounded,
-              color: AppColors.gold,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
+            Icon(Icons.info_outline_rounded, color: AppColors.gold, size: 20),
+            SizedBox(width: 10),
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.primary,
                   fontSize: 14,
                   height: 1.4,
@@ -1607,14 +1722,14 @@ class _SignInStory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         image: DecorationImage(
           image: AssetImage('assets/images/kololo_heights_v2.png'),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(Color(0x7A0B0D0F), BlendMode.darken),
         ),
       ),
-      child: const Padding(
+      child: Padding(
         padding: EdgeInsets.all(64),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1717,7 +1832,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
-                          return const Center(
+                          return Center(
                             child: CircularProgressIndicator(
                               color: AppColors.gold,
                             ),
@@ -1762,7 +1877,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 10),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
@@ -1770,7 +1885,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   child: _BrandLockup(),
                 ),
               ),
-              const SizedBox(height: 46),
+              SizedBox(height: 46),
               for (var index = 0; index < sections.length; index++)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -1788,11 +1903,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                 ),
               const Spacer(),
-              const Divider(color: AppColors.border),
-              const SizedBox(height: 12),
+              Divider(color: AppColors.border),
+              SizedBox(height: 12),
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                leading: const CircleAvatar(
+                leading: CircleAvatar(
                   backgroundColor: AppColors.panel,
                   child: Icon(
                     Icons.admin_panel_settings_outlined,
@@ -1858,7 +1973,7 @@ class _AdminNavItem extends StatelessWidget {
                 size: 20,
                 color: selected ? AppColors.gold : AppColors.muted,
               ),
-              const SizedBox(width: 13),
+              SizedBox(width: 13),
               Expanded(
                 child: Text(
                   label,
@@ -1894,7 +2009,7 @@ class _AdminTopBar extends StatelessWidget {
     return Container(
       height: 78,
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
@@ -1904,14 +2019,14 @@ class _AdminTopBar extends StatelessWidget {
             Builder(
               builder: (context) => IconButton(
                 onPressed: () => Scaffold.of(context).openDrawer(),
-                icon: const Icon(Icons.menu_rounded),
+                icon: Icon(Icons.menu_rounded),
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
           ],
           Text(
             title == 'Overview' ? 'Admin overview' : title,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.primary,
               fontSize: 23,
               fontWeight: FontWeight.w800,
@@ -1927,7 +2042,7 @@ class _AdminTopBar extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: 'Search operations',
                   hintStyle: AppText.small,
-                  prefixIcon: const Icon(
+                  prefixIcon: Icon(
                     Icons.search_rounded,
                     color: AppColors.muted,
                     size: 20,
@@ -1937,22 +2052,22 @@ class _AdminTopBar extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.border),
+                    borderSide: BorderSide(color: AppColors.border),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.gold),
+                    borderSide: BorderSide(color: AppColors.gold),
                   ),
                 ),
               ),
             ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           IconButton(
             onPressed: () => showMessage(context, 'No new notifications'),
-            icon: const Icon(Icons.notifications_none_rounded),
+            icon: Icon(Icons.notifications_none_rounded),
           ),
           if (MediaQuery.sizeOf(context).width >= 900) ...[
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 180),
               child: Text(
@@ -1962,8 +2077,8 @@ class _AdminTopBar extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(width: 8),
-          const CircleAvatar(
+          SizedBox(width: 8),
+          CircleAvatar(
             radius: 17,
             backgroundColor: AppColors.panel,
             child: Icon(
@@ -2016,8 +2131,12 @@ class _AdminSection extends StatelessWidget {
         repository: repository,
         onChanged: onChanged,
       ),
-      5 => const _ReportsPanel(),
-      _ => const _SettingsPanel(),
+      5 => _ReportsPanel(data: data),
+      _ => _SettingsPanel(
+        policy: data.withdrawalPolicy,
+        repository: repository,
+        onChanged: onChanged,
+      ),
     };
   }
 }
@@ -2049,11 +2168,11 @@ class _OverviewPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Monitor member activity, verified assets, and settlement flow.',
           style: TextStyle(color: AppColors.secondary, fontSize: 14),
         ),
-        const SizedBox(height: 26),
+        SizedBox(height: 26),
         Wrap(
           spacing: 14,
           runSpacing: 14,
@@ -2092,17 +2211,15 @@ class _OverviewPanel extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: 20),
         LayoutBuilder(
           builder: (context, constraints) {
-            const chart = _UserGrowthChart();
-            const reviews = _PendingReviews();
+            final chart = _UserGrowthChart(data: data);
+            final reviews = _PendingReviews(data: data);
             if (constraints.maxWidth < 850) {
-              return const Column(
-                children: [chart, SizedBox(height: 18), reviews],
-              );
+              return Column(children: [chart, SizedBox(height: 18), reviews]);
             }
-            return const Row(
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(flex: 3, child: chart),
@@ -2112,7 +2229,7 @@ class _OverviewPanel extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: 20),
         _AdminPanel(
           title: 'Recent crypto payments',
           action: 'View all',
@@ -2121,7 +2238,7 @@ class _OverviewPanel extends StatelessWidget {
             compact: true,
           ),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: 20),
         _AdminPanel(
           title: 'Recent users',
           action: 'Manage users',
@@ -2145,20 +2262,20 @@ class _AdminErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.admin_panel_settings_outlined,
               color: AppColors.gold,
               size: 34,
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             Text('Admin data unavailable', style: AppText.h2),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               message,
               style: AppText.bodyLarge,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 18),
+            SizedBox(height: 18),
             SecondaryButton(label: 'Retry', onPressed: onRetry, compact: true),
           ],
         ),
@@ -2204,20 +2321,20 @@ class _AdminMetricCard extends StatelessWidget {
                   style: AppText.small,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Icon(icon, size: 20, color: AppColors.gold),
             ],
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: 18),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.primary,
               fontSize: 28,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 7),
+          SizedBox(height: 7),
           Text(
             change,
             style: TextStyle(
@@ -2258,7 +2375,7 @@ class _AdminPanel extends StatelessWidget {
                 child: Text(
                   title,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.primary,
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
@@ -2272,7 +2389,7 @@ class _AdminPanel extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 22),
+          SizedBox(height: 22),
           child,
         ],
       ),
@@ -2281,18 +2398,32 @@ class _AdminPanel extends StatelessWidget {
 }
 
 class _UserGrowthChart extends StatelessWidget {
-  const _UserGrowthChart();
+  const _UserGrowthChart({required this.data});
+
+  final AdminDashboardData data;
 
   @override
   Widget build(BuildContext context) {
-    return const _AdminPanel(
-      title: 'User growth',
-      action: 'Last 6 months',
+    final activeUsers = data.users.where((user) => !user.disabled).length;
+    final admins = data.users.where((user) => user.admin).length;
+    final verifiedEmails = data.users
+        .where((user) => user.emailVerified)
+        .length;
+    final disabledUsers = data.users.where((user) => user.disabled).length;
+    return _AdminPanel(
+      title: 'User mix',
+      action: '${data.users.length} total',
       child: SizedBox(
         height: 220,
         child: _BarChart(
-          values: [64, 92, 118, 105, 148, 176],
-          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+          values: [
+            data.users.length.toDouble(),
+            activeUsers.toDouble(),
+            verifiedEmails.toDouble(),
+            admins.toDouble(),
+            disabledUsers.toDouble(),
+          ],
+          labels: const ['All', 'Active', 'Email', 'Admin', 'Off'],
         ),
       ),
     );
@@ -2307,7 +2438,9 @@ class _BarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final maxValue = values.isEmpty
+        ? 0.0
+        : values.reduce((a, b) => a > b ? a : b);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -2322,7 +2455,9 @@ class _BarChart extends StatelessWidget {
                     child: Align(
                       alignment: Alignment.bottomCenter,
                       child: FractionallySizedBox(
-                        heightFactor: values[index] / maxValue,
+                        heightFactor: maxValue <= 0
+                            ? 0
+                            : values[index] / maxValue,
                         child: Container(
                           decoration: BoxDecoration(
                             color: index == values.length - 1
@@ -2336,7 +2471,7 @@ class _BarChart extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   Text(labels[index], style: AppText.tinyLight),
                 ],
               ),
@@ -2348,21 +2483,36 @@ class _BarChart extends StatelessWidget {
 }
 
 class _PendingReviews extends StatelessWidget {
-  const _PendingReviews();
+  const _PendingReviews({required this.data});
+
+  final AdminDashboardData data;
 
   @override
   Widget build(BuildContext context) {
-    return const _AdminPanel(
+    final pendingAssets = data.assets
+        .where((asset) => asset.reviewStatus.toLowerCase() != 'verified')
+        .toList();
+    final pendingDeposits = data.depositRequests
+        .where((request) => request.status == 'proof_submitted')
+        .toList();
+    final pendingSupport = data.supportTickets
+        .where((ticket) => ticket.status == 'waiting_for_admin')
+        .toList();
+    final rows = <Widget>[
+      for (final asset in pendingAssets.take(2))
+        _ReviewRow(asset.title, asset.reviewStatus, 'Asset'),
+      for (final request in pendingDeposits.take(2))
+        _ReviewRow(request.opportunityTitle, 'Deposit proof', 'Payment'),
+      for (final ticket in pendingSupport.take(2))
+        _ReviewRow(ticket.subject, ticket.requesterLabel, 'Support'),
+    ];
+
+    return _AdminPanel(
       title: 'Pending asset reviews',
-      action: '17 pending',
-      child: Column(
-        children: [
-          _ReviewRow('Bugolobi Logistics REIT', 'Documents updated', '2h'),
-          _ReviewRow('Kigali Green Offices', 'Legal review', '5h'),
-          _ReviewRow('Nakasero Income Fund', 'Valuation review', '1d'),
-          _ReviewRow('Mombasa Storage Trust', 'Issuer verification', '1d'),
-        ],
-      ),
+      action: '${rows.length} shown',
+      child: rows.isEmpty
+          ? Text('No pending operational reviews.', style: AppText.body)
+          : Column(children: rows),
     );
   }
 }
@@ -2386,19 +2536,19 @@ class _ReviewRow extends StatelessWidget {
               color: AppColors.goldSoft,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.apartment_outlined,
               color: AppColors.gold,
               size: 19,
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: AppText.fieldLabel),
-                const SizedBox(height: 3),
+                SizedBox(height: 3),
                 Text(status, style: AppText.tinyLight),
               ],
             ),
@@ -2543,9 +2693,9 @@ class _PaymentsPanel extends StatelessWidget {
                 onChanged: onChanged,
               ),
             ),
-            const SizedBox(height: 24),
-            const Text('Deposit proof review', style: AppText.cardHeadingSmall),
-            const SizedBox(height: 12),
+            SizedBox(height: 24),
+            Text('Deposit proof review', style: AppText.cardHeadingSmall),
+            SizedBox(height: 12),
             _DepositRequestTable(
               requests: depositRequests,
               onVerify: (request) => _runAdminAction(
@@ -2581,7 +2731,7 @@ class _DepositRequestTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (requests.isEmpty) {
-      return const Panel(
+      return Panel(
         child: Text('No submitted deposit proofs yet.', style: AppText.body),
       );
     }
@@ -2613,17 +2763,17 @@ class _DepositRequestTable extends StatelessWidget {
               onPressed: request.proofUrl.isEmpty
                   ? null
                   : () => showMessage(context, request.proofUrl),
-              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+              icon: Icon(Icons.receipt_long_outlined, size: 18),
             ),
             IconButton(
               tooltip: 'Verify',
               onPressed: submitted ? () => onVerify(request) : null,
-              icon: const Icon(Icons.verified_outlined, size: 18),
+              icon: Icon(Icons.verified_outlined, size: 18),
             ),
             IconButton(
               tooltip: 'Reject',
               onPressed: submitted ? () => onReject(request) : null,
-              icon: const Icon(Icons.close_rounded, size: 18),
+              icon: Icon(Icons.close_rounded, size: 18),
             ),
           ],
         );
@@ -2683,9 +2833,7 @@ class _SupportTicketTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (tickets.isEmpty) {
-      return const Panel(
-        child: Text('No support tickets yet.', style: AppText.body),
-      );
+      return Panel(child: Text('No support tickets yet.', style: AppText.body));
     }
 
     return _ResponsiveDataTable(
@@ -2712,12 +2860,12 @@ class _SupportTicketTable extends StatelessWidget {
             IconButton(
               tooltip: 'Reply',
               onPressed: closed ? null : () => onReply(ticket),
-              icon: const Icon(Icons.reply_rounded, size: 18),
+              icon: Icon(Icons.reply_rounded, size: 18),
             ),
             IconButton(
               tooltip: 'Close',
               onPressed: closed ? null : () => onClose(ticket),
-              icon: const Icon(Icons.task_alt_rounded, size: 18),
+              icon: Icon(Icons.task_alt_rounded, size: 18),
             ),
           ],
         );
@@ -2727,11 +2875,32 @@ class _SupportTicketTable extends StatelessWidget {
 }
 
 class _ReportsPanel extends StatelessWidget {
-  const _ReportsPanel();
+  const _ReportsPanel({required this.data});
+
+  final AdminDashboardData data;
 
   @override
   Widget build(BuildContext context) {
-    return const _SectionPage(
+    final verifiedAssets = data.assets
+        .where((asset) => asset.reviewStatus.toLowerCase() == 'verified')
+        .length;
+    final liveAssets = data.assets
+        .where((asset) => asset.publishedStatus.toLowerCase() == 'live')
+        .length;
+    final submittedDeposits = data.depositRequests
+        .where((request) => request.status == 'proof_submitted')
+        .length;
+    final verifiedDeposits = data.depositRequests
+        .where((request) => request.status == 'deposit_verified')
+        .length;
+    final rejectedDeposits = data.depositRequests
+        .where((request) => request.status == 'deposit_rejected')
+        .length;
+    final openSupport = data.supportTickets
+        .where((ticket) => ticket.status != 'closed')
+        .length;
+
+    return _SectionPage(
       description:
           'Operational reporting for member growth, assets, and settlement.',
       child: _AdminPanel(
@@ -2739,8 +2908,24 @@ class _ReportsPanel extends StatelessWidget {
         child: SizedBox(
           height: 320,
           child: _BarChart(
-            values: [72, 112, 88, 154, 132, 190, 168, 218],
-            labels: ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'],
+            values: [
+              data.users.length.toDouble(),
+              verifiedAssets.toDouble(),
+              liveAssets.toDouble(),
+              submittedDeposits.toDouble(),
+              verifiedDeposits.toDouble(),
+              rejectedDeposits.toDouble(),
+              openSupport.toDouble(),
+            ],
+            labels: const [
+              'Users',
+              'Verified',
+              'Live',
+              'Proofs',
+              'Paid',
+              'Rejected',
+              'Support',
+            ],
           ),
         ),
       ),
@@ -2749,23 +2934,58 @@ class _ReportsPanel extends StatelessWidget {
 }
 
 class _SettingsPanel extends StatelessWidget {
-  const _SettingsPanel();
+  const _SettingsPanel({
+    required this.policy,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final WithdrawalPolicy policy;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return const _SectionPage(
+    return _SectionPage(
       description:
           'Configure approval rules, payment networks, and administrator access.',
+      actionLabel: 'Edit withdrawals',
+      onAction: () => _showWithdrawalPolicyDialog(
+        context,
+        repository: repository,
+        policy: policy,
+        onChanged: onChanged,
+      ),
       child: _AdminPanel(
-        title: 'Platform settings',
+        title: 'Withdrawal requirements',
         child: Column(
           children: [
             _SettingRow(
-              'Require dual approval',
-              'Asset publication and refunds',
+              'Withdrawals',
+              policy.enabled ? 'Enabled' : 'Disabled',
+              switchValue: policy.enabled,
             ),
-            _SettingRow('USDT settlement', 'Ethereum and Tron enabled'),
-            _SettingRow('Admin session timeout', '30 minutes'),
+            _SettingRow(
+              'Minimum amount',
+              'UGX ${policy.minimumAmountUgx.toStringAsFixed(0)}',
+            ),
+            _SettingRow(
+              'Fees',
+              'UGX ${policy.flatFeeUgx.toStringAsFixed(0)} + ${policy.percentageFee.toStringAsFixed(2)}%',
+            ),
+            _SettingRow(
+              'Destination wallet',
+              policy.requiresDestinationWalletVerification
+                  ? 'Verification required'
+                  : 'Address format only',
+              switchValue: policy.requiresDestinationWalletVerification,
+            ),
+            _SettingRow(
+              'Approvals',
+              '${policy.requiredApprovals} admin approval${policy.requiredApprovals == 1 ? '' : 's'}',
+            ),
+            _SettingRow('Processing time', policy.processingTime),
+            _SettingRow('Notes', policy.notes),
           ],
         ),
       ),
@@ -2792,7 +3012,7 @@ class _SectionPage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(description, style: AppText.bodyLarge),
-        const SizedBox(height: 24),
+        SizedBox(height: 24),
         Row(
           children: [
             const Spacer(),
@@ -2804,7 +3024,7 @@ class _SectionPage extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: 20),
         child,
       ],
     );
@@ -2812,9 +3032,10 @@ class _SectionPage extends StatelessWidget {
 }
 
 class _SettingRow extends StatelessWidget {
-  const _SettingRow(this.title, this.value);
+  const _SettingRow(this.title, this.value, {this.switchValue});
   final String title;
   final String value;
+  final bool? switchValue;
 
   @override
   Widget build(BuildContext context) {
@@ -2822,11 +3043,13 @@ class _SettingRow extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(title, style: AppText.fieldLabel),
       subtitle: Text(value, style: AppText.small),
-      trailing: Switch(
-        value: true,
-        onChanged: (_) => showMessage(context, '$title updated'),
-        activeThumbColor: AppColors.gold,
-      ),
+      trailing: switchValue == null
+          ? null
+          : Switch(
+              value: switchValue!,
+              onChanged: null,
+              activeThumbColor: AppColors.gold,
+            ),
     );
   }
 }
@@ -3046,7 +3269,7 @@ class _ResponsiveDataTable extends StatelessWidget {
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
-            headingTextStyle: const TextStyle(
+            headingTextStyle: TextStyle(
               color: AppColors.muted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -3058,7 +3281,7 @@ class _ResponsiveDataTable extends StatelessWidget {
             horizontalMargin: 8,
             columnSpacing: 34,
             dividerThickness: .5,
-            border: const TableBorder(
+            border: TableBorder(
               horizontalInside: BorderSide(color: AppColors.border),
             ),
             columns: [
@@ -3115,13 +3338,13 @@ class _RowActions extends StatelessWidget {
           IconButton(
             tooltip: 'Edit',
             onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined, size: 18),
+            icon: Icon(Icons.edit_outlined, size: 18),
           ),
         if (onDelete != null)
           IconButton(
             tooltip: 'Delete',
             onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            icon: Icon(Icons.delete_outline_rounded, size: 18),
           ),
       ],
     );
@@ -3200,13 +3423,13 @@ Future<void> _showUserDialog(
                   hintText: 'Full name',
                   initialValue: null,
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 AppTextField(
                   controller: email,
                   hintText: 'member@example.com',
                   keyboardType: TextInputType.emailAddress,
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 AppTextField(
                   controller: password,
                   hintText: user == null
@@ -3218,13 +3441,13 @@ Future<void> _showUserDialog(
                 SwitchListTile(
                   value: admin,
                   onChanged: (value) => setState(() => admin = value),
-                  title: const Text('Admin access'),
+                  title: Text('Admin access'),
                   activeThumbColor: AppColors.gold,
                 ),
                 SwitchListTile(
                   value: disabled,
                   onChanged: (value) => setState(() => disabled = value),
-                  title: const Text('Disabled'),
+                  title: Text('Disabled'),
                   activeThumbColor: AppColors.gold,
                 ),
               ],
@@ -3233,7 +3456,7 @@ Future<void> _showUserDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+              child: Text('Cancel'),
             ),
             FilledButton(
               onPressed: () async {
@@ -3261,7 +3484,7 @@ Future<void> _showUserDialog(
                   Navigator.pop(dialogContext);
                 }
               },
-              child: const Text('Save'),
+              child: Text('Save'),
             ),
           ],
         );
@@ -3301,19 +3524,19 @@ Future<void> _showAssetDialog(
           mainAxisSize: MainAxisSize.min,
           children: [
             AppTextField(controller: title, hintText: 'Asset title'),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             AppTextField(controller: location, hintText: 'Location'),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             AppTextField(controller: type, hintText: 'Asset type'),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             AppTextField(
               controller: fundedPercent,
               hintText: 'Funded percent',
               keyboardType: TextInputType.number,
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             AppTextField(controller: reviewStatus, hintText: 'Review status'),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             AppTextField(
               controller: publishedStatus,
               hintText: 'Published status',
@@ -3324,7 +3547,7 @@ Future<void> _showAssetDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel'),
+          child: Text('Cancel'),
         ),
         FilledButton(
           onPressed: () async {
@@ -3349,7 +3572,7 @@ Future<void> _showAssetDialog(
               Navigator.pop(dialogContext);
             }
           },
-          child: const Text('Save'),
+          child: Text('Save'),
         ),
       ],
     ),
@@ -3392,14 +3615,14 @@ Future<void> _showPaymentOptionDialog(
               mainAxisSize: MainAxisSize.min,
               children: [
                 AppTextField(controller: network, hintText: 'Network'),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 AppTextField(controller: assetSymbol, hintText: 'Asset symbol'),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 AppTextField(
                   controller: walletAddress,
                   hintText: 'Settlement wallet address',
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 _PickerTile(
                   icon: Icons.qr_code_2_rounded,
                   title: qrCodeUrl.isEmpty
@@ -3412,7 +3635,7 @@ Future<void> _showPaymentOptionDialog(
                     }
                   },
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 AppTextField(
                   controller: minimumAmount,
                   hintText: 'Minimum amount',
@@ -3421,7 +3644,7 @@ Future<void> _showPaymentOptionDialog(
                 SwitchListTile(
                   value: enabled,
                   onChanged: (value) => setState(() => enabled = value),
-                  title: const Text('Enabled'),
+                  title: Text('Enabled'),
                   activeThumbColor: AppColors.gold,
                 ),
               ],
@@ -3430,7 +3653,7 @@ Future<void> _showPaymentOptionDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+              child: Text('Cancel'),
             ),
             FilledButton(
               onPressed: () async {
@@ -3455,7 +3678,7 @@ Future<void> _showPaymentOptionDialog(
                   Navigator.pop(dialogContext);
                 }
               },
-              child: const Text('Save'),
+              child: Text('Save'),
             ),
           ],
         );
@@ -3498,7 +3721,7 @@ Future<void> _showRejectDepositDialog(
     context: context,
     builder: (dialogContext) => AlertDialog(
       backgroundColor: AppColors.panel,
-      title: const Text('Reject deposit proof'),
+      title: Text('Reject deposit proof'),
       content: SizedBox(
         width: 420,
         child: AppTextField(
@@ -3509,7 +3732,7 @@ Future<void> _showRejectDepositDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel'),
+          child: Text('Cancel'),
         ),
         FilledButton(
           onPressed: () async {
@@ -3523,12 +3746,139 @@ Future<void> _showRejectDepositDialog(
             );
             if (dialogContext.mounted) Navigator.pop(dialogContext);
           },
-          child: const Text('Reject'),
+          child: Text('Reject'),
         ),
       ],
     ),
   );
   reason.dispose();
+}
+
+Future<void> _showWithdrawalPolicyDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required WithdrawalPolicy policy,
+  required VoidCallback onChanged,
+}) async {
+  final minimum = TextEditingController(
+    text: policy.minimumAmountUgx.toStringAsFixed(0),
+  );
+  final flatFee = TextEditingController(
+    text: policy.flatFeeUgx.toStringAsFixed(0),
+  );
+  final percentageFee = TextEditingController(
+    text: policy.percentageFee.toStringAsFixed(2),
+  );
+  final approvals = TextEditingController(
+    text: policy.requiredApprovals.toString(),
+  );
+  final processingTime = TextEditingController(text: policy.processingTime);
+  final notes = TextEditingController(text: policy.notes);
+  var enabled = policy.enabled;
+  var requiresWalletVerification = policy.requiresDestinationWalletVerification;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        return AlertDialog(
+          backgroundColor: AppColors.panel,
+          title: Text('Withdrawal requirements'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    value: enabled,
+                    onChanged: (value) => setState(() => enabled = value),
+                    title: Text('Withdrawals enabled'),
+                    activeThumbColor: AppColors.gold,
+                  ),
+                  SwitchListTile(
+                    value: requiresWalletVerification,
+                    onChanged: (value) =>
+                        setState(() => requiresWalletVerification = value),
+                    title: Text('Require wallet verification'),
+                    activeThumbColor: AppColors.gold,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: minimum,
+                    hintText: 'Minimum amount in UGX',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: flatFee,
+                    hintText: 'Flat fee in UGX',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: percentageFee,
+                    hintText: 'Percentage fee',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: approvals,
+                    hintText: 'Required admin approvals',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: processingTime,
+                    hintText: 'Processing time',
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(controller: notes, hintText: 'Member notes'),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final payload = WithdrawalPolicy(
+                  minimumAmountUgx: double.tryParse(minimum.text) ?? 0,
+                  flatFeeUgx: double.tryParse(flatFee.text) ?? 0,
+                  percentageFee: double.tryParse(percentageFee.text) ?? 0,
+                  requiresDestinationWalletVerification:
+                      requiresWalletVerification,
+                  requiredApprovals: int.tryParse(approvals.text) ?? 1,
+                  processingTime: processingTime.text,
+                  enabled: enabled,
+                  notes: notes.text,
+                );
+
+                await _runAdminAction(
+                  context,
+                  action: () => repository.updateWithdrawalPolicy(payload),
+                  onChanged: onChanged,
+                  successMessage: 'Withdrawal requirements updated',
+                );
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: Text('Save'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  minimum.dispose();
+  flatFee.dispose();
+  percentageFee.dispose();
+  approvals.dispose();
+  processingTime.dispose();
+  notes.dispose();
 }
 
 Future<void> _showSupportReplyDialog(
@@ -3551,15 +3901,15 @@ Future<void> _showSupportReplyDialog(
           children: [
             Text(ticket.subject, style: AppText.fieldLabel),
             if (ticket.latestMessage.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(ticket.latestMessage, style: AppText.body),
             ],
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             TextField(
               controller: reply,
               minLines: 4,
               maxLines: 6,
-              style: const TextStyle(color: AppColors.primary),
+              style: TextStyle(color: AppColors.primary),
               decoration: InputDecoration(
                 hintText: 'Type your reply',
                 hintStyle: AppText.placeholder,
@@ -3567,7 +3917,7 @@ Future<void> _showSupportReplyDialog(
                 fillColor: AppColors.surface,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppColors.border),
+                  borderSide: BorderSide(color: AppColors.border),
                 ),
               ),
             ),
@@ -3577,7 +3927,7 @@ Future<void> _showSupportReplyDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel'),
+          child: Text('Cancel'),
         ),
         FilledButton(
           onPressed: () async {
@@ -3597,7 +3947,7 @@ Future<void> _showSupportReplyDialog(
             );
             if (dialogContext.mounted) Navigator.pop(dialogContext);
           },
-          child: const Text('Send reply'),
+          child: Text('Send reply'),
         ),
       ],
     ),
@@ -3705,29 +4055,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 children: [
                   IconButton(
                     onPressed: widget.onBack,
-                    icon: const Icon(Icons.chevron_left, size: 34),
+                    icon: Icon(Icons.chevron_left, size: 34),
                     padding: EdgeInsets.zero,
                     alignment: Alignment.centerLeft,
                   ),
                   const _BrandLockup(height: 112),
-                  const SizedBox(height: 10),
-                  const Text(
+                  SizedBox(height: 10),
+                  Text(
                     'Create your BrickShares account. Wallet verification '
                     'and KYC come next.',
                     style: AppText.bodyLarge,
                   ),
-                  const SizedBox(height: 26),
+                  SizedBox(height: 26),
                   Panel(
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Create account', style: AppText.h2),
-                        const Text(
+                        Text('Create account', style: AppText.h2),
+                        Text(
                           'Use your legal names exactly as they appear on your ID.',
                           style: AppText.body,
                         ),
-                        const SizedBox(height: 18),
+                        SizedBox(height: 18),
                         LayoutBuilder(
                           builder: (context, constraints) {
                             final stackNames = constraints.maxWidth < 350;
@@ -3758,7 +4108,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               return Column(
                                 children: [
                                   firstName,
-                                  const SizedBox(height: 14),
+                                  SizedBox(height: 14),
                                   lastName,
                                 ],
                               );
@@ -3767,13 +4117,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             return Row(
                               children: [
                                 Expanded(child: firstName),
-                                const SizedBox(width: 12),
+                                SizedBox(width: 12),
                                 Expanded(child: lastName),
                               ],
                             );
                           },
                         ),
-                        const SizedBox(height: 14),
+                        SizedBox(height: 14),
                         _SignUpField(
                           label: 'Email',
                           child: AppTextField(
@@ -3786,7 +4136,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             autofillHints: const [AutofillHints.email],
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        SizedBox(height: 14),
                         _SignUpField(
                           label: 'Password',
                           child: AppTextField(
@@ -3799,7 +4149,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             autofillHints: const [AutofillHints.newPassword],
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        SizedBox(height: 14),
                         _SignUpField(
                           label: 'Confirm password',
                           child: AppTextField(
@@ -3812,7 +4162,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             autofillHints: const [AutofillHints.newPassword],
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -3822,10 +4172,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 accepted = value ?? false;
                                 authMessage = null;
                               }),
-                              side: const BorderSide(color: AppColors.border),
+                              side: BorderSide(color: AppColors.border),
                               activeColor: AppColors.gold,
                             ),
-                            const Expanded(
+                            Expanded(
                               child: Padding(
                                 padding: EdgeInsets.only(top: 10),
                                 child: Text(
@@ -3840,10 +4190,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   if (authMessage != null) ...[
                     _AuthMessageBanner(message: authMessage!),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                   ],
                   PrimaryButton(
                     key: const ValueKey('create-account-submit'),
@@ -3854,7 +4204,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ? _createAccount
                         : null,
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   GoogleAuthButton(
                     key: const ValueKey('google-sign-up'),
                     label: signingUpWithGoogle
@@ -3864,14 +4214,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ? null
                         : _signUpWithGoogle,
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
+                  SizedBox(height: 10),
+                  Text(
                     'Financial actions require KYC and verified wallet setup '
                     'after account creation.',
                     textAlign: TextAlign.center,
                     style: AppText.disclosure,
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   SecondaryButton(
                     key: const ValueKey('account-login-button'),
                     label: 'Already have an account? Sign in',
@@ -3954,7 +4304,7 @@ class _SignUpField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [FieldLabel(label), const SizedBox(height: 7), child],
+      children: [FieldLabel(label), SizedBox(height: 7), child],
     );
   }
 }
@@ -3966,12 +4316,16 @@ class BrickClubShell extends StatefulWidget {
     required this.investmentRepository,
     required this.kycRepository,
     required this.supportRepository,
+    required this.themeMode,
+    required this.onThemeModeChanged,
   });
 
   final AuthRepository authRepository;
   final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
   final SupportRepository supportRepository;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   State<BrickClubShell> createState() => _BrickClubShellState();
@@ -4008,14 +4362,20 @@ class _BrickClubShellState extends State<BrickClubShell> {
           ),
           WalletScreen(
             kyc: kyc,
+            investmentRepository: widget.investmentRepository,
             onStartKyc: () => _openKyc(context),
             onOpenProfile: _openProfile,
           ),
-          PortfolioScreen(onOpenProfile: _openProfile),
+          PortfolioScreen(
+            investmentRepository: widget.investmentRepository,
+            onOpenProfile: _openProfile,
+          ),
           ProfileScreen(
             user: widget.authRepository.currentUserDetails(),
             kyc: kyc,
             supportRepository: widget.supportRepository,
+            themeMode: widget.themeMode,
+            onThemeModeChanged: widget.onThemeModeChanged,
             onStartKyc: () => _openKyc(context),
           ),
         ];
@@ -4070,16 +4430,16 @@ void requireApprovedKyc(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.verified_user_outlined, color: AppColors.gold),
-          const SizedBox(height: 16),
-          const Text('Complete KYC first', style: AppText.h2),
-          const SizedBox(height: 8),
+          Icon(Icons.verified_user_outlined, color: AppColors.gold),
+          SizedBox(height: 16),
+          Text('Complete KYC first', style: AppText.h2),
+          SizedBox(height: 8),
           Text(
             'Status: ${kyc.label}. Purchases, withdrawals, wallet changes, '
             'and crypto settlement unlock after approval.',
             style: AppText.bodyLarge,
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           PrimaryButton(
             key: const ValueKey('start-kyc-gate'),
             label: kyc.status == KycStatus.submitted
@@ -4126,23 +4486,23 @@ class KycStatusCard extends StatelessWidget {
                 color: isApproved ? AppColors.success : AppColors.gold,
                 size: 30,
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('KYC ${kyc.label}', style: AppText.cardHeadingSmall),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(_statusCopy(kyc), style: AppText.body),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           ProgressLine(value: kyc.completionRatio.clamp(0, 1), height: 6),
           if (!compact) ...[
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -4154,7 +4514,7 @@ class KycStatusCard extends StatelessWidget {
             ),
           ],
           if (showAction) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             PrimaryButton(
               key: const ValueKey('kyc-status-cta'),
               label: isApproved ? 'View KYC details' : 'Complete KYC',
@@ -4256,19 +4616,19 @@ class _KycScreenState extends State<KycScreen> {
                       showAction: false,
                     ),
                     if (kycMessage != null) ...[
-                      const SizedBox(height: 14),
+                      SizedBox(height: 14),
                       _KycMessageBanner(message: kycMessage!),
                     ],
-                    const SizedBox(height: 18),
+                    SizedBox(height: 18),
                     const FieldLabel('Full legal name'),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     AppTextField(
                       controller: fullNameController,
                       hintText: 'Name exactly as shown on your ID',
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     const FieldLabel('Date of birth'),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     _PickerTile(
                       key: const ValueKey('kyc-dob'),
                       icon: Icons.calendar_month_outlined,
@@ -4277,27 +4637,27 @@ class _KycScreenState extends State<KycScreen> {
                           : DateFormat.yMMMd().format(dateOfBirth!),
                       onTap: _pickDateOfBirth,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     const FieldLabel('Government ID or passport'),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     _PickerTile(
                       key: const ValueKey('kyc-government-id'),
                       icon: Icons.badge_outlined,
                       title: governmentId?.name ?? 'Upload ID document',
                       onTap: () => _pickFile((file) => governmentId = file),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     const FieldLabel('Selfie / face verification'),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     _PickerTile(
                       key: const ValueKey('kyc-selfie'),
                       icon: Icons.face_retouching_natural_outlined,
                       title: selfie?.name ?? 'Capture selfie',
                       onTap: _pickSelfie,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     const FieldLabel('Physical address proof'),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     _PickerTile(
                       key: const ValueKey('kyc-address-proof'),
                       icon: Icons.home_work_outlined,
@@ -4305,9 +4665,9 @@ class _KycScreenState extends State<KycScreen> {
                           addressProof?.name ?? 'Upload utility bill or lease',
                       onTap: () => _pickFile((file) => addressProof = file),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     const FieldLabel('Phone verification'),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     AppTextField(
                       key: const ValueKey('kyc-phone'),
                       controller: phoneController,
@@ -4317,13 +4677,13 @@ class _KycScreenState extends State<KycScreen> {
                       textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.telephoneNumber],
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     SecondaryButton(
                       key: const ValueKey('send-phone-code'),
                       label: sendingPhone ? 'Sending...' : 'Send code',
                       onPressed: sendingPhone ? null : _sendPhoneCode,
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     AppTextField(
                       key: const ValueKey('kyc-phone-code'),
                       controller: phoneCodeController,
@@ -4332,9 +4692,9 @@ class _KycScreenState extends State<KycScreen> {
                       prefixIcon: Icons.sms_outlined,
                       textInputAction: TextInputAction.done,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     const FieldLabel('Email verification'),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     _VerificationRow(
                       label: kyc.emailVerified
                           ? 'Email verified'
@@ -4345,14 +4705,14 @@ class _KycScreenState extends State<KycScreen> {
                           ? null
                           : _sendEmailVerification,
                     ),
-                    const SizedBox(height: 26),
+                    SizedBox(height: 26),
                     PrimaryButton(
                       key: const ValueKey('submit-kyc'),
                       label: submitting ? 'Submitting...' : 'Submit for review',
                       onPressed: submitting ? null : _submit,
                     ),
-                    const SizedBox(height: 10),
-                    const Text(
+                    SizedBox(height: 10),
+                    Text(
                       'Phone codes appear in the Firebase Auth emulator. Development emails appear in Mailpit.',
                       style: AppText.disclosure,
                     ),
@@ -4495,7 +4855,7 @@ class _KycScreenState extends State<KycScreen> {
         ),
       );
       if (mounted) {
-        showMessage(context, 'KYC submitted for review');
+        showMessage(context, 'KYC submitted for automatic checks');
         Navigator.pop(context);
       }
     } catch (error) {
@@ -4562,16 +4922,16 @@ class _KycMessageBanner extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline_rounded,
               color: AppColors.warning,
               size: 20,
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.primary,
                   fontSize: 13,
                   height: 1.4,
@@ -4614,9 +4974,9 @@ class _PickerTile extends StatelessWidget {
         child: Row(
           children: [
             Icon(icon, color: AppColors.gold, size: 20),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(child: Text(title, style: AppText.fieldLabel)),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+            Icon(Icons.chevron_right_rounded, color: AppColors.muted),
           ],
         ),
       ),
@@ -4647,7 +5007,7 @@ class _VerificationRow extends StatelessWidget {
             verified ? Icons.check_circle_rounded : Icons.mail_outline_rounded,
             color: verified ? AppColors.success : AppColors.gold,
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(child: Text(label, style: AppText.fieldLabel)),
           SizedBox(
             width: 104,
@@ -4726,7 +5086,20 @@ class HomeScreen extends StatelessWidget {
       onProfileTap: onOpenProfile,
       children: [
         KycStatusCard(kyc: kyc, onStartKyc: onStartKyc, compact: true),
-        const _PortfolioOverview(),
+        FutureBuilder<MemberDashboardData>(
+          future: investmentRepository.loadMemberDashboard(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _DashboardLoadingPanel();
+            }
+            if (snapshot.hasError) {
+              return const _DashboardErrorPanel();
+            }
+            return _PortfolioOverview(
+              data: snapshot.data ?? MemberDashboardData.empty(),
+            );
+          },
+        ),
         SectionHeading(
           title: 'Featured opportunity',
           action: 'View all',
@@ -4737,7 +5110,7 @@ class HomeScreen extends StatelessWidget {
           builder: (context, snapshot) {
             final opportunities = snapshot.data ?? const [];
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Panel(
+              return Panel(
                 child: Center(
                   child: CircularProgressIndicator(color: AppColors.gold),
                 ),
@@ -4747,20 +5120,20 @@ class HomeScreen extends StatelessWidget {
               return Panel(
                 child: Column(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.apartment_rounded,
                       color: AppColors.gold,
                       size: 34,
                     ),
-                    const SizedBox(height: 10),
-                    const Text('No live BrickShares yet', style: AppText.h2),
-                    const SizedBox(height: 6),
-                    const Text(
+                    SizedBox(height: 10),
+                    Text('No live BrickShares yet', style: AppText.h2),
+                    SizedBox(height: 6),
+                    Text(
                       'Published, verified assets will appear here.',
                       textAlign: TextAlign.center,
                       style: AppText.body,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     SecondaryButton(label: 'View invest', onPressed: onInvest),
                   ],
                 ),
@@ -4786,46 +5159,34 @@ class HomeScreen extends StatelessWidget {
           },
         ),
         const SectionHeading(title: 'Your holdings', action: 'View all'),
-        const Panel(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Column(
-            children: [
-              _HoldingRow(
-                title: 'Kololo Heights Income Fund',
-                subtitle: '32.45 BrickShares',
-                value: 'UGX 6.8M',
-                change: '+12.1%',
-              ),
-              Divider(height: 1, color: AppColors.border),
-              _HoldingRow(
-                title: 'Naalya Residences Fund',
-                subtitle: '18.72 BrickShares',
-                value: 'UGX 4.2M',
-                change: '+7.3%',
-              ),
-            ],
-          ),
+        FutureBuilder<MemberDashboardData>(
+          future: investmentRepository.loadMemberDashboard(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _DashboardLoadingPanel();
+            }
+            if (snapshot.hasError) {
+              return const _DashboardErrorPanel();
+            }
+            return _HoldingsPanel(
+              holdings: (snapshot.data ?? MemberDashboardData.empty()).holdings,
+            );
+          },
         ),
         const SectionHeading(title: 'Recent activity', action: 'View all'),
-        const Panel(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Column(
-            children: [
-              _ActivityRow(
-                icon: Icons.south_west_rounded,
-                title: 'Dividend received',
-                subtitle: 'Kololo Heights Income Fund',
-                value: 'UGX 152,400',
-              ),
-              Divider(height: 1, color: AppColors.border),
-              _ActivityRow(
-                icon: Icons.verified_user_outlined,
-                title: 'Wallet settlement verified',
-                subtitle: 'Secure • Transparent • Trusted',
-                value: 'Complete',
-              ),
-            ],
-          ),
+        FutureBuilder<MemberDashboardData>(
+          future: investmentRepository.loadMemberDashboard(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _DashboardLoadingPanel();
+            }
+            if (snapshot.hasError) {
+              return const _DashboardErrorPanel();
+            }
+            return _ActivityPanel(
+              activity: (snapshot.data ?? MemberDashboardData.empty()).activity,
+            );
+          },
         ),
       ],
     );
@@ -4833,41 +5194,45 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _PortfolioOverview extends StatelessWidget {
-  const _PortfolioOverview();
+  const _PortfolioOverview({required this.data});
+
+  final MemberDashboardData data;
 
   @override
   Widget build(BuildContext context) {
+    final chartValues = data.chartValues.isEmpty
+        ? const <double>[0, 0, 0, 0, 0, 0]
+        : data.chartValues;
+    final chartLabels = data.chartLabels.isEmpty
+        ? const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+        : data.chartLabels;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Portfolio value', style: AppText.bodyLarge),
-        const SizedBox(height: 4),
-        const Row(
+        Text('Portfolio value', style: AppText.bodyLarge),
+        SizedBox(height: 4),
+        Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Expanded(child: Text('UGX 18.6M', style: AppText.hero)),
+            Expanded(child: Text(data.portfolioValueText, style: AppText.hero)),
             Padding(
-              padding: EdgeInsets.only(bottom: 5),
-              child: Text('+8.4% this year', style: AppText.goldBody),
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Text(data.yearReturnText, style: AppText.goldBody),
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        SizedBox(height: 18),
         SizedBox(
           height: 96,
           width: double.infinity,
-          child: CustomPaint(painter: _PortfolioChartPainter()),
+          child: CustomPaint(painter: _PortfolioChartPainter(chartValues)),
         ),
-        const SizedBox(height: 8),
-        const Row(
+        SizedBox(height: 8),
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Jan', style: AppText.tiny),
-            Text('Feb', style: AppText.tiny),
-            Text('Mar', style: AppText.tiny),
-            Text('Apr', style: AppText.tiny),
-            Text('May', style: AppText.tiny),
-            Text('Jun', style: AppText.tiny),
+            for (final label in chartLabels.take(6))
+              Text(label, style: AppText.tiny),
           ],
         ),
       ],
@@ -4876,7 +5241,9 @@ class _PortfolioOverview extends StatelessWidget {
 }
 
 class _PortfolioChartPainter extends CustomPainter {
-  const _PortfolioChartPainter();
+  const _PortfolioChartPainter(this.values);
+
+  final List<double> values;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4888,39 +5255,16 @@ class _PortfolioChartPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    const values = [
-      .64,
-      .59,
-      .61,
-      .55,
-      .63,
-      .58,
-      .66,
-      .62,
-      .71,
-      .68,
-      .76,
-      .72,
-      .79,
-      .74,
-      .82,
-      .77,
-      .84,
-      .80,
-      .88,
-      .83,
-      .91,
-      .86,
-      .94,
-      .90,
-      .98,
-      .93,
-      1.0,
-    ];
+    final maxValue = values.fold<double>(0, (max, value) {
+      return value > max ? value : max;
+    });
+    if (values.length < 2 || maxValue <= 0) return;
+
     final path = Path();
     for (var i = 0; i < values.length; i++) {
       final x = size.width * i / (values.length - 1);
-      final y = size.height - (values[i] * size.height * .78);
+      final normalized = values[i] / maxValue;
+      final y = size.height - (normalized * size.height * .78);
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -4939,7 +5283,145 @@ class _PortfolioChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _PortfolioChartPainter oldDelegate) {
+    return oldDelegate.values != values;
+  }
+}
+
+class _HoldingsPanel extends StatelessWidget {
+  const _HoldingsPanel({required this.holdings});
+
+  final List<MemberHolding> holdings;
+
+  @override
+  Widget build(BuildContext context) {
+    if (holdings.isEmpty) {
+      return const _EmptyFinancePanel(
+        icon: Icons.account_balance_wallet_outlined,
+        title: 'No holdings yet',
+        message: 'Verified deposits will appear here as BrickShares.',
+      );
+    }
+
+    return Panel(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        children: [
+          for (final entry in holdings.take(4).indexed) ...[
+            if (entry.$1 > 0) Divider(height: 1, color: AppColors.border),
+            _HoldingRow(
+              title: entry.$2.title,
+              subtitle: entry.$2.sharesText,
+              value: entry.$2.valueText,
+              change: entry.$2.returnText,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityPanel extends StatelessWidget {
+  const _ActivityPanel({required this.activity});
+
+  final List<MemberActivity> activity;
+
+  @override
+  Widget build(BuildContext context) {
+    if (activity.isEmpty) {
+      return const _EmptyFinancePanel(
+        icon: Icons.history_rounded,
+        title: 'No activity yet',
+        message: 'Deposit requests and settlement updates will appear here.',
+      );
+    }
+
+    return Panel(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        children: [
+          for (final entry in activity.take(4).indexed) ...[
+            if (entry.$1 > 0) Divider(height: 1, color: AppColors.border),
+            _ActivityRow(
+              icon: _activityIcon(entry.$2.status),
+              title: entry.$2.title,
+              subtitle: entry.$2.subtitle,
+              value: entry.$2.value,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  IconData _activityIcon(String status) {
+    return switch (status) {
+      'deposit_verified' => Icons.verified_user_outlined,
+      'proof_submitted' => Icons.receipt_long_outlined,
+      'deposit_rejected' => Icons.error_outline_rounded,
+      _ => Icons.south_west_rounded,
+    };
+  }
+}
+
+class _DashboardLoadingPanel extends StatelessWidget {
+  const _DashboardLoadingPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Panel(
+      child: Center(child: CircularProgressIndicator(color: AppColors.gold)),
+    );
+  }
+}
+
+class _DashboardErrorPanel extends StatelessWidget {
+  const _DashboardErrorPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Panel(
+      child: Column(
+        children: [
+          Text('Unable to load account data', style: AppText.h2),
+          SizedBox(height: 8),
+          Text(
+            'Check the backend connection and try again.',
+            textAlign: TextAlign.center,
+            style: AppText.body,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyFinancePanel extends StatelessWidget {
+  const _EmptyFinancePanel({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Panel(
+      child: Column(
+        children: [
+          Icon(icon, color: AppColors.gold, size: 32),
+          SizedBox(height: 10),
+          Text(title, style: AppText.h2),
+          SizedBox(height: 6),
+          Text(message, textAlign: TextAlign.center, style: AppText.body),
+        ],
+      ),
+    );
+  }
 }
 
 class _HoldingRow extends StatelessWidget {
@@ -4962,13 +5444,13 @@ class _HoldingRow extends StatelessWidget {
       child: Row(
         children: [
           const _AssetIcon(),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: AppText.fieldLabel),
-                const SizedBox(height: 3),
+                SizedBox(height: 3),
                 Text(subtitle, style: AppText.tiny),
               ],
             ),
@@ -4977,10 +5459,10 @@ class _HoldingRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(value, style: AppText.fieldLabel),
-              const SizedBox(height: 3),
+              SizedBox(height: 3),
               Text(
                 change,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.success,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -5016,19 +5498,19 @@ class _ActivityRow extends StatelessWidget {
           Container(
             width: 38,
             height: 38,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.track,
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: AppColors.gold, size: 19),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: AppText.fieldLabel),
-                const SizedBox(height: 3),
+                SizedBox(height: 3),
                 Text(subtitle, style: AppText.tiny),
               ],
             ),
@@ -5052,20 +5534,16 @@ class _AssetIcon extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         shape: BoxShape.circle,
       ),
-      child: const Icon(
-        Icons.apartment_rounded,
-        color: AppColors.gold,
-        size: 18,
-      ),
+      child: Icon(Icons.apartment_rounded, color: AppColors.gold, size: 18),
     );
   }
 }
 
 class BrickShareFilters {
   const BrickShareFilters({
-    this.asset = 'Real Estate',
-    this.risk = 'Medium',
-    this.payment = 'USDT',
+    this.asset = 'All',
+    this.risk = 'All',
+    this.payment = 'All',
   });
 
   final String asset;
@@ -5073,9 +5551,9 @@ class BrickShareFilters {
   final String payment;
 
   bool matches(InvestmentOpportunity opportunity) {
-    return opportunity.assetClass == asset &&
-        opportunity.riskLevel == risk &&
-        opportunity.paymentMethods.contains(payment);
+    return (asset == 'All' || opportunity.assetClass == asset) &&
+        (risk == 'All' || opportunity.riskLevel == risk) &&
+        (payment == 'All' || opportunity.paymentMethods.contains(payment));
   }
 }
 
@@ -5128,11 +5606,11 @@ class _InvestScreenState extends State<InvestScreen> {
                       label: 'Available ${opportunities.length}',
                       selected: true,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     ChoicePill(label: filters.asset),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     ChoicePill(label: filters.risk),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     ChoicePill(label: filters.payment),
                   ],
                 ),
@@ -5143,8 +5621,8 @@ class _InvestScreenState extends State<InvestScreen> {
               child: Row(
                 children: [
                   Text(featuredReturn, style: AppText.goldMetric),
-                  const SizedBox(width: 22),
-                  const Expanded(
+                  SizedBox(width: 22),
+                  Expanded(
                     child: Text(
                       'Filtered income\nBrickShares',
                       style: AppText.cardHeadingSmall,
@@ -5164,7 +5642,7 @@ class _InvestScreenState extends State<InvestScreen> {
                   : () => _openFilters(allOpportunities),
             ),
             if (snapshot.connectionState != ConnectionState.done)
-              const Panel(
+              Panel(
                 child: Center(
                   child: CircularProgressIndicator(color: AppColors.gold),
                 ),
@@ -5173,14 +5651,14 @@ class _InvestScreenState extends State<InvestScreen> {
               Panel(
                 child: Column(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.search_off_rounded,
                       color: AppColors.gold,
                       size: 34,
                     ),
-                    const SizedBox(height: 10),
-                    const Text('No BrickShares match', style: AppText.h2),
-                    const SizedBox(height: 6),
+                    SizedBox(height: 10),
+                    Text('No BrickShares match', style: AppText.h2),
+                    SizedBox(height: 6),
                     Text(
                       allOpportunities.isEmpty
                           ? 'Admin-published verified assets will appear here.'
@@ -5188,7 +5666,7 @@ class _InvestScreenState extends State<InvestScreen> {
                       textAlign: TextAlign.center,
                       style: AppText.body,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     SecondaryButton(
                       label: 'Reset filters',
                       onPressed: () =>
@@ -5239,11 +5717,13 @@ class WalletScreen extends StatelessWidget {
   const WalletScreen({
     super.key,
     required this.kyc,
+    required this.investmentRepository,
     required this.onStartKyc,
     required this.onOpenProfile,
   });
 
   final KycProfile kyc;
+  final InvestmentRepository investmentRepository;
   final VoidCallback onStartKyc;
   final VoidCallback onOpenProfile;
 
@@ -5253,47 +5733,56 @@ class WalletScreen extends StatelessWidget {
       title: 'Wallet',
       onProfileTap: onOpenProfile,
       children: [
-        Container(
-          height: 170,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.panel, AppColors.surface],
-            ),
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Verified wallet balance', style: AppText.bodyLarge),
-              SizedBox(height: 10),
-              Text('UGX 4.2M', style: AppText.walletValue),
-              SizedBox(height: 8),
-              Text(
-                'Crypto rails: USDT on Ethereum / Tron',
-                style: AppText.eyebrow,
+        FutureBuilder<MemberDashboardData>(
+          future: investmentRepository.loadMemberDashboard(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _DashboardLoadingPanel();
+            }
+            if (snapshot.hasError) {
+              return const _DashboardErrorPanel();
+            }
+            final data = snapshot.data ?? MemberDashboardData.empty();
+            return Container(
+              height: 170,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.panel, AppColors.surface],
+                ),
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(28),
               ),
-            ],
-          ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Verified wallet balance', style: AppText.bodyLarge),
+                  SizedBox(height: 10),
+                  Text(data.walletBalanceText, style: AppText.walletValue),
+                  SizedBox(height: 8),
+                  Text(data.cryptoRailsText, style: AppText.eyebrow),
+                ],
+              ),
+            );
+          },
         ),
         KycStatusCard(kyc: kyc, onStartKyc: onStartKyc, compact: true),
-        const SizedBox(height: 28),
+        SizedBox(height: 28),
         Panel(
           child: Column(
             children: [
-              const Text(
+              Text(
                 'Crypto funding readiness',
                 style: AppText.cardHeading,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
-              const Text(
+              SizedBox(height: 8),
+              Text(
                 'Add a verified wallet before sending funds. Network, fees, '
                 'quote expiry, and settlement status are shown before confirmation.',
                 textAlign: TextAlign.center,
                 style: AppText.body,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               PrimaryButton(
                 label: 'Add verified wallet',
                 height: 46,
@@ -5308,7 +5797,7 @@ class WalletScreen extends StatelessWidget {
           ),
         ),
         Panel(
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -5329,8 +5818,13 @@ class WalletScreen extends StatelessWidget {
 }
 
 class PortfolioScreen extends StatelessWidget {
-  const PortfolioScreen({super.key, required this.onOpenProfile});
+  const PortfolioScreen({
+    super.key,
+    required this.investmentRepository,
+    required this.onOpenProfile,
+  });
 
+  final InvestmentRepository investmentRepository;
   final VoidCallback onOpenProfile;
 
   @override
@@ -5339,32 +5833,76 @@ class PortfolioScreen extends StatelessWidget {
       title: 'Portfolio',
       onProfileTap: onOpenProfile,
       children: [
-        Panel(
-          radius: 22,
-          padding: const EdgeInsets.all(18),
-          child: const SizedBox(
-            height: 112,
-            child: Column(
+        FutureBuilder<MemberDashboardData>(
+          future: investmentRepository.loadMemberDashboard(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _DashboardLoadingPanel();
+            }
+            if (snapshot.hasError) {
+              return const _DashboardErrorPanel();
+            }
+            final data = snapshot.data ?? MemberDashboardData.empty();
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Total BrickShares allocation', style: AppText.body),
-                SizedBox(height: 10),
-                Text('UGX 18.6M', style: AppText.portfolioValue),
+                Panel(
+                  radius: 22,
+                  padding: const EdgeInsets.all(18),
+                  child: SizedBox(
+                    height: 112,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Total BrickShares allocation',
+                          style: AppText.body,
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          data.portfolioValueText,
+                          style: AppText.portfolioValue,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text('Allocation', style: AppText.h2),
+                if (data.allocation.isEmpty)
+                  const _EmptyFinancePanel(
+                    icon: Icons.pie_chart_outline_rounded,
+                    title: 'No allocation yet',
+                    message: 'Your asset mix appears after deposits verify.',
+                  )
+                else
+                  for (final entry in data.allocation.indexed)
+                    AllocationRow(
+                      entry.$2.label,
+                      entry.$2.percent,
+                      _allocationColor(entry.$1),
+                    ),
+                SizedBox(height: 14),
+                Text('Recent activity', style: AppText.h2),
+                _ActivityPanel(activity: data.activity),
               ],
-            ),
-          ),
+            );
+          },
         ),
-        const SizedBox(height: 8),
-        const Text('Allocation', style: AppText.h2),
-        const AllocationRow('Real Estate', .45, AppColors.gold),
-        const AllocationRow('ETF', .22, Color(0xFF38BDF8)),
-        const AllocationRow('REIT', .18, Color(0xFF22C55E)),
-        const AllocationRow('Alternatives', .15, Color(0xFFF59E0B)),
-        const SizedBox(height: 14),
-        const Text('Recent activity', style: AppText.h2),
       ],
     );
+  }
+
+  Color _allocationColor(int index) {
+    final colors = [
+      AppColors.gold,
+      Color(0xFF38BDF8),
+      Color(0xFF22C55E),
+      Color(0xFFF59E0B),
+      Color(0xFFA78BFA),
+    ];
+    return colors[index % colors.length];
   }
 }
 
@@ -5374,12 +5912,16 @@ class ProfileScreen extends StatelessWidget {
     required this.user,
     required this.kyc,
     required this.supportRepository,
+    required this.themeMode,
+    required this.onThemeModeChanged,
     required this.onStartKyc,
   });
 
   final SignedInUserDetails? user;
   final KycProfile kyc;
   final SupportRepository supportRepository;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
   final VoidCallback onStartKyc;
 
   @override
@@ -5393,7 +5935,7 @@ class ProfileScreen extends StatelessWidget {
           color: AppColors.panel,
           child: Row(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 28,
                 backgroundColor: AppColors.track,
                 child: Icon(
@@ -5402,7 +5944,7 @@ class ProfileScreen extends StatelessWidget {
                   size: 28,
                 ),
               ),
-              const SizedBox(width: 20),
+              SizedBox(width: 20),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -5419,10 +5961,23 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        SizedBox(height: 18),
         KycStatusCard(kyc: kyc, onStartKyc: onStartKyc),
-        for (final item in const [
-          ('Settings', 'Theme, currency, alerts'),
+        ProfileRow(
+          key: const ValueKey('profile-settings'),
+          title: 'Settings',
+          subtitle: '${_themeModeLabel(themeMode)} theme',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ThemeSettingsScreen(
+                themeMode: themeMode,
+                onThemeModeChanged: onThemeModeChanged,
+              ),
+            ),
+          ),
+        ),
+        for (final item in [
           ('Security & privacy', 'Verified wallet and biometrics'),
           ('Documents', 'Statements, risk disclosures'),
         ])
@@ -5464,6 +6019,79 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
+class ThemeSettingsScreen extends StatelessWidget {
+  const ThemeSettingsScreen({
+    super.key,
+    required this.themeMode,
+    required this.onThemeModeChanged,
+  });
+
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return PhoneFrame(
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: detailAppBar(context, 'Theme'),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+          children: [
+            Text('Appearance', style: AppText.h2),
+            SizedBox(height: 8),
+            Text(
+              'Choose how BrickClub looks on this device.',
+              style: AppText.bodyLarge,
+            ),
+            SizedBox(height: 18),
+            Panel(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  for (final mode in ThemeMode.values)
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        key: ValueKey('theme-${mode.name}'),
+                        title: Text(_themeModeLabel(mode), style: AppText.h2),
+                        subtitle: Text(
+                          _themeModeDescription(mode),
+                          style: AppText.body,
+                        ),
+                        trailing: Icon(
+                          themeMode == mode
+                              ? Icons.check_circle_rounded
+                              : Icons.circle_outlined,
+                          color: themeMode == mode
+                              ? AppColors.gold
+                              : AppColors.muted,
+                        ),
+                        onTap: () => onThemeModeChanged(mode),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _themeModeLabel(ThemeMode mode) => switch (mode) {
+  ThemeMode.system => 'System default',
+  ThemeMode.light => 'Light',
+  ThemeMode.dark => 'Dark',
+};
+
+String _themeModeDescription(ThemeMode mode) => switch (mode) {
+  ThemeMode.system => 'Follow this device automatically.',
+  ThemeMode.light => 'Use a bright interface with dark text.',
+  ThemeMode.dark => 'Use the classic dark BrickClub interface.',
+};
+
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key, required this.repository});
 
@@ -5487,16 +6115,16 @@ class SupportScreen extends StatelessWidget {
                   label: 'New support request',
                   onPressed: () => _showCreateTicket(context),
                 ),
-                const SizedBox(height: 18),
+                SizedBox(height: 18),
                 if (snapshot.connectionState == ConnectionState.waiting)
-                  const Center(
+                  Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: CircularProgressIndicator(color: AppColors.gold),
                     ),
                   )
                 else if (tickets.isEmpty)
-                  const Panel(
+                  Panel(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -5581,10 +6209,10 @@ class SupportThreadScreen extends StatelessWidget {
                 Text('${ticket.messages.length} messages', style: AppText.tiny),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             for (final message in ticket.messages)
               _SupportMessageBubble(message: message),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             PrimaryButton(
               key: const ValueKey('reply-support-ticket'),
               label: ticket.isClosed ? 'Request closed' : 'Reply',
@@ -5642,18 +6270,15 @@ class _SupportTicketTile extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: Text(ticket.subject, style: AppText.h2)),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.muted,
-                  ),
+                  Icon(Icons.chevron_right_rounded, color: AppColors.muted),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 ticket.latestMessage?.body ?? 'No messages yet',
                 style: AppText.body,
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               ChoicePill(label: ticket.status.label, selected: true),
             ],
           ),
@@ -5683,7 +6308,7 @@ class _SupportMessageBubble extends StatelessWidget {
             message.isAdmin ? 'BrickClub support' : 'You',
             style: AppText.tinyLight,
           ),
-          const SizedBox(height: 5),
+          SizedBox(height: 5),
           Container(
             constraints: const BoxConstraints(maxWidth: 290),
             padding: const EdgeInsets.all(14),
@@ -5744,9 +6369,9 @@ class _SupportComposerSheetState extends State<_SupportComposerSheet> {
         children: [
           Text(widget.title, style: AppText.h2),
           if (widget.subjectEnabled) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             const FieldLabel('Subject'),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             AppTextField(
               key: const ValueKey('support-subject'),
               controller: subjectController,
@@ -5754,15 +6379,15 @@ class _SupportComposerSheetState extends State<_SupportComposerSheet> {
               prefixIcon: Icons.support_agent_rounded,
             ),
           ],
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           const FieldLabel('Message'),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           TextField(
             key: const ValueKey('support-message'),
             controller: messageController,
             minLines: 4,
             maxLines: 6,
-            style: const TextStyle(fontSize: 14, color: AppColors.primary),
+            style: TextStyle(fontSize: 14, color: AppColors.primary),
             decoration: InputDecoration(
               filled: true,
               fillColor: AppColors.surface,
@@ -5770,19 +6395,19 @@ class _SupportComposerSheetState extends State<_SupportComposerSheet> {
               hintStyle: AppText.placeholder,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: BorderSide(color: AppColors.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppColors.gold, width: 1.3),
+                borderSide: BorderSide(color: AppColors.gold, width: 1.3),
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: 18),
           PrimaryButton(
             key: const ValueKey('send-support-message'),
             label: submitting ? 'Sending...' : widget.submitLabel,
@@ -5868,15 +6493,10 @@ class _FiltersScreenState extends State<FiltersScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Asset class', style: AppText.h2),
-                            const SizedBox(height: 16),
+                            Text('Asset class', style: AppText.h2),
+                            SizedBox(height: 16),
                             FilterChoices(
-                              values: const [
-                                'Real Estate',
-                                'REIT',
-                                'ETF',
-                                'Index',
-                              ],
+                              values: _assetOptions,
                               selected: asset,
                               onChanged: (value) =>
                                   setState(() => asset = value),
@@ -5884,16 +6504,16 @@ class _FiltersScreenState extends State<FiltersScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       Panel(
                         padding: const EdgeInsets.all(18),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Risk level', style: AppText.h2),
-                            const SizedBox(height: 16),
+                            Text('Risk level', style: AppText.h2),
+                            SizedBox(height: 16),
                             FilterChoices(
-                              values: const ['Low', 'Medium', 'High'],
+                              values: _riskOptions,
                               selected: risk,
                               onChanged: (value) =>
                                   setState(() => risk = value),
@@ -5901,21 +6521,16 @@ class _FiltersScreenState extends State<FiltersScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       Panel(
                         padding: const EdgeInsets.all(18),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Payment method', style: AppText.h2),
-                            const SizedBox(height: 16),
+                            Text('Payment method', style: AppText.h2),
+                            SizedBox(height: 16),
                             FilterChoices(
-                              values: const [
-                                'USDT',
-                                'USDC',
-                                'BTC',
-                                'UGX Wallet',
-                              ],
+                              values: _paymentOptions,
                               selected: payment,
                               onChanged: (value) =>
                                   setState(() => payment = value),
@@ -5923,12 +6538,12 @@ class _FiltersScreenState extends State<FiltersScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      SizedBox(height: 18),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
@@ -5942,7 +6557,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                       }),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: PrimaryButton(
                       key: const ValueKey('show-brickshares'),
@@ -5974,6 +6589,29 @@ class _FiltersScreenState extends State<FiltersScreen> {
       payment: payment,
     );
     return widget.opportunities.where(selected.matches).length;
+  }
+
+  List<String> get _assetOptions => _uniqueOptions(
+    widget.opportunities.map((opportunity) => opportunity.assetClass),
+  );
+
+  List<String> get _riskOptions => _uniqueOptions(
+    widget.opportunities.map((opportunity) => opportunity.riskLevel),
+  );
+
+  List<String> get _paymentOptions => _uniqueOptions(
+    widget.opportunities.expand((opportunity) => opportunity.paymentMethods),
+  );
+
+  List<String> _uniqueOptions(Iterable<String> values) {
+    final unique =
+        values
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return ['All', ...unique];
   }
 }
 
@@ -6020,13 +6658,13 @@ class DetailScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 26),
+              SizedBox(height: 26),
               Text(opportunity.displayTitle, style: AppText.detailTitle),
               Text(
                 '${opportunity.assetClass} BrickShares | ${opportunity.location}',
                 style: AppText.body,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               Panel(
                 child: Column(
                   children: [
@@ -6044,7 +6682,7 @@ class DetailScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    SizedBox(height: 20),
                     Row(
                       children: [
                         const Expanded(child: Metric('36 mo', 'Liquidity')),
@@ -6056,13 +6694,13 @@ class DetailScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
               Panel(
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Funding status',
                             style: AppText.cardHeadingSmall,
@@ -6074,17 +6712,17 @@ class DetailScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: 14),
                     ProgressLine(value: opportunity.fundedPercent / 100),
-                    const SizedBox(height: 12),
-                    const Text(
+                    SizedBox(height: 12),
+                    Text(
                       'Supported payment options and quote expiry are shown before settlement confirmation.',
                       style: AppText.small,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               PrimaryButton(
                 key: const ValueKey('invest-with-crypto'),
                 label: 'Invest with crypto funding',
@@ -6132,25 +6770,52 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool submitting = false;
   PurchaseOrder? order;
   DepositProofFile? proof;
+  late String selectedPaymentAsset;
+  late final TextEditingController amountController;
   late final TextEditingController transactionHashController;
 
   @override
   void initState() {
     super.initState();
+    selectedPaymentAsset = _cryptoPaymentMethods.contains('USDT')
+        ? 'USDT'
+        : _cryptoPaymentMethods.firstOrNull ?? 'USDT';
+    amountController = TextEditingController(
+      text: widget.opportunity.minimumInvestment.toStringAsFixed(0),
+    );
     transactionHashController = TextEditingController();
   }
 
   @override
   void dispose() {
+    amountController.dispose();
     transactionHashController.dispose();
     super.dispose();
   }
 
+  List<String> get _cryptoPaymentMethods {
+    final methods =
+        widget.opportunity.paymentMethods
+            .where((method) => method.toUpperCase() != 'UGX WALLET')
+            .map((method) => method.trim().toUpperCase())
+            .where((method) => method.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return methods.isEmpty ? const ['USDT'] : methods;
+  }
+
+  double get _enteredAmount {
+    final normalized = amountController.text.replaceAll(',', '').trim();
+    return double.tryParse(normalized) ?? 0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final paymentAsset = widget.opportunity.paymentMethods.contains('USDT')
-        ? 'USDT'
-        : widget.opportunity.paymentMethods.firstOrNull ?? 'USDT';
+    final paymentMethods = _cryptoPaymentMethods;
+    final amount = order?.amountUgx ?? _enteredAmount;
+    final belowMinimum =
+        order == null && amount < widget.opportunity.minimumInvestment;
     return PhoneFrame(
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -6159,40 +6824,63 @@ class _PaymentScreenState extends State<PaymentScreen> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           child: Column(
             children: [
+              _FundingHero(
+                title: widget.opportunity.displayTitle,
+                location: widget.opportunity.location,
+                amountText: _formatUgxCompact(amount),
+                rail: selectedPaymentAsset,
+              ),
+              SizedBox(height: 18),
               Panel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Buying BrickShares', style: AppText.eyebrow),
-                    const SizedBox(height: 12),
-                    Text(
-                      widget.opportunity.displayTitle,
-                      style: AppText.cardHeading,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-              Panel(
-                child: Column(
-                  children: [
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Crypto quote',
+                            'Crypto funding setup',
                             style: AppText.cardHeading,
                           ),
                         ),
-                        Text('Expires after submit', style: AppText.warning),
+                        _StatusChip(order == null ? 'Draft' : 'Active'),
                       ],
                     ),
-                    const SizedBox(height: 18),
+                    SizedBox(height: 16),
+                    const FieldLabel('Payment rail'),
+                    SizedBox(height: 10),
+                    FilterChoices(
+                      values: paymentMethods,
+                      selected: selectedPaymentAsset,
+                      onChanged: order == null
+                          ? (value) => setState(() {
+                              selectedPaymentAsset = value;
+                            })
+                          : (_) {},
+                    ),
+                    SizedBox(height: 16),
+                    const FieldLabel('Investment amount'),
+                    SizedBox(height: 8),
+                    AppTextField(
+                      controller: amountController,
+                      hintText: 'Amount in UGX',
+                      keyboardType: TextInputType.number,
+                      prefixIcon: Icons.payments_outlined,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      belowMinimum
+                          ? 'Minimum for this opportunity is ${widget.opportunity.minimumText}.'
+                          : 'Demo amount can be adjusted before creating the deposit request.',
+                      style: belowMinimum ? AppText.warning : AppText.small,
+                    ),
+                    SizedBox(height: 18),
                     QuoteRow(
                       'Payment asset',
-                      order?.paymentAsset ?? paymentAsset,
+                      order?.paymentAsset ?? selectedPaymentAsset,
                     ),
-                    QuoteRow('Amount', widget.opportunity.minimumText),
+                    QuoteRow('Amount', _formatUgxCompact(amount)),
                     QuoteRow(
                       'Network',
                       order == null
@@ -6217,8 +6905,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ],
                 ),
               ),
+              SizedBox(height: 18),
+              _FundingSteps(order: order, proofReady: proof != null),
               if (order != null) ...[
-                const SizedBox(height: 28),
+                SizedBox(height: 18),
                 _DepositInstructions(
                   order: order!,
                   proofName: proof?.name,
@@ -6226,8 +6916,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   onPickProof: _pickProof,
                 ),
               ],
-              const SizedBox(height: 28),
-              const Panel(
+              SizedBox(height: 18),
+              Panel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -6244,7 +6934,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 36),
+              SizedBox(height: 36),
               PrimaryButton(
                 key: const ValueKey('confirm-purchase'),
                 label: submitting
@@ -6252,13 +6942,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     : order == null
                     ? 'Create deposit request'
                     : 'Submit proof for review',
-                onPressed: widget.kyc.canPerformFinancialActions && !submitting
+                onPressed:
+                    widget.kyc.canPerformFinancialActions &&
+                        !submitting &&
+                        !belowMinimum
                     ? () => order == null
-                          ? _createDepositRequest(paymentAsset)
+                          ? _createDepositRequest(selectedPaymentAsset, amount)
                           : _submitProof()
                     : null,
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: 14),
               SecondaryButton(
                 label: 'Cancel',
                 onPressed: () => Navigator.pop(context),
@@ -6270,14 +6963,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Future<void> _createDepositRequest(String paymentAsset) async {
+  Future<void> _createDepositRequest(
+    String paymentAsset,
+    double amountUgx,
+  ) async {
+    if (amountUgx < widget.opportunity.minimumInvestment) {
+      showMessage(context, 'Increase the amount to the opportunity minimum.');
+      return;
+    }
     setState(() => submitting = true);
     try {
       final createdOrder = await widget.investmentRepository
           .createPurchaseOrder(
             PurchaseRequest(
               opportunityId: widget.opportunity.id,
-              amountUgx: widget.opportunity.minimumInvestment,
+              amountUgx: amountUgx,
               paymentAsset: paymentAsset,
             ),
           );
@@ -6372,8 +7072,8 @@ class _DepositInstructions extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Deposit instructions', style: AppText.cardHeading),
-          const SizedBox(height: 14),
+          Text('Deposit instructions', style: AppText.cardHeading),
+          SizedBox(height: 14),
           if (order.paymentQrCodeUrl.isNotEmpty) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
@@ -6384,25 +7084,213 @@ class _DepositInstructions extends StatelessWidget {
                 fit: BoxFit.contain,
               ),
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
           ],
-          QuoteRow('Wallet address', order.paymentWalletAddress),
+          _CopyableQuoteRow('Wallet address', order.paymentWalletAddress),
           QuoteRow('Network', order.paymentNetwork),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           const FieldLabel('Transaction hash'),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           AppTextField(
             key: const ValueKey('transaction-hash'),
             controller: transactionHashController,
             hintText: 'Paste blockchain transaction hash',
             prefixIcon: Icons.tag_rounded,
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           _PickerTile(
             key: const ValueKey('payment-proof'),
             icon: Icons.upload_file_rounded,
             title: proofName ?? 'Upload proof of payment',
             onTap: onPickProof,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FundingHero extends StatelessWidget {
+  const _FundingHero({
+    required this.title,
+    required this.location,
+    required this.amountText,
+    required this.rail,
+  });
+
+  final String title;
+  final String location;
+  final String amountText;
+  final String rail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF087F7A),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFF20BBAE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.currency_bitcoin_rounded,
+                color: AppColors.primary,
+                size: 22,
+              ),
+              SizedBox(width: 8),
+              Text(rail, style: AppText.cardHeadingSmall),
+              const Spacer(),
+              Icon(Icons.north_east_rounded, color: AppColors.primary),
+            ],
+          ),
+          SizedBox(height: 26),
+          Text(amountText, style: AppText.walletValue),
+          SizedBox(height: 6),
+          Text(title, style: AppText.cardHeadingSmall),
+          Text(location, style: AppText.bodyLarge),
+        ],
+      ),
+    );
+  }
+}
+
+class _FundingSteps extends StatelessWidget {
+  const _FundingSteps({required this.order, required this.proofReady});
+
+  final PurchaseOrder? order;
+  final bool proofReady;
+
+  @override
+  Widget build(BuildContext context) {
+    return Panel(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: _FundingStep(
+              icon: Icons.tune_rounded,
+              label: 'Quote',
+              active: true,
+              done: order != null,
+            ),
+          ),
+          const _StepDivider(),
+          Expanded(
+            child: _FundingStep(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Send',
+              active: order != null,
+              done: proofReady,
+            ),
+          ),
+          const _StepDivider(),
+          Expanded(
+            child: _FundingStep(
+              icon: Icons.verified_outlined,
+              label: 'Review',
+              active: proofReady,
+              done: false,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FundingStep extends StatelessWidget {
+  const _FundingStep({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.done,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = done
+        ? AppColors.success
+        : active
+        ? AppColors.gold
+        : AppColors.muted;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .14),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withValues(alpha: .45)),
+          ),
+          child: Icon(icon, color: color, size: 19),
+        ),
+        SizedBox(height: 7),
+        Text(label, style: AppText.tinyLight, maxLines: 1),
+      ],
+    );
+  }
+}
+
+class _StepDivider extends StatelessWidget {
+  const _StepDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 28,
+      height: 1,
+      margin: const EdgeInsets.only(bottom: 22),
+      color: AppColors.border,
+    );
+  }
+}
+
+class _CopyableQuoteRow extends StatelessWidget {
+  const _CopyableQuoteRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: AppText.body)),
+          Flexible(
+            child: Text(
+              _shortHash(value),
+              textAlign: TextAlign.right,
+              style: AppText.fieldLabel,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Copy',
+            visualDensity: VisualDensity.compact,
+            onPressed: value.trim().isEmpty
+                ? null
+                : () async {
+                    await Clipboard.setData(ClipboardData(text: value));
+                    if (context.mounted) {
+                      showMessage(context, 'Wallet address copied');
+                    }
+                  },
+            icon: Icon(Icons.copy_rounded, size: 16),
           ),
         ],
       ),
@@ -6434,25 +7322,25 @@ class SuccessScreen extends StatelessWidget {
                     border: Border.all(color: AppColors.gold),
                     shape: BoxShape.circle,
                   ),
-                  child: const Text('OK', style: AppText.goldMetricSmall),
+                  child: Text('OK', style: AppText.goldMetricSmall),
                 ),
-                const SizedBox(height: 44),
-                const Text('Proof submitted', style: AppText.h1),
-                const SizedBox(height: 12),
+                SizedBox(height: 44),
+                Text('Proof submitted', style: AppText.h1),
+                SizedBox(height: 12),
                 Text(
                   'Your proof of payment is awaiting admin verification. '
                   'We will notify you after review.',
                   textAlign: TextAlign.center,
                   style: AppText.bodyLarge,
                 ),
-                const SizedBox(height: 38),
+                SizedBox(height: 38),
                 Panel(
                   child: SizedBox(
                     height: 84,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Settlement status',
                             style: AppText.bodyLarge,
@@ -6463,7 +7351,7 @@ class SuccessScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 62),
+                SizedBox(height: 62),
                 PrimaryButton(
                   key: const ValueKey('view-portfolio'),
                   label: 'View portfolio',
@@ -6512,7 +7400,7 @@ class AppPage extends StatelessWidget {
                   else
                     AppHeader(title: title, onProfileTap: onProfileTap),
                   if (subtitle != null) ...[
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(subtitle!, style: AppText.body),
                   ],
                 ],
@@ -6524,7 +7412,7 @@ class AppPage extends StatelessWidget {
             sliver: SliverList.separated(
               itemCount: children.length,
               itemBuilder: (_, index) => children[index],
-              separatorBuilder: (_, _) => const SizedBox(height: 14),
+              separatorBuilder: (_, _) => SizedBox(height: 14),
             ),
           ),
         ],
@@ -6546,23 +7434,23 @@ class AppHeader extends StatelessWidget {
       child: Row(
         children: [
           const _BrickMark(),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(child: Text(title, style: AppText.topTitle)),
           HeaderCircle(
             onTap: () => showMessage(context, 'No new notifications'),
-            child: const Icon(
+            child: Icon(
               Icons.notifications_none_rounded,
               color: AppColors.secondary,
               size: 18,
             ),
           ),
-          const SizedBox(width: 9),
+          SizedBox(width: 9),
           HeaderCircle(
             key: const ValueKey('profile-header-button'),
             onTap:
                 onProfileTap ??
                 () => showMessage(context, 'Profile is in More'),
-            child: const Icon(
+            child: Icon(
               Icons.person_outline_rounded,
               color: AppColors.gold,
               size: 17,
@@ -6580,7 +7468,7 @@ class AppBottomNav extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
 
-  static const items = [
+  static final items = [
     (Icons.home_outlined, Icons.home_rounded, 'Home'),
     (Icons.trending_up_rounded, Icons.trending_up_rounded, 'Invest'),
     (
@@ -6595,7 +7483,7 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.background,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
@@ -6668,7 +7556,7 @@ class _BottomNavItem extends StatelessWidget {
                 size: 21,
               ),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 180),
               style: TextStyle(
@@ -6755,7 +7643,7 @@ class InvestmentCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(title, style: AppText.investmentTitle),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       Text(location, style: AppText.small),
                       const Spacer(),
                       Row(
@@ -6767,15 +7655,15 @@ class InvestmentCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Text(returnText, style: AppText.cardHeadingSmall),
                         ],
                       ),
                       if (!compact) ...[
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         const ProgressLine(value: .62, height: 6),
-                        const SizedBox(height: 7),
-                        const Row(
+                        SizedBox(height: 7),
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Crypto funding', style: AppText.tiny),
@@ -6951,12 +7839,12 @@ class GoogleAuthButton extends StatelessWidget {
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
           backgroundColor: AppColors.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          textStyle: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         icon: const GoogleIcon(),
         label: Text(label, overflow: TextOverflow.ellipsis),
@@ -7051,7 +7939,7 @@ class PrimaryButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          textStyle: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         child: Text(label),
       ),
@@ -7080,7 +7968,7 @@ class SecondaryButton extends StatelessWidget {
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
           backgroundColor: AppColors.panel,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -7104,6 +7992,7 @@ class AppTextField extends StatefulWidget {
     this.prefixIcon,
     this.textInputAction,
     this.autofillHints,
+    this.onChanged,
   });
 
   final String? initialValue;
@@ -7115,6 +8004,7 @@ class AppTextField extends StatefulWidget {
   final IconData? prefixIcon;
   final TextInputAction? textInputAction;
   final Iterable<String>? autofillHints;
+  final ValueChanged<String>? onChanged;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -7148,7 +8038,8 @@ class _AppTextFieldState extends State<AppTextField> {
         keyboardType: widget.keyboardType,
         textInputAction: widget.textInputAction,
         autofillHints: widget.autofillHints,
-        style: const TextStyle(fontSize: 14, color: AppColors.primary),
+        onChanged: widget.onChanged,
+        style: TextStyle(fontSize: 14, color: AppColors.primary),
         decoration: InputDecoration(
           contentPadding: EdgeInsets.symmetric(
             horizontal: widget.prefixIcon == null ? 16 : 12,
@@ -7179,15 +8070,15 @@ class _AppTextFieldState extends State<AppTextField> {
               : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(widget.compact ? 12 : 14),
-            borderSide: const BorderSide(color: AppColors.border),
+            borderSide: BorderSide(color: AppColors.border),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(widget.compact ? 12 : 14),
-            borderSide: const BorderSide(color: AppColors.border),
+            borderSide: BorderSide(color: AppColors.border),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(widget.compact ? 12 : 14),
-            borderSide: const BorderSide(color: AppColors.gold, width: 1.3),
+            borderSide: BorderSide(color: AppColors.gold, width: 1.3),
           ),
         ),
       ),
@@ -7217,24 +8108,28 @@ class ProfileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        height: 58,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          color: AppColors.panel,
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(title, style: AppText.cardHeadingSmall),
-            Text(subtitle, style: AppText.tinyLight),
-          ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          height: 58,
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            color: AppColors.panel,
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(title, style: AppText.cardHeadingSmall),
+              Text(subtitle, style: AppText.tinyLight),
+            ],
+          ),
         ),
       ),
     );
@@ -7268,23 +8163,24 @@ class ProgressLine extends StatelessWidget {
   const ProgressLine({
     super.key,
     required this.value,
-    this.color = AppColors.gold,
+    this.color,
     this.height = 8,
   });
 
   final double value;
-  final Color color;
+  final Color? color;
   final double height;
 
   @override
   Widget build(BuildContext context) {
+    final lineColor = color ?? AppColors.gold;
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
       child: SizedBox(
         height: height,
         child: LinearProgressIndicator(
           value: value,
-          color: color,
+          color: lineColor,
           backgroundColor: AppColors.track,
         ),
       ),
@@ -7312,7 +8208,7 @@ class Metric extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(label, style: AppText.small),
       ],
     );
@@ -7418,10 +8314,10 @@ PreferredSizeWidget detailAppBar(BuildContext context, String title) {
     centerTitle: true,
     leading: IconButton(
       onPressed: () => Navigator.pop(context),
-      icon: const Icon(Icons.chevron_left, size: 32),
+      icon: Icon(Icons.chevron_left, size: 32),
     ),
     title: Text(title, style: AppText.detailAppBar),
-    bottom: const PreferredSize(
+    bottom: PreferredSize(
       preferredSize: Size.fromHeight(1),
       child: Divider(height: 1, color: AppColors.border),
     ),
@@ -7454,6 +8350,11 @@ String _shortHash(String hash) {
   return '${trimmed.substring(0, 8)}...${trimmed.substring(trimmed.length - 6)}';
 }
 
+String _formatUgxCompact(double value) {
+  if (value <= 0) return 'UGX 0';
+  return 'UGX ${NumberFormat.compact().format(value)}';
+}
+
 String _contentTypeForName(String name) {
   final lower = name.toLowerCase();
   if (lower.endsWith('.pdf')) return 'application/pdf';
@@ -7462,15 +8363,44 @@ String _contentTypeForName(String name) {
 }
 
 void showMessage(BuildContext context, String message) {
-  final displayMessage = message.trim().isEmpty
-      ? 'Something went wrong. Please try again.'
-      : message.trim();
+  final displayMessage = message.trim();
+  if (displayMessage.isEmpty) {
+    return;
+  }
   final messenger =
       rootScaffoldMessengerKey.currentState ?? ScaffoldMessenger.of(context);
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
-      SnackBar(content: Text(displayMessage), backgroundColor: AppColors.panel),
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(18, 0, 18, 22),
+        elevation: 10,
+        backgroundColor: AppColors.panel,
+        showCloseIcon: true,
+        closeIconColor: AppColors.secondary,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: AppColors.border),
+        ),
+        content: Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: AppColors.gold, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                displayMessage,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
 }
 
@@ -7564,166 +8494,233 @@ String _friendlyUnexpectedMessage(Object error) {
   return 'Something went wrong. Please try again.';
 }
 
+class AppPalette {
+  const AppPalette({
+    required this.background,
+    required this.surface,
+    required this.panel,
+    required this.track,
+    required this.border,
+    required this.gold,
+    required this.goldSoft,
+    required this.primary,
+    required this.secondary,
+    required this.muted,
+    required this.success,
+    required this.warning,
+  });
+
+  final Color background;
+  final Color surface;
+  final Color panel;
+  final Color track;
+  final Color border;
+  final Color gold;
+  final Color goldSoft;
+  final Color primary;
+  final Color secondary;
+  final Color muted;
+  final Color success;
+  final Color warning;
+
+  static const dark = AppPalette(
+    background: Color(0xFF0B0D0F),
+    surface: Color(0xFF101316),
+    panel: Color(0xFF15191D),
+    track: Color(0xFF20252A),
+    border: Color(0xFF2A3036),
+    gold: Color(0xFFD8A94F),
+    goldSoft: Color(0x1FD8A94F),
+    primary: Color(0xFFF4F5F6),
+    secondary: Color(0xFFB2B7BD),
+    muted: Color(0xFF747B83),
+    success: Color(0xFF51B96B),
+    warning: Color(0xFFF59E0B),
+  );
+
+  static const light = AppPalette(
+    background: Color(0xFFF7F4ED),
+    surface: Color(0xFFFFFFFF),
+    panel: Color(0xFFFFFCF6),
+    track: Color(0xFFE8E0D2),
+    border: Color(0xFFD6CAB7),
+    gold: Color(0xFF9A6A12),
+    goldSoft: Color(0x269A6A12),
+    primary: Color(0xFF15110A),
+    secondary: Color(0xFF504838),
+    muted: Color(0xFF746A58),
+    success: Color(0xFF257B40),
+    warning: Color(0xFFB45309),
+  );
+
+  static AppPalette forBrightness(Brightness brightness) =>
+      brightness == Brightness.light ? light : dark;
+}
+
 abstract final class AppColors {
-  static const background = Color(0xFF0B0D0F);
-  static const surface = Color(0xFF101316);
-  static const panel = Color(0xFF15191D);
-  static const track = Color(0xFF20252A);
-  static const border = Color(0xFF2A3036);
-  static const gold = Color(0xFFD8A94F);
-  static const goldSoft = Color(0x1FD8A94F);
-  static const primary = Color(0xFFF4F5F6);
-  static const secondary = Color(0xFFB2B7BD);
-  static const muted = Color(0xFF747B83);
-  static const success = Color(0xFF51B96B);
-  static const warning = Color(0xFFF59E0B);
+  static AppPalette _current = AppPalette.dark;
+
+  static void useBrightness(Brightness brightness) {
+    _current = AppPalette.forBrightness(brightness);
+  }
+
+  static Color get background => _current.background;
+  static Color get surface => _current.surface;
+  static Color get panel => _current.panel;
+  static Color get track => _current.track;
+  static Color get border => _current.border;
+  static Color get gold => _current.gold;
+  static Color get goldSoft => _current.goldSoft;
+  static Color get primary => _current.primary;
+  static Color get secondary => _current.secondary;
+  static Color get muted => _current.muted;
+  static Color get success => _current.success;
+  static Color get warning => _current.warning;
 }
 
 abstract final class AppText {
-  static const status = TextStyle(
+  static TextStyle get status => TextStyle(
     color: AppColors.secondary,
     fontSize: 13,
     fontWeight: FontWeight.w600,
   );
-  static const authBrand = TextStyle(
+  static TextStyle get authBrand => TextStyle(
     color: AppColors.primary,
     fontSize: 30,
     fontWeight: FontWeight.w700,
   );
-  static const h1 = TextStyle(
+  static TextStyle get h1 => TextStyle(
     color: AppColors.primary,
     fontSize: 28,
     fontWeight: FontWeight.w700,
   );
-  static const h2 = TextStyle(
+  static TextStyle get h2 => TextStyle(
     color: AppColors.primary,
     fontSize: 22,
     height: 1.2,
     fontWeight: FontWeight.w700,
   );
-  static const topTitle = TextStyle(
+  static TextStyle get topTitle => TextStyle(
     color: AppColors.primary,
     fontSize: 22,
     fontWeight: FontWeight.w700,
-    letterSpacing: -.4,
+    letterSpacing: 0,
   );
-  static const detailAppBar = TextStyle(
+  static TextStyle get detailAppBar => TextStyle(
     color: AppColors.primary,
     fontSize: 24,
     fontWeight: FontWeight.w700,
   );
-  static const bodyLarge = TextStyle(
+  static TextStyle get bodyLarge => TextStyle(
     color: AppColors.secondary,
     fontSize: 14,
     height: 1.3,
     fontWeight: FontWeight.w500,
   );
-  static const body = TextStyle(
+  static TextStyle get body => TextStyle(
     color: AppColors.secondary,
     fontSize: 12,
     height: 1.3,
     fontWeight: FontWeight.w500,
   );
-  static const small = TextStyle(
+  static TextStyle get small => TextStyle(
     color: AppColors.secondary,
     fontSize: 11,
     height: 1.25,
     fontWeight: FontWeight.w500,
   );
-  static const tiny = TextStyle(color: AppColors.muted, fontSize: 10);
-  static const tinyLight = TextStyle(color: AppColors.secondary, fontSize: 10);
-  static const disclosure = TextStyle(
-    color: AppColors.muted,
-    fontSize: 12,
-    height: 1.25,
-  );
-  static const fieldLabel = TextStyle(
+  static TextStyle get tiny => TextStyle(color: AppColors.muted, fontSize: 10);
+  static TextStyle get tinyLight =>
+      TextStyle(color: AppColors.secondary, fontSize: 10);
+  static TextStyle get disclosure =>
+      TextStyle(color: AppColors.muted, fontSize: 12, height: 1.25);
+  static TextStyle get fieldLabel => TextStyle(
     color: AppColors.secondary,
     fontSize: 12,
     fontWeight: FontWeight.w600,
   );
-  static const placeholder = TextStyle(
+  static TextStyle get placeholder => TextStyle(
     color: AppColors.muted,
     fontSize: 14,
     fontWeight: FontWeight.w500,
   );
-  static const eyebrow = TextStyle(
+  static TextStyle get eyebrow => TextStyle(
     color: AppColors.gold,
     fontSize: 12,
     fontWeight: FontWeight.w600,
   );
-  static const goldBody = TextStyle(
+  static TextStyle get goldBody => TextStyle(
     color: AppColors.gold,
     fontSize: 13,
     fontWeight: FontWeight.w700,
   );
-  static const warning = TextStyle(
+  static TextStyle get warning => TextStyle(
     color: AppColors.warning,
     fontSize: 12,
     fontWeight: FontWeight.w600,
   );
-  static const hero = TextStyle(
+  static TextStyle get hero => TextStyle(
     color: AppColors.primary,
     fontSize: 42,
     height: 1.05,
     fontWeight: FontWeight.w800,
-    letterSpacing: -1.5,
+    letterSpacing: 0,
   );
-  static const walletValue = TextStyle(
+  static TextStyle get walletValue => TextStyle(
     color: AppColors.primary,
     fontSize: 35,
     fontWeight: FontWeight.w700,
   );
-  static const portfolioValue = TextStyle(
+  static TextStyle get portfolioValue => TextStyle(
     color: AppColors.primary,
     fontSize: 34,
     fontWeight: FontWeight.w700,
   );
-  static const detailTitle = TextStyle(
+  static TextStyle get detailTitle => TextStyle(
     color: AppColors.primary,
     fontSize: 27,
     height: 1.25,
     fontWeight: FontWeight.w700,
   );
-  static const cardHeading = TextStyle(
+  static TextStyle get cardHeading => TextStyle(
     color: AppColors.primary,
     fontSize: 20,
     height: 1.15,
     fontWeight: FontWeight.w700,
   );
-  static const cardHeadingSmall = TextStyle(
+  static TextStyle get cardHeadingSmall => TextStyle(
     color: AppColors.primary,
     fontSize: 16,
     height: 1.2,
     fontWeight: FontWeight.w700,
   );
-  static const investmentTitle = TextStyle(
+  static TextStyle get investmentTitle => TextStyle(
     color: AppColors.primary,
     fontSize: 17,
     height: 1.15,
     fontWeight: FontWeight.w700,
   );
-  static const goldMetric = TextStyle(
+  static TextStyle get goldMetric => TextStyle(
     color: AppColors.gold,
     fontSize: 34,
     fontWeight: FontWeight.w700,
   );
-  static const goldMetricSmall = TextStyle(
+  static TextStyle get goldMetricSmall => TextStyle(
     color: AppColors.gold,
     fontSize: 19,
     fontWeight: FontWeight.w700,
   );
-  static const brandMark = TextStyle(
+  static TextStyle get brandMark => TextStyle(
     color: AppColors.gold,
     fontSize: 18,
     fontWeight: FontWeight.w700,
   );
-  static const headerIcon = TextStyle(
+  static TextStyle get headerIcon => TextStyle(
     color: AppColors.primary,
     fontSize: 14,
     fontWeight: FontWeight.w700,
   );
-  static const headerInitials = TextStyle(
+  static TextStyle get headerInitials => TextStyle(
     color: AppColors.gold,
     fontSize: 12,
     fontWeight: FontWeight.w600,

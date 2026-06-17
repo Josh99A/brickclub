@@ -19,7 +19,7 @@ class FirebaseAuthRepository implements AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final BackendFunctions _backendFunctions;
   final FirebaseMessaging _firebaseMessaging;
-  static const Duration _authTimeout = Duration(seconds: 12);
+  static const Duration _authTimeout = Duration(seconds: 30);
 
   @override
   Future<void> signIn(SignInCredentials credentials) async {
@@ -144,8 +144,10 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<T> _withAuthTimeout<T>(Future<T> operation) {
     return operation.timeout(
       _authTimeout,
-      onTimeout: () => throw const AuthOperationTimeoutException(
-        'We could not reach Firebase Auth. Make sure the local Firebase emulators are running, then try again.',
+      onTimeout: () => throw AuthOperationTimeoutException(
+        FirebaseBootstrap.useEmulators
+            ? 'We could not reach Firebase Auth at ${FirebaseBootstrap.emulatorHost}:9099. Make sure the local Firebase emulators are running, then try again.'
+            : 'We could not reach Firebase Auth. Check your internet connection, then try again.',
       ),
     );
   }
