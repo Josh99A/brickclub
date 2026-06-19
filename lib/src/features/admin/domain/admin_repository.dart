@@ -55,4 +55,8 @@ abstract interface class AdminRepository {
   Future<void> updateWithdrawalPolicy(WithdrawalPolicy policy);
 
   Future<void> markNotificationsRead();
+
+  Future<void> approveKycProfile(String uid);
+
+  Future<void> rejectKycProfile({required String uid, required String reason});
 }

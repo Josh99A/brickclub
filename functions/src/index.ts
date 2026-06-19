@@ -183,11 +183,12 @@ export const sendDevelopmentPasswordResetEmail = onCall(async (request) => {
 });
 
 export const listAdminDashboard = onAdminCall(async () => {
-  const [usersResult, assetsSnapshot, paymentOptionsSnapshot] =
+  const [usersResult, assetsSnapshot, paymentOptionsSnapshot, kycSnapshot] =
     await Promise.all([
       auth.listUsers(1000),
       assetsCollection.get(),
       paymentOptionsCollection.get(),
+      kycProfilesCollection.get(),
     ]);
   const depositRequestsSnapshot = await purchaseOrdersCollection
     .where("status", "in", ["proof_submitted", "deposit_verified", "deposit_rejected"])
@@ -210,6 +211,18 @@ export const listAdminDashboard = onAdminCall(async () => {
     supportTickets: supportTicketsSnapshot.docs.map(supportTicketFromDoc),
     notifications: notificationsSnapshot.docs.map(adminNotificationFromDoc),
     withdrawalPolicy,
+    kycProfiles: kycSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        fullLegalName: String(data.fullLegalName ?? ""),
+        email: String(data.email ?? ""),
+        phoneNumber: String(data.phoneNumber ?? ""),
+        status: String(data.status ?? "notStarted"),
+        rejectionReason: String(data.rejectionReason ?? ""),
+        submittedAt: data.submittedAt?.toDate?.()?.toISOString() ?? "",
+      };
+    }),
   };
 });
 

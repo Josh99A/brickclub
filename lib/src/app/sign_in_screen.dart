@@ -144,6 +144,16 @@ class _SignInScreenState extends State<SignInScreen> {
                                 ? null
                                 : _signInWithGoogle,
                           ),
+                          if (!adminAccess) ...[
+                            SizedBox(height: 10),
+                            SecondaryButton(
+                              key: const ValueKey('phone-sign-in'),
+                              label: 'Continue with phone',
+                              onPressed: signingIn || signingInWithGoogle
+                                  ? null
+                                  : _signInWithPhone,
+                            ),
+                          ],
                           SizedBox(height: 24),
                           Center(
                             child: TextButton.icon(
@@ -270,6 +280,14 @@ class _SignInScreenState extends State<SignInScreen> {
         setState(() => signingIn = false);
       }
     }
+  }
+
+  Future<void> _signInWithPhone() async {
+    await showPhoneSignInSheet(
+      context,
+      authRepository: widget.authRepository,
+      onSignedIn: widget.onMemberSignedIn,
+    );
   }
 
   Future<void> _sendPasswordReset() async {

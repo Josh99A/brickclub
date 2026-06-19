@@ -25,6 +25,9 @@ class FirebaseAuthRepository implements AuthRepository {
   static const Duration _authTimeout = Duration(seconds: 30);
   static const Duration _messagingTimeout = Duration(seconds: 10);
 
+  // Holds the web ConfirmationResult between sendPhoneVerificationCode and signInWithPhoneCode.
+  ConfirmationResult? _webPhoneConfirmation;
+
   // Web push (FCM) needs the project's VAPID public key to mint a token. This
   // is a public key (it ships in client code), not a secret, and native
   // platforms ignore it — it sits alongside the other public Firebase web
@@ -76,6 +79,78 @@ class FirebaseAuthRepository implements AuthRepository {
       idToken: googleAuth.idToken,
     );
     await _withAuthTimeout(_firebaseAuth.signInWithCredential(credential));
+    _registerMessagingTokenInBackground();
+  }
+
+  @override
+  Future<String> sendPhoneVerificationCode(String phoneNumber) async {
+    final phone = phoneNumber.trim();
+    if (phone.isEmpty) {
+      throw const AuthValidationException('Enter your phone number.');
+    }
+
+    if (kIsWeb) {
+      final confirmation = await _withAuthTimeout(
+        _firebaseAuth.signInWithPhoneNumber(phone),
+      );
+      _webPhoneConfirmation = confirmation;
+      return confirmation.verificationId;
+    }
+
+    // Mobile: verifyPhoneNumber uses callbacks; bridge to a Future via Completer.
+    final completer = Completer<String>();
+    await _firebaseAuth.verifyPhoneNumber(
+      phoneNumber: phone,
+      timeout: _authTimeout,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        // Auto-retrieval or instant verification (Android only).
+        await _firebaseAuth.signInWithCredential(credential);
+        _registerMessagingTokenInBackground();
+        if (!completer.isCompleted) completer.complete('auto');
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        if (!completer.isCompleted) {
+          completer.completeError(
+            AuthValidationException(e.message ?? 'Phone verification failed.'),
+          );
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        if (!completer.isCompleted) completer.complete(verificationId);
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        if (!completer.isCompleted) completer.complete(verificationId);
+      },
+    );
+    return completer.future;
+  }
+
+  @override
+  Future<void> signInWithPhoneCode({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    final code = smsCode.trim();
+    if (code.isEmpty) {
+      throw const AuthValidationException('Enter the verification code.');
+    }
+
+    if (kIsWeb) {
+      final confirmation = _webPhoneConfirmation;
+      if (confirmation == null) {
+        throw const AuthValidationException(
+          'Session expired. Please request a new code.',
+        );
+      }
+      await _withAuthTimeout(confirmation.confirm(code));
+      _webPhoneConfirmation = null;
+    } else {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: code,
+      );
+      await _withAuthTimeout(_firebaseAuth.signInWithCredential(credential));
+    }
     _registerMessagingTokenInBackground();
   }
 

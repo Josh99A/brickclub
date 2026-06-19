@@ -153,6 +153,19 @@ class FirebaseAdminRepository implements AdminRepository {
     return _callVoid('markAdminNotificationsRead');
   }
 
+  @override
+  Future<void> approveKycProfile(String uid) {
+    return _callVoid('approveKycProfile', {'uid': uid});
+  }
+
+  @override
+  Future<void> rejectKycProfile({
+    required String uid,
+    required String reason,
+  }) {
+    return _callVoid('rejectKycProfile', {'uid': uid, 'rejectionReason': reason});
+  }
+
   Future<Map<String, dynamic>> _callMap(
     String name, [
     Map<String, dynamic>? data,

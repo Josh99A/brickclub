@@ -32,43 +32,55 @@ class _LandingPageState extends State<LandingPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SelectionArea(
-        child: SingleChildScrollView(
+        child: _ScrollScope(
           controller: _scrollController,
-          child: Column(
-            children: [
-              _LandingHeader(
-                key: _topKey,
-                onSignIn: widget.onSignIn,
-                onSignUp: widget.onSignUp,
-                onBrand: () => _scrollTo(_topKey),
-                onNavigate: _scrollTo,
-                navKeys: {
-                  'features': _featuresKey,
-                  'how-it-works': _howItWorksKey,
-                  'testimonials': _testimonialsKey,
-                },
-              ),
-              _HeroSection(
-                onInstall: _install,
-                onExplore: widget.onSignUp,
-              ),
-              const _TrustStrip(),
-              KeyedSubtree(key: _howItWorksKey, child: const _HowItWorksSection()),
-              KeyedSubtree(key: _featuresKey, child: const _FeatureSection()),
-              KeyedSubtree(
-                key: _testimonialsKey,
-                child: const _TestimonialsSection(),
-              ),
-              _FinalCta(
-                onInstall: _install,
-                onSignIn: widget.onSignIn,
-                onSignUp: widget.onSignUp,
-              ),
-              _LandingFooter(
-                onSignIn: widget.onSignIn,
-                onSignUp: widget.onSignUp,
-              ),
-            ],
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            child: Column(
+              children: [
+                _LandingHeader(
+                  key: _topKey,
+                  onSignIn: widget.onSignIn,
+                  onSignUp: widget.onSignUp,
+                  onBrand: () => _scrollTo(_topKey),
+                  onNavigate: _scrollTo,
+                  navKeys: {
+                    'features': _featuresKey,
+                    'how-it-works': _howItWorksKey,
+                    'testimonials': _testimonialsKey,
+                  },
+                ),
+                _HeroSection(
+                  onInstall: _install,
+                  onExplore: widget.onSignUp,
+                ),
+                const _TrustStrip(),
+                const _Reveal(child: _StatsBand()),
+                KeyedSubtree(
+                  key: _howItWorksKey,
+                  child: const _Reveal(child: _HowItWorksSection()),
+                ),
+                KeyedSubtree(
+                  key: _featuresKey,
+                  child: const _Reveal(child: _FeatureSection()),
+                ),
+                KeyedSubtree(
+                  key: _testimonialsKey,
+                  child: const _Reveal(child: _TestimonialsSection()),
+                ),
+                _Reveal(
+                  child: _FinalCta(
+                    onInstall: _install,
+                    onSignIn: widget.onSignIn,
+                    onSignUp: widget.onSignUp,
+                  ),
+                ),
+                _LandingFooter(
+                  onSignIn: widget.onSignIn,
+                  onSignUp: widget.onSignUp,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -412,8 +424,48 @@ class _ProofPoint extends StatelessWidget {
   }
 }
 
-class _HeroVisual extends StatelessWidget {
+class _HeroVisual extends StatefulWidget {
   const _HeroVisual();
+
+  @override
+  State<_HeroVisual> createState() => _HeroVisualState();
+}
+
+class _HeroVisualState extends State<_HeroVisual>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1500),
+  )..forward();
+  late final Animation<double> _introImage = _interval(0.0, 0.55);
+  late final Animation<double> _introPhone = _interval(0.12, 0.7);
+  late final Animation<double> _introCard = _interval(0.28, 0.85);
+  late final Animation<double> _metric = _interval(0.35, 1.0);
+
+  Animation<double> _interval(double begin, double end) => CurvedAnimation(
+    parent: _controller,
+    curve: Interval(begin, end, curve: Curves.easeOutCubic),
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _entrance(Animation<double> anim, Widget child, {double dy = 26}) {
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, inner) => Opacity(
+        opacity: anim.value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - anim.value) * dy),
+          child: inner,
+        ),
+      ),
+      child: child,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -425,64 +477,84 @@ class _HeroVisual extends StatelessWidget {
           Positioned(
             right: 0,
             top: 45,
-            child: Container(
-              width: 410,
-              height: 350,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(34),
-                image: const DecorationImage(
-                  image: AssetImage('assets/images/skyline_heights.png'),
-                  fit: BoxFit.cover,
+            child: _entrance(
+              _introImage,
+              Container(
+                width: 410,
+                height: 350,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(34),
+                  image: const DecorationImage(
+                    image: AssetImage('assets/images/skyline_heights.png'),
+                    fit: BoxFit.cover,
+                  ),
+                  border: Border.all(color: AppColors.border),
                 ),
-                border: Border.all(color: AppColors.border),
               ),
             ),
           ),
           Positioned(
             left: 4,
             bottom: 0,
-            child: Container(
-              width: 272,
-              height: 480,
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(38),
-                border: Border.all(color: AppColors.border, width: 2),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0xA6000000),
-                    blurRadius: 42,
-                    offset: Offset(0, 24),
-                  ),
-                ],
+            child: _entrance(
+              _introPhone,
+              Container(
+                width: 272,
+                height: 480,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(38),
+                  border: Border.all(color: AppColors.border, width: 2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0xA6000000),
+                      blurRadius: 42,
+                      offset: Offset(0, 24),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: const _PhonePreview(),
+                ),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: const _PhonePreview(),
-              ),
+              dy: 34,
             ),
           ),
           Positioned(
             right: 0,
             bottom: 30,
-            child: Container(
-              width: 220,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.panel,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Target annual return', style: AppText.small),
-                  SizedBox(height: 6),
-                  Text('12.4%', style: AppText.goldMetric),
-                  SizedBox(height: 10),
-                  ProgressLine(value: .74, height: 6),
-                ],
+            child: _entrance(
+              _introCard,
+              Container(
+                width: 220,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.panel,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Target annual return', style: AppText.small),
+                    SizedBox(height: 6),
+                    _CountUp(
+                      progress: _metric,
+                      value: 12.4,
+                      decimals: 1,
+                      suffix: '%',
+                      style: AppText.goldMetric,
+                    ),
+                    SizedBox(height: 10),
+                    AnimatedBuilder(
+                      animation: _metric,
+                      builder: (context, _) =>
+                          ProgressLine(value: .74 * _metric.value, height: 6),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -664,14 +736,28 @@ class _HowItWorksSection extends StatelessWidget {
     if (constraints.maxWidth < 760) {
       return Column(
         children: [
-          for (final step in steps)
-            Padding(padding: const EdgeInsets.only(bottom: 22), child: step),
+          for (final (index, step) in steps.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 22),
+              child: _Reveal(
+                delay: Duration(milliseconds: index * 110),
+                child: step,
+              ),
+            ),
         ],
       );
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [for (final step in steps) Expanded(child: step)],
+      children: [
+        for (final (index, step) in steps.indexed)
+          Expanded(
+            child: _Reveal(
+              delay: Duration(milliseconds: index * 110),
+              child: step,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -838,48 +924,90 @@ class _AssetReviewPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.panel,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(26),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: Image.asset(
-              'assets/images/skyline_heights.png',
-              height: 230,
-              width: double.infinity,
-              fit: BoxFit.cover,
+    return _HoverLift(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.panel,
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(26),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: Image.asset(
+                    'assets/images/skyline_heights.png',
+                    height: 230,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  top: 14,
+                  left: 14,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC0B0D0F),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.verified_rounded,
+                          color: AppColors.gold,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'VERIFIED ASSET',
+                          style: TextStyle(
+                            color: Color(0xFFF4F5F6),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Skyline Heights', style: AppText.cardHeading),
-              Text('VERIFIED', style: AppText.eyebrow),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Income-producing residential property',
-            style: AppText.bodyLarge,
-          ),
-          SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Metric('12.4%', 'Target return', gold: true),
-              Metric('\$50', 'Minimum'),
-              Metric('62%', 'Funded'),
-            ],
-          ),
-        ],
+            SizedBox(height: 22),
+            Text('Skyline Heights', style: AppText.cardHeading),
+            SizedBox(height: 8),
+            Text(
+              'Income-producing residential property',
+              style: AppText.bodyLarge,
+            ),
+            SizedBox(height: 22),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Metric('12.4%', 'Target return', gold: true),
+                      const SizedBox(height: 18),
+                      Metric('\$50', 'Minimum'),
+                    ],
+                  ),
+                ),
+                const _FundingRing(value: .62, label: 'Funded'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -924,14 +1052,28 @@ class _TestimonialsSection extends StatelessWidget {
     if (constraints.maxWidth < 820) {
       return Column(
         children: [
-          for (final item in items)
-            Padding(padding: const EdgeInsets.only(bottom: 18), child: item),
+          for (final (index, item) in items.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 18),
+              child: _Reveal(
+                delay: Duration(milliseconds: index * 110),
+                child: item,
+              ),
+            ),
         ],
       );
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [for (final item in items) Expanded(child: item)],
+      children: [
+        for (final (index, item) in items.indexed)
+          Expanded(
+            child: _Reveal(
+              delay: Duration(milliseconds: index * 110),
+              child: item,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -945,18 +1087,19 @@ class _Testimonial extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 18),
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: AppColors.panel,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.format_quote_rounded, color: AppColors.gold),
+    return _HoverLift(
+      child: Container(
+        margin: const EdgeInsets.only(right: 18),
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: AppColors.panel,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.format_quote_rounded, color: AppColors.gold),
           SizedBox(height: 20),
           Text(
             quote,
@@ -978,7 +1121,8 @@ class _Testimonial extends StatelessWidget {
           ),
           SizedBox(height: 4),
           Text(role, style: AppText.small),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1149,7 +1293,7 @@ class _LandingFooter extends StatelessWidget {
   }
 }
 
-class _WebButton extends StatelessWidget {
+class _WebButton extends StatefulWidget {
   const _WebButton({
     super.key,
     required this.label,
@@ -1168,41 +1312,505 @@ class _WebButton extends StatelessWidget {
   final bool darkOutline;
 
   @override
+  State<_WebButton> createState() => _WebButtonState();
+}
+
+class _WebButtonState extends State<_WebButton> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final foreground = dark || darkOutline
+    final foreground = widget.dark || widget.darkOutline
         ? AppColors.background
-        : filled
+        : widget.filled
         ? AppColors.background
         : AppColors.primary;
-    final background = dark
+    final background = widget.dark
         ? AppColors.background
-        : filled
+        : widget.filled
         ? AppColors.gold
         : Colors.transparent;
-    return SizedBox(
-      height: 48,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: icon == null ? const SizedBox.shrink() : Icon(icon, size: 18),
-        label: Text(label),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: foreground,
-          backgroundColor: background,
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          side: BorderSide(
-            color: darkOutline
-                ? AppColors.background
-                : filled || dark
-                ? background
-                : AppColors.border,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedScale(
+        scale: _hovered ? 1.04 : 1,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: SizedBox(
+          height: 48,
+          child: OutlinedButton.icon(
+            onPressed: widget.onPressed,
+            icon: widget.icon == null
+                ? const SizedBox.shrink()
+                : Icon(widget.icon, size: 18),
+            label: Text(widget.label),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: foreground,
+              backgroundColor: background,
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              side: BorderSide(
+                color: widget.darkOutline
+                    ? AppColors.background
+                    : widget.filled || widget.dark
+                    ? background
+                    : AppColors.border,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              textStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Animation + infographic infrastructure
+// ---------------------------------------------------------------------------
+
+/// Exposes the landing page scroll controller to descendant reveal widgets.
+class _ScrollScope extends InheritedWidget {
+  const _ScrollScope({required this.controller, required super.child});
+
+  final ScrollController controller;
+
+  static ScrollController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_ScrollScope>()?.controller;
+
+  @override
+  bool updateShouldNotify(_ScrollScope oldWidget) =>
+      controller != oldWidget.controller;
+}
+
+/// Fires [onReveal] exactly once when the widget scrolls into the viewport.
+mixin _RevealOnScroll<T extends StatefulWidget> on State<T> {
+  ScrollController? _revealScroll;
+  bool _revealed = false;
+
+  /// Fraction of the viewport height below which the element counts as visible.
+  double get revealThreshold => 0.9;
+
+  void onReveal();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scroll = _ScrollScope.maybeOf(context);
+    if (scroll != _revealScroll) {
+      _revealScroll?.removeListener(_revealCheck);
+      _revealScroll = scroll;
+      _revealScroll?.addListener(_revealCheck);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealCheck());
+  }
+
+  void _revealCheck() {
+    if (_revealed || !mounted) {
+      return;
+    }
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) {
+      return;
+    }
+    final dy = box.localToGlobal(Offset.zero).dy;
+    final height = MediaQuery.of(context).size.height;
+    if (dy < height * revealThreshold) {
+      _revealed = true;
+      onReveal();
+    }
+  }
+
+  @override
+  void dispose() {
+    _revealScroll?.removeListener(_revealCheck);
+    super.dispose();
+  }
+}
+
+/// Fades and slides its [child] up when it first enters the viewport.
+class _Reveal extends StatefulWidget {
+  const _Reveal({required this.child, this.delay = Duration.zero});
+
+  final Widget child;
+  final Duration delay;
+
+  @override
+  State<_Reveal> createState() => _RevealState();
+}
+
+class _RevealState extends State<_Reveal>
+    with SingleTickerProviderStateMixin, _RevealOnScroll {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 640),
+  );
+  late final Animation<double> _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void onReveal() {
+    if (widget.delay == Duration.zero) {
+      _controller.forward();
+    } else {
+      Future.delayed(widget.delay, () {
+        if (mounted) {
+          _controller.forward();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _curve,
+      builder: (context, child) => Opacity(
+        opacity: _curve.value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - _curve.value) * 38),
+          child: child,
+        ),
+      ),
+      child: widget.child,
+    );
+  }
+}
+
+/// Lifts and brightens a card on hover for a tactile feel.
+class _HoverLift extends StatefulWidget {
+  const _HoverLift({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_HoverLift> createState() => _HoverLiftState();
+}
+
+class _HoverLiftState extends State<_HoverLift> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedSlide(
+        offset: _hovered ? const Offset(0, -0.06) : Offset.zero,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: const Color(0x33000000),
+                      blurRadius: 30,
+                      offset: const Offset(0, 18),
+                    ),
+                  ]
+                : const [],
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Animated number that counts up from zero as [progress] advances 0 → 1.
+class _CountUp extends StatelessWidget {
+  const _CountUp({
+    required this.progress,
+    required this.value,
+    required this.style,
+    this.prefix = '',
+    this.suffix = '',
+    this.decimals = 0,
+  });
+
+  final Animation<double> progress;
+  final double value;
+  final TextStyle style;
+  final String prefix;
+  final String suffix;
+  final int decimals;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: progress,
+      builder: (context, _) {
+        final current = value * progress.value;
+        final text = decimals == 0
+            ? current.round().toString()
+            : current.toStringAsFixed(decimals);
+        return Text('$prefix$text$suffix', style: style);
+      },
+    );
+  }
+}
+
+/// Headline metrics band with count-up numbers, revealed on scroll.
+class _StatsBand extends StatefulWidget {
+  const _StatsBand();
+
+  @override
+  State<_StatsBand> createState() => _StatsBandState();
+}
+
+class _StatsBandState extends State<_StatsBand>
+    with SingleTickerProviderStateMixin, _RevealOnScroll {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  );
+  late final Animation<double> _progress = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void onReveal() => _controller.forward();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tiles = <Widget>[
+      _StatTile(
+        progress: _progress,
+        value: 12.4,
+        decimals: 1,
+        suffix: '%',
+        label: 'Average target return',
+        icon: Icons.trending_up_rounded,
+      ),
+      _StatTile(
+        progress: _progress,
+        value: 50,
+        prefix: '\$',
+        label: 'Minimum to start',
+        icon: Icons.savings_outlined,
+      ),
+      _StatTile(
+        progress: _progress,
+        value: 100,
+        suffix: '%',
+        label: 'On-chain settlement',
+        icon: Icons.shield_moon_outlined,
+      ),
+      _StatTile(
+        progress: _progress,
+        value: 24,
+        suffix: '/7',
+        label: 'Portfolio visibility',
+        icon: Icons.visibility_outlined,
+      ),
+    ];
+    return Container(
+      width: double.infinity,
+      color: AppColors.surface,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1180),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 54),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth < 720 ? 2 : 4;
+                final spacing = 20.0;
+                final width =
+                    (constraints.maxWidth - spacing * (columns - 1)) / columns;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    for (final tile in tiles)
+                      SizedBox(width: width, child: tile),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.progress,
+    required this.value,
+    required this.label,
+    required this.icon,
+    this.prefix = '',
+    this.suffix = '',
+    this.decimals = 0,
+  });
+
+  final Animation<double> progress;
+  final double value;
+  final String label;
+  final IconData icon;
+  final String prefix;
+  final String suffix;
+  final int decimals;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppColors.goldSoft,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: AppColors.gold, size: 19),
+        ),
+        const SizedBox(height: 16),
+        _CountUp(
+          progress: progress,
+          value: value,
+          prefix: prefix,
+          suffix: suffix,
+          decimals: decimals,
+          style: AppText.goldMetric,
+        ),
+        const SizedBox(height: 6),
+        Text(label, style: AppText.small),
+      ],
+    );
+  }
+}
+
+/// Animated circular funding gauge revealed on scroll.
+class _FundingRing extends StatefulWidget {
+  const _FundingRing({required this.value, required this.label});
+
+  final double value;
+  final String label;
+  static const double size = 116;
+
+  @override
+  State<_FundingRing> createState() => _FundingRingState();
+}
+
+class _FundingRingState extends State<_FundingRing>
+    with SingleTickerProviderStateMixin, _RevealOnScroll {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  late final Animation<double> _sweep = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void onReveal() => _controller.forward();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _FundingRing.size,
+      height: _FundingRing.size,
+      child: AnimatedBuilder(
+        animation: _sweep,
+        builder: (context, _) {
+          final fraction = widget.value * _sweep.value;
+          return CustomPaint(
+            painter: _RingPainter(
+              fraction: fraction,
+              track: AppColors.track,
+              fill: AppColors.gold,
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${(fraction * 100).round()}%',
+                    style: AppText.goldMetricSmall,
+                  ),
+                  Text(widget.label, style: AppText.tinyLight),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter({
+    required this.fraction,
+    required this.track,
+    required this.fill,
+  });
+
+  final double fraction;
+  final Color track;
+  final Color fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 10.0;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.shortestSide - stroke) / 2;
+    final trackPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = track;
+    final fillPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = stroke
+      ..color = fill;
+    canvas.drawCircle(center, radius, trackPaint);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * fraction.clamp(0.0, 1.0),
+      false,
+      fillPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter oldDelegate) =>
+      oldDelegate.fraction != fraction ||
+      oldDelegate.fill != fill ||
+      oldDelegate.track != track;
 }
 

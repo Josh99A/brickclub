@@ -22,6 +22,16 @@ abstract interface class AuthRepository {
 
   Future<void> signInWithGoogle();
 
+  /// Sends an SMS verification code to [phoneNumber] (E.164 format, e.g. +14155552671).
+  /// Returns the verificationId needed to confirm the code.
+  Future<String> sendPhoneVerificationCode(String phoneNumber);
+
+  /// Confirms the SMS [smsCode] received after [sendPhoneVerificationCode].
+  Future<void> signInWithPhoneCode({
+    required String verificationId,
+    required String smsCode,
+  });
+
   Future<void> createAccount(SignUpCredentials credentials);
 
   SignedInUserDetails? currentUserDetails();

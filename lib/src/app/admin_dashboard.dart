@@ -23,6 +23,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   static const sections = [
     ('Overview', Icons.grid_view_rounded),
     ('Users', Icons.people_alt_outlined),
+    ('KYC', Icons.verified_user_outlined),
     ('Assets', Icons.apartment_outlined),
     ('Crypto payments', Icons.currency_bitcoin_rounded),
     ('Support', Icons.support_agent_rounded),
@@ -551,23 +552,29 @@ class _AdminSection extends StatelessWidget {
         repository: repository,
         onChanged: onChanged,
       ),
-      2 => _AssetsPanel(
+      2 => _KycPanel(
+        users: data.users,
+        kycProfiles: data.kycProfiles,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      3 => _AssetsPanel(
         assets: data.assets,
         repository: repository,
         onChanged: onChanged,
       ),
-      3 => _PaymentsPanel(
+      4 => _PaymentsPanel(
         options: data.cryptoPaymentOptions,
         depositRequests: data.depositRequests,
         repository: repository,
         onChanged: onChanged,
       ),
-      4 => _SupportPanel(
+      5 => _SupportPanel(
         tickets: data.supportTickets,
         repository: repository,
         onChanged: onChanged,
       ),
-      5 => _ReportsPanel(data: data),
+      6 => _ReportsPanel(data: data),
       _ => _SettingsPanel(
         policy: data.withdrawalPolicy,
         repository: repository,
@@ -1041,6 +1048,258 @@ class _UsersPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _KycPanel extends StatelessWidget {
+  const _KycPanel({
+    required this.users,
+    required this.kycProfiles,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<AdminUser> users;
+  final List<AdminKycProfile> kycProfiles;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final profileByUid = {
+      for (final p in kycProfiles) p.uid: p,
+    };
+    final pending = kycProfiles.where((p) => p.needsReview).toList();
+
+    return _SectionPage(
+      description:
+          'Review submitted KYC documents and manage identity verification status.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AdminPanel(
+            title: 'Pending review (${pending.length})',
+            child: _KycTable(
+              profiles: pending,
+              onApprove: (p) => _runAdminAction(
+                context,
+                action: () => repository.approveKycProfile(p.uid),
+                onChanged: onChanged,
+                successMessage: 'KYC approved',
+              ),
+              onReject: (p) => _showRejectKycDialog(
+                context,
+                repository: repository,
+                profile: p,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+          SizedBox(height: 24),
+          _AdminPanel(
+            title: 'All members (${users.length})',
+            child: _KycMembersTable(
+              users: users,
+              profileByUid: profileByUid,
+              onApprove: (user) => _runAdminAction(
+                context,
+                action: () => repository.approveKycProfile(user.uid),
+                onChanged: onChanged,
+                successMessage: 'KYC approved for ${user.displayName ?? user.email}',
+              ),
+              onReject: (user) {
+                final profile = profileByUid[user.uid];
+                if (profile != null) {
+                  _showRejectKycDialog(
+                    context,
+                    repository: repository,
+                    profile: profile,
+                    onChanged: onChanged,
+                  );
+                } else {
+                  showMessage(context, 'User has not submitted KYC');
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KycTable extends StatelessWidget {
+  const _KycTable({
+    required this.profiles,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final List<AdminKycProfile> profiles;
+  final ValueChanged<AdminKycProfile> onApprove;
+  final ValueChanged<AdminKycProfile> onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    if (profiles.isEmpty) {
+      return Panel(
+        child: Text('No KYC submissions pending review.', style: AppText.body),
+      );
+    }
+
+    return _ResponsiveDataTable(
+      columns: const ['Name', 'Email', 'Phone', 'Status'],
+      rows: [
+        for (final profile in profiles)
+          _AdminTableRow(
+            values: [
+              profile.fullLegalName.isNotEmpty ? profile.fullLegalName : '-',
+              profile.email,
+              profile.phoneNumber.isNotEmpty ? profile.phoneNumber : '-',
+              profile.statusLabel,
+            ],
+            source: profile,
+          ),
+      ],
+      statusColumns: const {3},
+      trailingBuilder: (row) {
+        final profile = row.source as AdminKycProfile;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Approve KYC',
+              icon: Icon(Icons.check_circle_outline, color: Colors.green),
+              onPressed: () => onApprove(profile),
+            ),
+            IconButton(
+              tooltip: 'Reject KYC',
+              icon: Icon(Icons.cancel_outlined, color: Colors.red.shade400),
+              onPressed: () => onReject(profile),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _KycMembersTable extends StatelessWidget {
+  const _KycMembersTable({
+    required this.users,
+    required this.profileByUid,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final List<AdminUser> users;
+  final Map<String, AdminKycProfile> profileByUid;
+  final ValueChanged<AdminUser> onApprove;
+  final ValueChanged<AdminUser> onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    if (users.isEmpty) {
+      return Panel(
+        child: Text('No members found.', style: AppText.body),
+      );
+    }
+
+    return _ResponsiveDataTable(
+      columns: const ['Member', 'Email', 'KYC Status'],
+      rows: [
+        for (final user in users)
+          _AdminTableRow(
+            values: [
+              user.displayName?.isNotEmpty == true ? user.displayName! : '-',
+              user.email,
+              profileByUid[user.uid]?.statusLabel ?? 'Not started',
+            ],
+            source: user,
+          ),
+      ],
+      statusColumns: const {2},
+      trailingBuilder: (row) {
+        final user = row.source as AdminUser;
+        final profile = profileByUid[user.uid];
+        final isApproved = profile?.isApproved ?? false;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isApproved)
+              IconButton(
+                tooltip: 'Approve KYC',
+                icon: Icon(Icons.verified_user_outlined, color: Colors.green),
+                onPressed: () => onApprove(user),
+              ),
+            if (profile != null && !isApproved)
+              IconButton(
+                tooltip: 'Reject KYC',
+                icon: Icon(Icons.cancel_outlined, color: Colors.red.shade400),
+                onPressed: () => onReject(user),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+Future<void> _showRejectKycDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required AdminKycProfile profile,
+  required VoidCallback onChanged,
+}) async {
+  final reason = TextEditingController();
+  await showAdaptiveDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: Text('Reject KYC', style: AppText.h2),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Rejecting KYC for ${profile.fullLegalName.isNotEmpty ? profile.fullLegalName : profile.email}.',
+            style: AppText.body,
+          ),
+          SizedBox(height: 16),
+          AppTextField(
+            controller: reason,
+            hintText: 'Reason shown to the member',
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
+          onPressed: () async {
+            if (reason.text.trim().isEmpty) {
+              showMessage(context, 'Enter a rejection reason');
+              return;
+            }
+            Navigator.pop(dialogContext);
+            await _runAdminAction(
+              context,
+              action: () => repository.rejectKycProfile(
+                uid: profile.uid,
+                reason: reason.text.trim(),
+              ),
+              onChanged: onChanged,
+              successMessage: 'KYC rejected',
+            );
+          },
+          child: Text('Reject'),
+        ),
+      ],
+    ),
+  );
+  reason.dispose();
 }
 
 class _AssetsPanel extends StatelessWidget {

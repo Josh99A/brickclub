@@ -7,6 +7,7 @@ class AdminDashboardData {
     required this.supportTickets,
     required this.withdrawalPolicy,
     this.notifications = const [],
+    this.kycProfiles = const [],
   });
 
   factory AdminDashboardData.fromJson(Map<String, dynamic> json) {
@@ -29,6 +30,7 @@ class AdminDashboardData {
       withdrawalPolicy: WithdrawalPolicy.fromJson(
         Map<String, dynamic>.from(json['withdrawalPolicy'] as Map? ?? {}),
       ),
+      kycProfiles: _list(json['kycProfiles'], AdminKycProfile.fromJson),
     );
   }
 
@@ -39,6 +41,7 @@ class AdminDashboardData {
   final List<AdminSupportTicket> supportTickets;
   final List<AdminNotification> notifications;
   final WithdrawalPolicy withdrawalPolicy;
+  final List<AdminKycProfile> kycProfiles;
 
   int get unreadNotificationCount =>
       notifications.where((notification) => notification.isUnread).length;
@@ -403,6 +406,50 @@ class WithdrawalPolicy {
   double feeFor(double amountUsd) {
     return flatFeeUsd + (amountUsd * percentageFee / 100);
   }
+}
+
+class AdminKycProfile {
+  const AdminKycProfile({
+    required this.uid,
+    required this.email,
+    required this.fullLegalName,
+    required this.phoneNumber,
+    required this.status,
+    required this.rejectionReason,
+    required this.submittedAt,
+  });
+
+  factory AdminKycProfile.fromJson(Map<String, dynamic> json) {
+    return AdminKycProfile(
+      uid: json['uid'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      fullLegalName: json['fullLegalName'] as String? ?? '',
+      phoneNumber: json['phoneNumber'] as String? ?? '',
+      status: json['status'] as String? ?? 'notStarted',
+      rejectionReason: json['rejectionReason'] as String? ?? '',
+      submittedAt: json['submittedAt'] as String? ?? '',
+    );
+  }
+
+  final String uid;
+  final String email;
+  final String fullLegalName;
+  final String phoneNumber;
+  final String status;
+  final String rejectionReason;
+  final String submittedAt;
+
+  String get statusLabel => switch (status) {
+    'notStarted' => 'Not started',
+    'inProgress' => 'In progress',
+    'submitted' => 'Submitted',
+    'approved' => 'Approved',
+    'rejected' => 'Rejected',
+    _ => status,
+  };
+
+  bool get needsReview => status == 'submitted';
+  bool get isApproved => status == 'approved';
 }
 
 List<T> _list<T>(
