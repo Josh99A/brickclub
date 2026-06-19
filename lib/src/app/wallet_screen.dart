@@ -30,25 +30,36 @@ class WalletScreen extends StatelessWidget {
               return const _DashboardErrorPanel();
             }
             final data = snapshot.data ?? MemberDashboardData.empty();
-            return Container(
-              height: 170,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.panel, AppColors.surface],
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 170,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.panel, AppColors.surface],
+                    ),
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Verified wallet balance',
+                        style: AppText.bodyLarge,
+                      ),
+                      SizedBox(height: 10),
+                      Text(data.walletBalanceText, style: AppText.walletValue),
+                      SizedBox(height: 8),
+                      Text(data.cryptoRailsText, style: AppText.eyebrow),
+                    ],
+                  ),
                 ),
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(28),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Verified wallet balance', style: AppText.bodyLarge),
-                  SizedBox(height: 10),
-                  Text(data.walletBalanceText, style: AppText.walletValue),
-                  SizedBox(height: 8),
-                  Text(data.cryptoRailsText, style: AppText.eyebrow),
-                ],
-              ),
+                SizedBox(height: 18),
+                Text('Crypto order activity', style: AppText.h2),
+                _ActivityPanel(activity: data.activity),
+              ],
             );
           },
         ),

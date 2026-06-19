@@ -84,6 +84,29 @@ class FirebaseAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<void> updateAssetValuation({
+    required String id,
+    required double currentAssetValue,
+    String valuationDate = '',
+    String performanceNotes = '',
+    double assetIncome = 0,
+    double expenses = 0,
+    double netIncome = 0,
+    double occupancyRate = 0,
+  }) {
+    return _callVoid('updateAssetValuation', {
+      'id': id,
+      'currentAssetValue': currentAssetValue,
+      if (valuationDate.isNotEmpty) 'valuationDate': valuationDate,
+      if (performanceNotes.isNotEmpty) 'performanceNotes': performanceNotes,
+      'assetIncome': assetIncome,
+      'expenses': expenses,
+      'netIncome': netIncome,
+      'occupancyRate': occupancyRate,
+    });
+  }
+
+  @override
   Future<void> createCryptoPaymentOption(CryptoPaymentOption option) {
     return _callVoid('createCryptoPaymentOption', option.toJson());
   }

@@ -1339,6 +1339,12 @@ class _AssetsPanel extends StatelessWidget {
             action: () => repository.deleteAsset(asset.id),
             onChanged: onChanged,
           ),
+          onValuation: (asset) => _showAssetValuationDialog(
+            context,
+            repository: repository,
+            asset: asset,
+            onChanged: onChanged,
+          ),
         ),
       ),
     );
@@ -1800,11 +1806,17 @@ class _UserTable extends StatelessWidget {
 }
 
 class _AssetTable extends StatelessWidget {
-  const _AssetTable({required this.assets, this.onEdit, this.onDelete});
+  const _AssetTable({
+    required this.assets,
+    this.onEdit,
+    this.onDelete,
+    this.onValuation,
+  });
 
   final List<AdminAsset> assets;
   final ValueChanged<AdminAsset>? onEdit;
   final ValueChanged<AdminAsset>? onDelete;
+  final ValueChanged<AdminAsset>? onValuation;
 
   @override
   Widget build(BuildContext context) {
@@ -1830,6 +1842,13 @@ class _AssetTable extends StatelessWidget {
       onDelete: onDelete == null
           ? null
           : (row) => onDelete!(row.source as AdminAsset),
+      trailingBuilder: onValuation == null
+          ? null
+          : (row) => IconButton(
+              tooltip: 'Update valuation',
+              onPressed: () => onValuation!(row.source as AdminAsset),
+              icon: Icon(Icons.trending_up_rounded, size: 18),
+            ),
     );
   }
 }
@@ -2192,6 +2211,27 @@ Future<void> _showUserDialog(
   password.dispose();
 }
 
+// Supported enumerations for asset inputs.
+const _assetCategories = ['realEstate', 'reit', 'etf', 'index', 'alternative'];
+const _assetStrategies = [
+  'capitalGrowth',
+  'highYield',
+  'prime',
+  'fixAndFlip',
+  'fixToHighYield',
+];
+const _assetRiskLevels = ['conservative', 'balanced', 'growth'];
+const _assetStatuses = [
+  'available',
+  'funded',
+  'exited',
+  'saved',
+  'draft',
+  'archived',
+];
+const _assetReviewStatuses = ['Pending', 'Verified'];
+const _assetPublishedStatuses = ['Draft', 'Live'];
+
 Future<void> _showAssetDialog(
   BuildContext context, {
   required AdminRepository repository,
@@ -2202,41 +2242,362 @@ Future<void> _showAssetDialog(
   final title = TextEditingController(text: value.title);
   final location = TextEditingController(text: value.location);
   final type = TextEditingController(text: value.type);
-  final fundedPercent = TextEditingController(
-    text: value.fundedPercent.toStringAsFixed(0),
+  final description = TextEditingController(text: value.description);
+  final purchasePrice = TextEditingController(
+    text: value.purchasePrice.toStringAsFixed(0),
   );
-  final reviewStatus = TextEditingController(text: value.reviewStatus);
-  final publishedStatus = TextEditingController(text: value.publishedStatus);
+  final fundingTarget = TextEditingController(
+    text: value.fundingTarget.toStringAsFixed(0),
+  );
+  final amountFunded = TextEditingController(
+    text: value.amountFunded.toStringAsFixed(0),
+  );
+  final pricePerShare = TextEditingController(
+    text: value.pricePerShare.toStringAsFixed(2),
+  );
+  final totalShares = TextEditingController(
+    text: value.totalShares.toStringAsFixed(0),
+  );
+  final availableShares = TextEditingController(
+    text: value.availableShares.toStringAsFixed(0),
+  );
+  final minimumInvestment = TextEditingController(
+    text: value.minimumInvestment.toStringAsFixed(0),
+  );
+  final expectedAnnualYield = TextEditingController(
+    text: value.expectedAnnualYield.toStringAsFixed(1),
+  );
+  final projectedNetYield = TextEditingController(
+    text: value.projectedNetYield.toStringAsFixed(1),
+  );
+  final exitPeriod = TextEditingController(text: value.exitPeriod);
+  final regulationNote = TextEditingController(text: value.regulationNote);
+  var category = _assetCategories.contains(value.category)
+      ? value.category
+      : _assetCategories.first;
+  var strategy = _assetStrategies.contains(value.strategy)
+      ? value.strategy
+      : _assetStrategies.first;
+  var riskLevel = _assetRiskLevels.contains(value.riskLevel)
+      ? value.riskLevel
+      : _assetRiskLevels[1];
+  var status = _assetStatuses.contains(value.status)
+      ? value.status
+      : _assetStatuses.first;
+  var reviewStatus = _assetReviewStatuses.contains(value.reviewStatus)
+      ? value.reviewStatus
+      : _assetReviewStatuses.first;
+  var publishedStatus = _assetPublishedStatuses.contains(value.publishedStatus)
+      ? value.publishedStatus
+      : _assetPublishedStatuses.first;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        return AlertDialog(
+          backgroundColor: AppColors.panel,
+          title: Text(asset == null ? 'Create asset' : 'Edit asset'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppTextField(controller: title, hintText: 'Asset title'),
+                  SizedBox(height: 10),
+                  AppTextField(controller: location, hintText: 'Location'),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: type,
+                    hintText: 'Asset type (e.g. Residential)',
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: description,
+                    hintText: 'Description',
+                  ),
+                  SizedBox(height: 10),
+                  _AssetDropdown(
+                    label: 'Category',
+                    value: category,
+                    values: _assetCategories,
+                    onChanged: (v) => setState(() => category = v),
+                  ),
+                  SizedBox(height: 10),
+                  _AssetDropdown(
+                    label: 'Strategy',
+                    value: strategy,
+                    values: _assetStrategies,
+                    onChanged: (v) => setState(() => strategy = v),
+                  ),
+                  SizedBox(height: 10),
+                  _AssetDropdown(
+                    label: 'Risk level',
+                    value: riskLevel,
+                    values: _assetRiskLevels,
+                    onChanged: (v) => setState(() => riskLevel = v),
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: purchasePrice,
+                    hintText: 'Purchase price (USD)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: fundingTarget,
+                    hintText: 'Funding target (USD)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: amountFunded,
+                    hintText: 'Amount funded (USD)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: pricePerShare,
+                    hintText: 'Price per share (USD)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: totalShares,
+                    hintText: 'Total shares',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: availableShares,
+                    hintText: 'Available shares',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: minimumInvestment,
+                    hintText: 'Minimum investment (USD)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: expectedAnnualYield,
+                    hintText: 'Expected annual yield (%)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: projectedNetYield,
+                    hintText: 'Projected net yield (%)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: exitPeriod,
+                    hintText: 'Exit period (e.g. 36 months)',
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: regulationNote,
+                    hintText: 'Regulation note',
+                  ),
+                  SizedBox(height: 10),
+                  _AssetDropdown(
+                    label: 'Asset status',
+                    value: status,
+                    values: _assetStatuses,
+                    onChanged: (v) => setState(() => status = v),
+                  ),
+                  SizedBox(height: 10),
+                  _AssetDropdown(
+                    label: 'Review status',
+                    value: reviewStatus,
+                    values: _assetReviewStatuses,
+                    onChanged: (v) => setState(() => reviewStatus = v),
+                  ),
+                  SizedBox(height: 10),
+                  _AssetDropdown(
+                    label: 'Published status',
+                    value: publishedStatus,
+                    values: _assetPublishedStatuses,
+                    onChanged: (v) => setState(() => publishedStatus = v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final payload = value.copyWith(
+                  title: title.text.trim(),
+                  location: location.text.trim(),
+                  type: type.text.trim(),
+                  description: description.text.trim(),
+                  category: category,
+                  strategy: strategy,
+                  riskLevel: riskLevel,
+                  purchasePrice: double.tryParse(purchasePrice.text) ?? 0,
+                  fundingTarget: double.tryParse(fundingTarget.text) ?? 0,
+                  amountFunded: double.tryParse(amountFunded.text) ?? 0,
+                  pricePerShare: double.tryParse(pricePerShare.text) ?? 0,
+                  totalShares: double.tryParse(totalShares.text) ?? 0,
+                  availableShares: double.tryParse(availableShares.text) ?? 0,
+                  minimumInvestment:
+                      double.tryParse(minimumInvestment.text) ?? 50,
+                  expectedAnnualYield:
+                      double.tryParse(expectedAnnualYield.text) ?? 0,
+                  projectedNetYield:
+                      double.tryParse(projectedNetYield.text) ?? 0,
+                  exitPeriod: exitPeriod.text.trim(),
+                  regulationNote: regulationNote.text.trim(),
+                  status: status,
+                  reviewStatus: reviewStatus,
+                  publishedStatus: publishedStatus,
+                );
+
+                await _runAdminAction(
+                  context,
+                  action: () => asset == null
+                      ? repository.createAsset(payload)
+                      : repository.updateAsset(payload),
+                  onChanged: onChanged,
+                );
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+              },
+              child: Text('Save'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  title.dispose();
+  location.dispose();
+  type.dispose();
+  description.dispose();
+  purchasePrice.dispose();
+  fundingTarget.dispose();
+  amountFunded.dispose();
+  pricePerShare.dispose();
+  totalShares.dispose();
+  availableShares.dispose();
+  minimumInvestment.dispose();
+  expectedAnnualYield.dispose();
+  projectedNetYield.dispose();
+  exitPeriod.dispose();
+  regulationNote.dispose();
+}
+
+class _AssetDropdown extends StatelessWidget {
+  const _AssetDropdown({
+    required this.label,
+    required this.value,
+    required this.values,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<String> values;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      isExpanded: true,
+      dropdownColor: AppColors.panel,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: AppText.small,
+        filled: true,
+        fillColor: AppColors.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+      ),
+      style: AppText.fieldLabel,
+      items: [
+        for (final option in values)
+          DropdownMenuItem(value: option, child: Text(option)),
+      ],
+      onChanged: (selected) {
+        if (selected != null) onChanged(selected);
+      },
+    );
+  }
+}
+
+Future<void> _showAssetValuationDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required AdminAsset asset,
+  required VoidCallback onChanged,
+}) async {
+  final currentValue = TextEditingController(
+    text: asset.currentAssetValue.toStringAsFixed(0),
+  );
+  final valuationDate = TextEditingController();
+  final assetIncome = TextEditingController();
+  final expenses = TextEditingController();
+  final occupancyRate = TextEditingController();
+  final notes = TextEditingController();
 
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       backgroundColor: AppColors.panel,
-      title: Text(asset == null ? 'Create asset' : 'Edit asset'),
+      title: Text('Update valuation'),
       content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppTextField(controller: title, hintText: 'Asset title'),
-            SizedBox(height: 10),
-            AppTextField(controller: location, hintText: 'Location'),
-            SizedBox(height: 10),
-            AppTextField(controller: type, hintText: 'Asset type'),
-            SizedBox(height: 10),
-            AppTextField(
-              controller: fundedPercent,
-              hintText: 'Funded percent',
-              keyboardType: TextInputType.number,
-            ),
-            SizedBox(height: 10),
-            AppTextField(controller: reviewStatus, hintText: 'Review status'),
-            SizedBox(height: 10),
-            AppTextField(
-              controller: publishedStatus,
-              hintText: 'Published status',
-            ),
-          ],
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(asset.title, style: AppText.fieldLabel),
+              SizedBox(height: 12),
+              AppTextField(
+                controller: currentValue,
+                hintText: 'Current asset value (USD)',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: valuationDate,
+                hintText: 'Valuation date (YYYY-MM-DD)',
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: assetIncome,
+                hintText: 'Asset/rental income (USD)',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: expenses,
+                hintText: 'Expenses (USD)',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: occupancyRate,
+                hintText: 'Occupancy rate (%)',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(controller: notes, hintText: 'Performance notes'),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -2246,39 +2607,42 @@ Future<void> _showAssetDialog(
         ),
         FilledButton(
           onPressed: () async {
-            final payload = AdminAsset(
-              id: value.id,
-              title: title.text,
-              location: location.text,
-              type: type.text,
-              fundedPercent: double.tryParse(fundedPercent.text) ?? 0,
-              reviewStatus: reviewStatus.text,
-              publishedStatus: publishedStatus.text,
-            );
-
+            final parsedValue = double.tryParse(currentValue.text) ?? 0;
+            if (parsedValue <= 0) {
+              showMessage(context, 'Enter a current asset value');
+              return;
+            }
+            final income = double.tryParse(assetIncome.text) ?? 0;
+            final cost = double.tryParse(expenses.text) ?? 0;
             await _runAdminAction(
               context,
-              action: () => asset == null
-                  ? repository.createAsset(payload)
-                  : repository.updateAsset(payload),
+              action: () => repository.updateAssetValuation(
+                id: asset.id,
+                currentAssetValue: parsedValue,
+                valuationDate: valuationDate.text.trim(),
+                performanceNotes: notes.text.trim(),
+                assetIncome: income,
+                expenses: cost,
+                netIncome: income - cost,
+                occupancyRate: double.tryParse(occupancyRate.text) ?? 0,
+              ),
               onChanged: onChanged,
+              successMessage: 'Valuation updated',
             );
-            if (dialogContext.mounted) {
-              Navigator.pop(dialogContext);
-            }
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
           },
-          child: Text('Save'),
+          child: Text('Save valuation'),
         ),
       ],
     ),
   );
 
-  title.dispose();
-  location.dispose();
-  type.dispose();
-  fundedPercent.dispose();
-  reviewStatus.dispose();
-  publishedStatus.dispose();
+  currentValue.dispose();
+  valuationDate.dispose();
+  assetIncome.dispose();
+  expenses.dispose();
+  occupancyRate.dispose();
+  notes.dispose();
 }
 
 Future<void> _showPaymentOptionDialog(

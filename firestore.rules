@@ -46,6 +46,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Holdings are created/updated only by Cloud Functions during approval.
+    // Members may read their own; clients never write directly.
+    match /memberHoldings/{holdingId} {
+      allow read: if request.auth != null
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    // Activity log is server-written only. Members read their own entries.
+    match /memberActivities/{activityId} {
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
     match /notificationTokens/{tokenId} {
       allow read, write: if isAdmin();
     }

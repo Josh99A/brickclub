@@ -25,6 +25,28 @@ type AdminAsset = {
   fundedPercent: number;
   reviewStatus: string;
   publishedStatus: string;
+  // Expanded investment-opportunity data. Older Firestore documents will not
+  // carry these fields, so every reader applies a safe default.
+  description: string;
+  category: string;
+  assetType: string;
+  images: string[];
+  purchasePrice: number;
+  fundingTarget: number;
+  amountFunded: number;
+  pricePerShare: number;
+  totalShares: number;
+  availableShares: number;
+  expectedAnnualYield: number;
+  projectedNetYield: number;
+  strategy: string;
+  riskLevel: string;
+  exitPeriod: string;
+  documents: string[];
+  status: string;
+  regulationNote: string;
+  currentAssetValue: number;
+  minimumInvestment: number;
 };
 
 type CryptoPaymentOption = {
@@ -47,6 +69,25 @@ type MemberOpportunity = {
   minimumInvestment: number;
   targetReturn: number;
   fundedPercent: number;
+  // Expanded fields surfaced to members. Defaults keep older assets valid.
+  description: string;
+  category: string;
+  assetType: string;
+  images: string[];
+  purchasePrice: number;
+  fundingTarget: number;
+  amountFunded: number;
+  pricePerShare: number;
+  totalShares: number;
+  availableShares: number;
+  expectedAnnualYield: number;
+  projectedNetYield: number;
+  strategy: string;
+  exitPeriod: string;
+  documents: string[];
+  status: string;
+  regulationNote: string;
+  currentAssetValue: number;
 };
 
 type WithdrawalPolicy = {
@@ -99,6 +140,8 @@ type KycAutomationResult = {
 const assetsCollection = db.collection("adminAssets");
 const paymentOptionsCollection = db.collection("cryptoPaymentOptions");
 const purchaseOrdersCollection = db.collection("purchaseOrders");
+const memberHoldingsCollection = db.collection("memberHoldings");
+const memberActivitiesCollection = db.collection("memberActivities");
 const kycProfilesCollection = db.collection("kycProfiles");
 const notificationTokensCollection = db.collection("notificationTokens");
 const adminNotificationsCollection = db.collection("adminNotifications");
@@ -268,11 +311,12 @@ export const listMemberOpportunities = onMemberCall(async () => {
 
 export const getMemberDashboard = onMemberCall(async (request) => {
   const uid = request.auth!.uid;
-  const [ordersSnapshot, assetsSnapshot, paymentOptionsSnapshot] =
+  const [ordersSnapshot, assetsSnapshot, paymentOptionsSnapshot, holdingsSnapshot] =
     await Promise.all([
       purchaseOrdersCollection.where("uid", "==", uid).get(),
       assetsCollection.get(),
       paymentOptionsCollection.where("enabled", "==", true).get(),
+      memberHoldingsCollection.where("userId", "==", uid).get(),
     ]);
 
   const assetsById = new Map(
@@ -284,21 +328,38 @@ export const getMemberDashboard = onMemberCall(async (request) => {
   const verifiedOrders = orders.filter(
     (order) => order.status === "deposit_verified",
   );
-  const holdings = buildMemberHoldings(verifiedOrders, assetsById);
-  const portfolioValueUsd = roundMoney(
-    holdings.reduce((total, holding) => total + holding.valueUsd, 0),
+
+  // Prefer persisted holdings created at approval time. Fall back to deriving
+  // them from verified orders for accounts created before holdings were stored.
+  const holdings = holdingsSnapshot.empty ?
+    buildMemberHoldings(verifiedOrders, assetsById) :
+    holdingsSnapshot.docs.map((doc) => holdingFromDoc(doc));
+
+  const totalInvested = roundMoney(
+    holdings.reduce((total, holding) => total + holding.amountInvested, 0),
   );
-  const yearReturnPercent = portfolioValueUsd === 0 ? 0 : roundMoney(
-    holdings.reduce(
-      (total, holding) => total + holding.returnPercent * holding.valueUsd,
-      0,
-    ) / portfolioValueUsd,
+  const totalCurrentValue = roundMoney(
+    holdings.reduce((total, holding) => total + holding.currentValue, 0),
   );
+  const totalDividends = roundMoney(
+    holdings.reduce((total, holding) => total + holding.dividendsReceived, 0),
+  );
+  const totalProfitLoss = roundMoney(
+    totalCurrentValue + totalDividends - totalInvested,
+  );
+  const overallReturnPercentage = totalInvested > 0 ?
+    roundMoney((totalProfitLoss / totalInvested) * 100) :
+    0;
 
   return {
-    portfolioValueUsd,
+    portfolioValueUsd: totalCurrentValue,
     walletBalanceUsd: 0,
-    yearReturnPercent,
+    yearReturnPercent: overallReturnPercentage,
+    totalInvested,
+    totalCurrentValue,
+    totalDividends,
+    totalProfitLoss,
+    overallReturnPercentage,
     cryptoRails: paymentOptionsSnapshot.docs
       .map((doc) => paymentOptionFromDoc(doc))
       .map((option) => `${option.assetSymbol} on ${option.network}`),
@@ -377,6 +438,14 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
   const quoteAmount = roundMoney(amountUsd);
   const networkFee = paymentAsset === "BTC" ? 0.0001 : 1;
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  // Pre-compute the ownership and share figures the member is shown before
+  // payment. The real holding is only written after admin approval.
+  const sharesExpected = asset.pricePerShare > 0 ?
+    roundShares(amountUsd / asset.pricePerShare) :
+    0;
+  const ownershipPercentage = asset.purchasePrice > 0 ?
+    roundMoney((amountUsd / asset.purchasePrice) * 100) :
+    0;
 
   const order = {
     id,
@@ -386,8 +455,14 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
     amountUsd,
     paymentNetwork: paymentOption.network,
     paymentAsset,
+    // Crypto-only aliases matching the upgraded PurchaseOrder model.
+    cryptoCurrency: paymentAsset,
+    cryptoNetwork: paymentOption.network,
+    cryptoAmountExpected: quoteAmount,
     quoteAmount,
     networkFee,
+    sharesExpected,
+    ownershipPercentage,
     paymentWalletAddress: paymentOption.walletAddress,
     paymentQrCodeUrl: paymentOption.qrCodeUrl,
     status: "pending_payment",
@@ -461,34 +536,145 @@ export const submitDepositProof = onMemberCall(async (request) => {
   };
 });
 
-export const verifyDepositProof = onAdminCall(async (data) => {
+export const verifyDepositProof = onAdminCall(async (data, context) => {
   const orderId = readString(data, "orderId");
   const orderRef = purchaseOrdersCollection.doc(orderId);
-  const orderSnapshot = await orderRef.get();
-  const order = orderSnapshot.data();
-  if (!orderSnapshot.exists || !order) {
-    throw new HttpsError("not-found", "Deposit request was not found.");
-  }
-  if (order.status !== "proof_submitted") {
-    throw new HttpsError(
-      "failed-precondition",
-      "Only submitted deposit proofs can be verified.",
+
+  // Run approval as a single transaction so the order status, member holding,
+  // asset funding totals, and activity log stay consistent. The MemberHolding
+  // is created here and only here — never when proof is first submitted.
+  const result = await db.runTransaction(async (tx) => {
+    const orderSnapshot = await tx.get(orderRef);
+    const order = orderSnapshot.data();
+    if (!orderSnapshot.exists || !order) {
+      throw new HttpsError("not-found", "Deposit request was not found.");
+    }
+    if (order.status !== "proof_submitted") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Only submitted deposit proofs can be verified.",
+      );
+    }
+
+    const uid = String(order.uid);
+    const opportunityId = String(order.opportunityId);
+    const amountUsd = Number(order.amountUsd ?? 0);
+
+    const assetRef = assetsCollection.doc(opportunityId);
+    const assetSnapshot = await tx.get(assetRef);
+    const asset = assetSnapshot.exists ?
+      assetFromData(assetSnapshot.id, assetSnapshot.data()!) :
+      null;
+
+    const holdingRef = memberHoldingsCollection.doc(`${uid}_${opportunityId}`);
+    const holdingSnapshot = await tx.get(holdingRef);
+    const existingHolding = holdingSnapshot.data();
+
+    // Accumulate onto any prior holding for the same asset.
+    const priorInvested = Number(existingHolding?.amountInvested ?? 0);
+    const priorShares = Number(existingHolding?.sharesOwned ?? 0);
+    const priorDividends = Number(existingHolding?.dividendsReceived ?? 0);
+
+    const pricePerShare = asset?.pricePerShare ?? 0;
+    const purchasePrice = asset?.purchasePrice ?? 0;
+    const currentAssetValue = asset?.currentAssetValue ?? purchasePrice;
+
+    const sharesPurchased = pricePerShare > 0 ?
+      roundShares(amountUsd / pricePerShare) :
+      0;
+    const amountInvested = roundMoney(priorInvested + amountUsd);
+    const sharesOwned = roundShares(priorShares + sharesPurchased);
+    const figures = computeHoldingFigures({
+      amountInvested,
+      purchasePrice,
+      currentAssetValue,
+      dividendsReceived: priorDividends,
+    });
+
+    // Write order approval state.
+    tx.set(
+      orderRef,
+      {
+        status: "deposit_verified",
+        approvedAt: FieldValue.serverTimestamp(),
+        approvedBy: context.uid,
+        verifiedAt: FieldValue.serverTimestamp(),
+        rejectionReason: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
     );
-  }
 
-  await orderRef.set(
-    {
+    // Create or update the member holding.
+    tx.set(
+      holdingRef,
+      {
+        holdingId: holdingRef.id,
+        userId: uid,
+        assetId: opportunityId,
+        assetTitle: asset?.title ?? String(order.opportunityTitle ?? ""),
+        assetImageUrl: asset?.images?.[0] ?? "",
+        assetCategory: asset?.category ?? "",
+        assetStrategy: asset?.strategy ?? "",
+        assetStatus: asset?.status ?? "available",
+        amountInvested,
+        sharesOwned,
+        ownershipPercentage: figures.ownershipPercentage,
+        currentValue: figures.currentValue,
+        dividendsReceived: priorDividends,
+        profitLoss: figures.profitLoss,
+        returnPercentage: figures.returnPercentage,
+        createdAt: existingHolding?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    // Update asset funding totals when the asset still exists.
+    if (asset) {
+      const fundingTarget = asset.fundingTarget;
+      const newAmountFunded = roundMoney(asset.amountFunded + amountUsd);
+      const newAvailableShares = asset.totalShares > 0 ?
+        Math.max(0, roundShares(asset.availableShares - sharesPurchased)) :
+        asset.availableShares;
+      const newFundedPercent = fundingTarget > 0 ?
+        roundMoney((newAmountFunded / fundingTarget) * 100) :
+        asset.fundedPercent;
+      tx.set(
+        assetRef,
+        {
+          amountFunded: newAmountFunded,
+          availableShares: newAvailableShares,
+          fundedPercent: newFundedPercent,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        {merge: true},
+      );
+    }
+
+    // Record the member activity entry.
+    const activityRef = memberActivitiesCollection.doc();
+    tx.set(activityRef, {
+      id: activityRef.id,
+      uid,
+      type: "investment_approved",
+      title: "Investment approved",
+      subtitle: asset?.title ?? String(order.opportunityTitle ?? ""),
+      value: formatUsd(amountUsd),
       status: "deposit_verified",
-      verifiedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    {merge: true},
-  );
+      opportunityId,
+      orderId,
+      amountUsd,
+      createdAt: FieldValue.serverTimestamp(),
+    });
 
-  await notifyMember(String(order.uid), {
+    return {uid};
+  });
+
+  await notifyMember(result.uid, {
     type: "deposit_verified",
     title: "Deposit verified",
-    body: "Your crypto deposit proof has been verified.",
+    body: "Your crypto deposit proof has been verified and added to your portfolio.",
     data: {orderId},
   });
 
@@ -504,6 +690,14 @@ export const rejectDepositProof = onAdminCall(async (data) => {
   const order = orderSnapshot.data();
   if (!orderSnapshot.exists || !order) {
     throw new HttpsError("not-found", "Deposit request was not found.");
+  }
+  // Only submitted proofs may be rejected. This prevents rejecting an order
+  // that was already verified (and therefore already has a holding).
+  if (order.status !== "proof_submitted") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Only submitted deposit proofs can be rejected.",
+    );
   }
 
   await orderRef.set(
@@ -996,6 +1190,72 @@ export const deleteAdminAsset = onAdminCall(async (data) => {
   return {id};
 });
 
+export const updateAssetValuation = onAdminCall(async (data) => {
+  const value = readObject(data);
+  const id = readString(value, "id");
+  const currentAssetValue = readPositiveNumber(value, "currentAssetValue");
+  const valuationDate = readOptionalString(value, "valuationDate") ?? "";
+  const performanceNotes = readOptionalString(value, "performanceNotes") ?? "";
+
+  const assetRef = assetsCollection.doc(id);
+  const assetSnapshot = await assetRef.get();
+  if (!assetSnapshot.exists) {
+    throw new HttpsError("not-found", "Asset was not found.");
+  }
+  const asset = assetFromData(assetSnapshot.id, assetSnapshot.data()!);
+
+  // Persist the valuation plus optional performance inputs. Dividends are not
+  // implemented yet, so the income figures are stored for reporting only.
+  await assetRef.set(
+    {
+      currentAssetValue,
+      performance: {
+        currentValue: currentAssetValue,
+        assetIncome: readNumberOrDefault(value, "assetIncome", 0),
+        expenses: readNumberOrDefault(value, "expenses", 0),
+        netIncome: readNumberOrDefault(value, "netIncome", 0),
+        occupancyRate: readNumberOrDefault(value, "occupancyRate", 0),
+        valuationDate,
+        performanceNotes,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  // Recompute profit/loss for every holding tied to this asset so member
+  // portfolios reflect the new valuation. Batched for consistency.
+  const holdingsSnapshot = await memberHoldingsCollection
+    .where("assetId", "==", id)
+    .get();
+  if (!holdingsSnapshot.empty) {
+    const batch = db.batch();
+    for (const doc of holdingsSnapshot.docs) {
+      const holding = doc.data();
+      const figures = computeHoldingFigures({
+        amountInvested: Number(holding.amountInvested ?? 0),
+        purchasePrice: asset.purchasePrice,
+        currentAssetValue,
+        dividendsReceived: Number(holding.dividendsReceived ?? 0),
+      });
+      batch.set(
+        doc.ref,
+        {
+          currentValue: figures.currentValue,
+          profitLoss: figures.profitLoss,
+          returnPercentage: figures.returnPercentage,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        {merge: true},
+      );
+    }
+    await batch.commit();
+  }
+
+  return {id, currentAssetValue, holdingsUpdated: holdingsSnapshot.size};
+});
+
 export const createCryptoPaymentOption = onAdminCall(async (data) => {
   const payload = readPaymentOptionPayload(data);
   const id = randomUUID();
@@ -1031,7 +1291,7 @@ export const deleteCryptoPaymentOption = onAdminCall(async (data) => {
 });
 
 function onAdminCall<T>(
-  handler: (data: unknown) => Promise<T>,
+  handler: (data: unknown, context: {uid: string}) => Promise<T>,
 ) {
   return onCall(async (request) => {
     if (!request.auth) {
@@ -1042,7 +1302,7 @@ function onAdminCall<T>(
       throw new HttpsError("permission-denied", "Admin access is required.");
     }
 
-    return handler(request.data);
+    return handler(request.data, {uid: request.auth.uid});
   });
 }
 
@@ -1074,15 +1334,51 @@ function userToJson(user: UserRecord) {
 function assetFromDoc(
   doc: FirebaseFirestore.QueryDocumentSnapshot,
 ): AdminAsset {
-  const data = doc.data();
+  return assetFromData(doc.id, doc.data());
+}
+
+function assetFromData(
+  id: string,
+  data: FirebaseFirestore.DocumentData,
+): AdminAsset {
+  const purchasePrice = Number(data.purchasePrice ?? 0);
+  const fundingTarget = Number(data.fundingTarget ?? 0);
+  const amountFunded = Number(data.amountFunded ?? 0);
+  // Prefer a derived funding percentage when a funding target exists, falling
+  // back to the legacy admin-entered fundedPercent for older documents.
+  const fundedPercent = fundingTarget > 0 ?
+    roundMoney((amountFunded / fundingTarget) * 100) :
+    Number(data.fundedPercent ?? 0);
+  const type = String(data.type ?? data.assetType ?? "");
+
   return {
-    id: doc.id,
+    id,
     title: String(data.title ?? ""),
     location: String(data.location ?? ""),
-    type: String(data.type ?? ""),
-    fundedPercent: Number(data.fundedPercent ?? 0),
+    type,
+    fundedPercent,
     reviewStatus: String(data.reviewStatus ?? "Pending"),
     publishedStatus: String(data.publishedStatus ?? "Draft"),
+    description: String(data.description ?? ""),
+    category: String(data.category ?? "realEstate"),
+    assetType: String(data.assetType ?? type),
+    images: readStringArrayOrDefault(data.images, []),
+    purchasePrice,
+    fundingTarget,
+    amountFunded,
+    pricePerShare: Number(data.pricePerShare ?? 0),
+    totalShares: Number(data.totalShares ?? 0),
+    availableShares: Number(data.availableShares ?? data.totalShares ?? 0),
+    expectedAnnualYield: Number(data.expectedAnnualYield ?? 0),
+    projectedNetYield: Number(data.projectedNetYield ?? 0),
+    strategy: String(data.strategy ?? "capitalGrowth"),
+    riskLevel: String(data.riskLevel ?? "balanced"),
+    exitPeriod: String(data.exitPeriod ?? ""),
+    documents: readStringArrayOrDefault(data.documents, []),
+    status: String(data.status ?? "available"),
+    regulationNote: String(data.regulationNote ?? ""),
+    currentAssetValue: Number(data.currentAssetValue ?? purchasePrice),
+    minimumInvestment: Number(data.minimumInvestment ?? 50),
   };
 }
 
@@ -1095,19 +1391,38 @@ function opportunityFromDoc(
     throw new HttpsError("not-found", "Opportunity was not found.");
   }
 
+  const asset = assetFromData(doc.id, data);
   return {
     id: doc.id,
-    assetClass: String(data.assetClass ?? data.type ?? "Real Estate"),
-    riskLevel: String(data.riskLevel ?? "Medium"),
+    assetClass: String(data.assetClass ?? data.category ?? data.type ?? "Real Estate"),
+    riskLevel: asset.riskLevel,
     paymentMethods: readStringArrayOrDefault(
       data.paymentMethods,
       enabledPaymentMethods.length === 0 ? ["USDT"] : enabledPaymentMethods,
     ),
-    title: String(data.title ?? ""),
-    location: String(data.location ?? ""),
-    minimumInvestment: Number(data.minimumInvestment ?? 50),
-    targetReturn: Number(data.targetReturn ?? 11.8),
-    fundedPercent: Number(data.fundedPercent ?? 0),
+    title: asset.title,
+    location: asset.location,
+    minimumInvestment: asset.minimumInvestment,
+    targetReturn: Number(data.targetReturn ?? asset.expectedAnnualYield ?? 11.8),
+    fundedPercent: asset.fundedPercent,
+    description: asset.description,
+    category: asset.category,
+    assetType: asset.assetType,
+    images: asset.images,
+    purchasePrice: asset.purchasePrice,
+    fundingTarget: asset.fundingTarget,
+    amountFunded: asset.amountFunded,
+    pricePerShare: asset.pricePerShare,
+    totalShares: asset.totalShares,
+    availableShares: asset.availableShares,
+    expectedAnnualYield: asset.expectedAnnualYield,
+    projectedNetYield: asset.projectedNetYield,
+    strategy: asset.strategy,
+    exitPeriod: asset.exitPeriod,
+    documents: asset.documents,
+    status: asset.status,
+    regulationNote: asset.regulationNote,
+    currentAssetValue: asset.currentAssetValue,
   };
 }
 
@@ -1159,37 +1474,116 @@ function memberOrderFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot) {
   };
 }
 
+type DashboardHolding = {
+  // Legacy keys preserved for existing clients.
+  opportunityId: string;
+  title: string;
+  assetClass: string;
+  brickShares: number;
+  valueUsd: number;
+  returnPercent: number;
+  // Expanded MemberHolding keys.
+  assetId: string;
+  assetTitle: string;
+  assetImageUrl: string;
+  assetCategory: string;
+  assetStrategy: string;
+  assetStatus: string;
+  amountInvested: number;
+  sharesOwned: number;
+  ownershipPercentage: number;
+  currentValue: number;
+  dividendsReceived: number;
+  profitLoss: number;
+  returnPercentage: number;
+};
+
+function holdingFromDoc(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+): DashboardHolding {
+  const data = doc.data();
+  const amountInvested = Number(data.amountInvested ?? 0);
+  const currentValue = Number(data.currentValue ?? amountInvested);
+  const returnPercentage = Number(data.returnPercentage ?? 0);
+  const assetCategory = String(data.assetCategory ?? "BrickShares");
+  return {
+    opportunityId: String(data.assetId ?? ""),
+    title: String(data.assetTitle ?? ""),
+    assetClass: assetCategory,
+    brickShares: Number(data.sharesOwned ?? 0),
+    valueUsd: currentValue,
+    returnPercent: returnPercentage,
+    assetId: String(data.assetId ?? ""),
+    assetTitle: String(data.assetTitle ?? ""),
+    assetImageUrl: String(data.assetImageUrl ?? ""),
+    assetCategory,
+    assetStrategy: String(data.assetStrategy ?? ""),
+    assetStatus: String(data.assetStatus ?? "available"),
+    amountInvested,
+    sharesOwned: Number(data.sharesOwned ?? 0),
+    ownershipPercentage: Number(data.ownershipPercentage ?? 0),
+    currentValue,
+    dividendsReceived: Number(data.dividendsReceived ?? 0),
+    profitLoss: Number(data.profitLoss ?? 0),
+    returnPercentage,
+  };
+}
+
 function buildMemberHoldings(
   orders: ReturnType<typeof memberOrderFromDoc>[],
   assetsById: Map<string, MemberOpportunity>,
-) {
-  const holdingsByOpportunity = new Map<string, {
-    opportunityId: string;
-    title: string;
-    assetClass: string;
-    brickShares: number;
-    valueUsd: number;
-    returnPercent: number;
-  }>();
-
+): DashboardHolding[] {
+  const investedByOpportunity = new Map<string, number>();
   for (const order of orders) {
-    const asset = assetsById.get(order.opportunityId);
-    const current = holdingsByOpportunity.get(order.opportunityId);
-    const minimumInvestment = asset?.minimumInvestment ?? order.amountUsd;
-    const brickShares = minimumInvestment > 0 ?
-      order.amountUsd / minimumInvestment :
-      0;
-    holdingsByOpportunity.set(order.opportunityId, {
-      opportunityId: order.opportunityId,
-      title: asset?.title ?? order.opportunityTitle,
-      assetClass: asset?.assetClass ?? "BrickShares",
-      brickShares: roundMoney((current?.brickShares ?? 0) + brickShares),
-      valueUsd: roundMoney((current?.valueUsd ?? 0) + order.amountUsd),
-      returnPercent: asset?.targetReturn ?? current?.returnPercent ?? 0,
-    });
+    investedByOpportunity.set(
+      order.opportunityId,
+      (investedByOpportunity.get(order.opportunityId) ?? 0) + order.amountUsd,
+    );
   }
 
-  return Array.from(holdingsByOpportunity.values());
+  return Array.from(investedByOpportunity.entries()).map(
+    ([opportunityId, invested]) => {
+      const asset = assetsById.get(opportunityId);
+      const amountInvested = roundMoney(invested);
+      const purchasePrice = asset?.purchasePrice ?? 0;
+      const currentAssetValue = asset?.currentAssetValue ?? purchasePrice;
+      const pricePerShare = asset?.pricePerShare ?? 0;
+      const minimumInvestment = asset?.minimumInvestment ?? amountInvested;
+      const sharesOwned = pricePerShare > 0 ?
+        roundShares(amountInvested / pricePerShare) :
+        minimumInvestment > 0 ?
+          roundShares(amountInvested / minimumInvestment) :
+          0;
+      const figures = computeHoldingFigures({
+        amountInvested,
+        purchasePrice,
+        currentAssetValue,
+        dividendsReceived: 0,
+      });
+      const assetCategory = asset?.assetClass ?? "BrickShares";
+      return {
+        opportunityId,
+        title: asset?.title ?? "",
+        assetClass: assetCategory,
+        brickShares: sharesOwned,
+        valueUsd: figures.currentValue,
+        returnPercent: figures.returnPercentage,
+        assetId: opportunityId,
+        assetTitle: asset?.title ?? "",
+        assetImageUrl: asset?.images?.[0] ?? "",
+        assetCategory,
+        assetStrategy: asset?.strategy ?? "",
+        assetStatus: asset?.status ?? "available",
+        amountInvested,
+        sharesOwned,
+        ownershipPercentage: figures.ownershipPercentage,
+        currentValue: figures.currentValue,
+        dividendsReceived: 0,
+        profitLoss: figures.profitLoss,
+        returnPercentage: figures.returnPercentage,
+      };
+    },
+  );
 }
 
 function buildMemberAllocation(
@@ -1572,13 +1966,41 @@ function readUserPayload(
 
 function readAssetPayload(data: unknown): Omit<AdminAsset, "id"> {
   const value = readObject(data);
+  const type = readString(value, "type");
+  const purchasePrice = readNumberOrDefault(value, "purchasePrice", 0);
+  const totalShares = readNumberOrDefault(value, "totalShares", 0);
+
   return {
     title: readString(value, "title"),
     location: readString(value, "location"),
-    type: readString(value, "type"),
-    fundedPercent: readNumber(value, "fundedPercent"),
+    type,
+    fundedPercent: readNumberOrDefault(value, "fundedPercent", 0),
     reviewStatus: readString(value, "reviewStatus"),
     publishedStatus: readString(value, "publishedStatus"),
+    description: readOptionalString(value, "description") ?? "",
+    category: readOptionalString(value, "category") ?? "realEstate",
+    assetType: readOptionalString(value, "assetType") ?? type,
+    images: readStringArrayOrDefault(value.images, []),
+    purchasePrice,
+    fundingTarget: readNumberOrDefault(value, "fundingTarget", 0),
+    amountFunded: readNumberOrDefault(value, "amountFunded", 0),
+    pricePerShare: readNumberOrDefault(value, "pricePerShare", 0),
+    totalShares,
+    availableShares: readNumberOrDefault(value, "availableShares", totalShares),
+    expectedAnnualYield: readNumberOrDefault(value, "expectedAnnualYield", 0),
+    projectedNetYield: readNumberOrDefault(value, "projectedNetYield", 0),
+    strategy: readOptionalString(value, "strategy") ?? "capitalGrowth",
+    riskLevel: readOptionalString(value, "riskLevel") ?? "balanced",
+    exitPeriod: readOptionalString(value, "exitPeriod") ?? "",
+    documents: readStringArrayOrDefault(value.documents, []),
+    status: readOptionalString(value, "status") ?? "available",
+    regulationNote: readOptionalString(value, "regulationNote") ?? "",
+    currentAssetValue: readNumberOrDefault(
+      value,
+      "currentAssetValue",
+      purchasePrice,
+    ),
+    minimumInvestment: readNumberOrDefault(value, "minimumInvestment", 50),
   };
 }
 
@@ -1874,6 +2296,21 @@ function readNumber(data: unknown, key: string): number {
   return value;
 }
 
+function readNumberOrDefault(
+  data: unknown,
+  key: string,
+  fallback: number,
+): number {
+  const value = readObject(data)[key];
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new HttpsError("invalid-argument", `${key} must be a number.`);
+  }
+  return value;
+}
+
 function readPositiveNumber(data: unknown, key: string): number {
   const value = readNumber(data, key);
   if (value <= 0) {
@@ -1929,6 +2366,39 @@ function readSerializableDate(value: unknown): string {
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function roundShares(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+// Shared profit/loss math so holdings computed at approval and at valuation
+// time use identical formulas. Every division guards against zero.
+function computeHoldingFigures(input: {
+  amountInvested: number;
+  purchasePrice: number;
+  currentAssetValue: number;
+  dividendsReceived: number;
+}): {
+  ownershipPercentage: number;
+  currentValue: number;
+  profitLoss: number;
+  returnPercentage: number;
+} {
+  const ownershipPercentage = input.purchasePrice > 0 ?
+    roundMoney((input.amountInvested / input.purchasePrice) * 100) :
+    0;
+  // When no asset valuation exists yet, current value tracks invested capital.
+  const currentValue = input.currentAssetValue > 0 ?
+    roundMoney(input.currentAssetValue * (ownershipPercentage / 100)) :
+    roundMoney(input.amountInvested);
+  const profitLoss = roundMoney(
+    currentValue + input.dividendsReceived - input.amountInvested,
+  );
+  const returnPercentage = input.amountInvested > 0 ?
+    roundMoney((profitLoss / input.amountInvested) * 100) :
+    0;
+  return {ownershipPercentage, currentValue, profitLoss, returnPercentage};
 }
 
 function formatUsd(value: number): string {

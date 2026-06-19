@@ -70,7 +70,14 @@ class DetailScreen extends StatelessWidget {
                     SizedBox(height: 20),
                     Row(
                       children: [
-                        const Expanded(child: Metric('36 mo', 'Liquidity')),
+                        Expanded(
+                          child: Metric(
+                            opportunity.exitPeriod.isNotEmpty
+                                ? opportunity.exitPeriod
+                                : '36 mo',
+                            'Liquidity',
+                          ),
+                        ),
                         Expanded(
                           child: Metric(opportunity.riskLevel, 'Risk level'),
                         ),
@@ -92,13 +99,17 @@ class DetailScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${opportunity.fundedPercent.toStringAsFixed(0)}% funded',
+                          '${opportunity.fundedPercentage.toStringAsFixed(0)}% funded',
                           style: AppText.goldBody,
                         ),
                       ],
                     ),
                     SizedBox(height: 14),
-                    ProgressLine(value: opportunity.fundedPercent / 100),
+                    ProgressLine(
+                      value: (opportunity.fundedPercentage / 100)
+                          .clamp(0.0, 1.0)
+                          .toDouble(),
+                    ),
                     SizedBox(height: 12),
                     Text(
                       'Supported payment options and quote expiry are shown before settlement confirmation.',

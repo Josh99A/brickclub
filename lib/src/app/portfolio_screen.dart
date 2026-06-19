@@ -32,25 +32,54 @@ class PortfolioScreen extends StatelessWidget {
                 Panel(
                   radius: 22,
                   padding: const EdgeInsets.all(18),
-                  child: SizedBox(
-                    height: 112,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Current portfolio value', style: AppText.body),
+                      SizedBox(height: 10),
+                      Text(
+                        data.totalCurrentValueText,
+                        style: AppText.portfolioValue,
+                      ),
+                      SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Metric(data.totalInvestedText, 'Invested'),
+                          ),
+                          Expanded(
+                            child: Metric(
+                              data.totalProfitLossText,
+                              'Profit / loss',
+                              gold: data.totalProfitLoss >= 0,
+                            ),
+                          ),
+                          Expanded(
+                            child: Metric(data.overallReturnText, 'Return'),
+                          ),
+                        ],
+                      ),
+                      if (data.totalDividends > 0) ...[
+                        SizedBox(height: 12),
                         Text(
-                          'Total BrickShares allocation',
-                          style: AppText.body,
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          data.portfolioValueText,
-                          style: AppText.portfolioValue,
+                          'Dividends received: ${data.totalDividendsText}',
+                          style: AppText.small,
                         ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
+                SizedBox(height: 14),
+                Text('Holdings', style: AppText.h2),
+                if (data.holdings.isEmpty)
+                  const _EmptyFinancePanel(
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: 'No holdings yet',
+                    message: 'Approved investments appear here automatically.',
+                  )
+                else
+                  for (final holding in data.holdings)
+                    _PortfolioHoldingRow(holding: holding),
                 SizedBox(height: 8),
                 Text('Allocation', style: AppText.h2),
                 if (data.allocation.isEmpty)
@@ -86,6 +115,61 @@ class PortfolioScreen extends StatelessWidget {
       Color(0xFFA78BFA),
     ];
     return colors[index % colors.length];
+  }
+}
+
+class _PortfolioHoldingRow extends StatelessWidget {
+  const _PortfolioHoldingRow({required this.holding});
+
+  final MemberHolding holding;
+
+  @override
+  Widget build(BuildContext context) {
+    final positive = holding.profitLoss >= 0;
+    return Panel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  holding.assetTitle.isNotEmpty
+                      ? holding.assetTitle
+                      : holding.title,
+                  style: AppText.cardHeadingSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                holding.currentValueText,
+                style: AppText.cardHeadingSmall,
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Invested ${holding.amountInvestedText} · ${holding.ownershipText} ownership',
+                  style: AppText.small,
+                ),
+              ),
+              Text(
+                holding.profitLossText,
+                style: TextStyle(
+                  color: positive ? AppColors.success : const Color(0xFFE36D6D),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

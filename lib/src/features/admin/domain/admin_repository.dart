@@ -30,6 +30,17 @@ abstract interface class AdminRepository {
 
   Future<void> deleteAsset(String id);
 
+  Future<void> updateAssetValuation({
+    required String id,
+    required double currentAssetValue,
+    String valuationDate,
+    String performanceNotes,
+    double assetIncome,
+    double expenses,
+    double netIncome,
+    double occupancyRate,
+  });
+
   Future<void> createCryptoPaymentOption(CryptoPaymentOption option);
 
   Future<void> updateCryptoPaymentOption(CryptoPaymentOption option);

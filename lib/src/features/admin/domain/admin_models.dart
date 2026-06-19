@@ -122,6 +122,23 @@ class AdminAsset {
     required this.fundedPercent,
     required this.reviewStatus,
     required this.publishedStatus,
+    this.description = '',
+    this.category = 'realEstate',
+    this.purchasePrice = 0,
+    this.fundingTarget = 0,
+    this.amountFunded = 0,
+    this.pricePerShare = 0,
+    this.totalShares = 0,
+    this.availableShares = 0,
+    this.expectedAnnualYield = 0,
+    this.projectedNetYield = 0,
+    this.strategy = 'capitalGrowth',
+    this.riskLevel = 'balanced',
+    this.exitPeriod = '',
+    this.status = 'available',
+    this.regulationNote = '',
+    this.currentAssetValue = 0,
+    this.minimumInvestment = 50,
   });
 
   factory AdminAsset.empty() {
@@ -137,6 +154,7 @@ class AdminAsset {
   }
 
   factory AdminAsset.fromJson(Map<String, dynamic> json) {
+    final purchasePrice = (json['purchasePrice'] as num?)?.toDouble() ?? 0;
     return AdminAsset(
       id: json['id'] as String,
       title: json['title'] as String? ?? '',
@@ -145,6 +163,25 @@ class AdminAsset {
       fundedPercent: (json['fundedPercent'] as num?)?.toDouble() ?? 0,
       reviewStatus: json['reviewStatus'] as String? ?? 'Pending',
       publishedStatus: json['publishedStatus'] as String? ?? 'Draft',
+      description: json['description'] as String? ?? '',
+      category: json['category'] as String? ?? 'realEstate',
+      purchasePrice: purchasePrice,
+      fundingTarget: (json['fundingTarget'] as num?)?.toDouble() ?? 0,
+      amountFunded: (json['amountFunded'] as num?)?.toDouble() ?? 0,
+      pricePerShare: (json['pricePerShare'] as num?)?.toDouble() ?? 0,
+      totalShares: (json['totalShares'] as num?)?.toDouble() ?? 0,
+      availableShares: (json['availableShares'] as num?)?.toDouble() ?? 0,
+      expectedAnnualYield:
+          (json['expectedAnnualYield'] as num?)?.toDouble() ?? 0,
+      projectedNetYield: (json['projectedNetYield'] as num?)?.toDouble() ?? 0,
+      strategy: json['strategy'] as String? ?? 'capitalGrowth',
+      riskLevel: json['riskLevel'] as String? ?? 'balanced',
+      exitPeriod: json['exitPeriod'] as String? ?? '',
+      status: json['status'] as String? ?? 'available',
+      regulationNote: json['regulationNote'] as String? ?? '',
+      currentAssetValue:
+          (json['currentAssetValue'] as num?)?.toDouble() ?? purchasePrice,
+      minimumInvestment: (json['minimumInvestment'] as num?)?.toDouble() ?? 50,
     );
   }
 
@@ -157,7 +194,78 @@ class AdminAsset {
       'fundedPercent': fundedPercent,
       'reviewStatus': reviewStatus,
       'publishedStatus': publishedStatus,
+      'description': description,
+      'category': category,
+      'assetType': type,
+      'purchasePrice': purchasePrice,
+      'fundingTarget': fundingTarget,
+      'amountFunded': amountFunded,
+      'pricePerShare': pricePerShare,
+      'totalShares': totalShares,
+      'availableShares': availableShares,
+      'expectedAnnualYield': expectedAnnualYield,
+      'projectedNetYield': projectedNetYield,
+      'strategy': strategy,
+      'riskLevel': riskLevel,
+      'exitPeriod': exitPeriod,
+      'status': status,
+      'regulationNote': regulationNote,
+      'currentAssetValue': currentAssetValue,
+      'minimumInvestment': minimumInvestment,
     };
+  }
+
+  AdminAsset copyWith({
+    String? title,
+    String? location,
+    String? type,
+    double? fundedPercent,
+    String? reviewStatus,
+    String? publishedStatus,
+    String? description,
+    String? category,
+    double? purchasePrice,
+    double? fundingTarget,
+    double? amountFunded,
+    double? pricePerShare,
+    double? totalShares,
+    double? availableShares,
+    double? expectedAnnualYield,
+    double? projectedNetYield,
+    String? strategy,
+    String? riskLevel,
+    String? exitPeriod,
+    String? status,
+    String? regulationNote,
+    double? currentAssetValue,
+    double? minimumInvestment,
+  }) {
+    return AdminAsset(
+      id: id,
+      title: title ?? this.title,
+      location: location ?? this.location,
+      type: type ?? this.type,
+      fundedPercent: fundedPercent ?? this.fundedPercent,
+      reviewStatus: reviewStatus ?? this.reviewStatus,
+      publishedStatus: publishedStatus ?? this.publishedStatus,
+      description: description ?? this.description,
+      category: category ?? this.category,
+      purchasePrice: purchasePrice ?? this.purchasePrice,
+      fundingTarget: fundingTarget ?? this.fundingTarget,
+      amountFunded: amountFunded ?? this.amountFunded,
+      pricePerShare: pricePerShare ?? this.pricePerShare,
+      totalShares: totalShares ?? this.totalShares,
+      availableShares: availableShares ?? this.availableShares,
+      expectedAnnualYield: expectedAnnualYield ?? this.expectedAnnualYield,
+      projectedNetYield: projectedNetYield ?? this.projectedNetYield,
+      strategy: strategy ?? this.strategy,
+      riskLevel: riskLevel ?? this.riskLevel,
+      exitPeriod: exitPeriod ?? this.exitPeriod,
+      status: status ?? this.status,
+      regulationNote: regulationNote ?? this.regulationNote,
+      currentAssetValue: currentAssetValue ?? this.currentAssetValue,
+      minimumInvestment: minimumInvestment ?? this.minimumInvestment,
+    );
   }
 
   final String id;
@@ -167,6 +275,23 @@ class AdminAsset {
   final double fundedPercent;
   final String reviewStatus;
   final String publishedStatus;
+  final String description;
+  final String category;
+  final double purchasePrice;
+  final double fundingTarget;
+  final double amountFunded;
+  final double pricePerShare;
+  final double totalShares;
+  final double availableShares;
+  final double expectedAnnualYield;
+  final double projectedNetYield;
+  final String strategy;
+  final String riskLevel;
+  final String exitPeriod;
+  final String status;
+  final String regulationNote;
+  final double currentAssetValue;
+  final double minimumInvestment;
 }
 
 class CryptoPaymentOption {
