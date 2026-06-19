@@ -161,6 +161,38 @@ npm --prefix functions run claim:admin -- admin@brickclub.com
 
 After a claim changes, sign out and sign back in so the app receives a fresh ID token.
 
+### First admin on the live (cloud) project
+
+The live `brickclub` project starts with no users, and the in-app "Users"
+dashboard can only promote people once an admin already exists. So the very
+first admin has to be granted the `admin: true` claim from a trusted machine.
+
+1. Make sure **Email/Password** (and **Google**, if you use it) is enabled under
+   Firebase Console → Authentication → Sign-in method. Without it, sign-up fails
+   with "Email sign in is not enabled yet."
+2. Create the account through the app's **Create account** flow against cloud:
+
+   ```powershell
+   flutter run -d chrome --dart-define=USE_FIREBASE_EMULATORS=false
+   ```
+
+3. Grant the admin claim with the helper script. Against cloud it uses Google
+   Application Default Credentials, so authenticate once first:
+
+   ```powershell
+   gcloud auth application-default login
+   $env:GCLOUD_PROJECT="brickclub"
+   npm --prefix functions run claim:admin -- you@example.com
+   ```
+
+   (Do **not** set `FIREBASE_AUTH_EMULATOR_HOST` here — that variable is only for
+   the emulator and would point the script at the wrong place.)
+4. Sign out and sign back in, then use **Sign in as an admin** on the sign-in
+   screen. The app force-refreshes the ID token and reads the new claim.
+
+Once the first admin exists, grant or revoke admin for everyone else from the
+admin dashboard's Users section instead of re-running the script.
+
 ### Development email
 
 Development password reset and KYC email verification messages are sent through

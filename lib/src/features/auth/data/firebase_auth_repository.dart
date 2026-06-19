@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../core/firebase/backend_functions.dart';
 import '../../../core/firebase/firebase_bootstrap.dart';
@@ -57,17 +58,24 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signInWithGoogle() async {
-    final provider = GoogleAuthProvider()
-      ..addScope('email')
-      ..addScope('profile');
-
     if (kIsWeb) {
+      final provider = GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
       await _withAuthTimeout(_firebaseAuth.signInWithPopup(provider));
       _registerMessagingTokenInBackground();
       return;
     }
 
-    await _withAuthTimeout(_firebaseAuth.signInWithProvider(provider));
+    final googleUser = await GoogleSignIn().signIn();
+    if (googleUser == null) return; // user cancelled
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    await _withAuthTimeout(_firebaseAuth.signInWithCredential(credential));
     _registerMessagingTokenInBackground();
   }
 
