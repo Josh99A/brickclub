@@ -50,7 +50,7 @@ jobs:
 
       - name: Write service account credentials
         env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BRICKCLUB }}
         run: printf '%s' "$SA" > "${RUNNER_TEMP}/sa.json"
 
       - name: Deploy to Firebase
