@@ -63,12 +63,23 @@ class AppPalette {
       brightness == Brightness.light ? light : dark;
 }
 
-abstract final class AppColors {
-  static AppPalette _current = AppPalette.dark;
+class AppColors extends InheritedWidget {
+  const AppColors({super.key, required this.palette, required super.child});
 
-  static void useBrightness(Brightness brightness) {
-    _current = AppPalette.forBrightness(brightness);
-  }
+  final AppPalette palette;
+
+  /// Subscribes the calling widget to palette changes and returns the palette.
+  static AppPalette of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppColors>()!.palette;
+
+  @override
+  bool updateShouldNotify(AppColors old) => palette != old.palette;
+
+  // Static backing used by AppText and other build-time helpers.
+  // Always up-to-date because the InheritedWidget provider updates _current
+  // before notifying dependents (parent builds before children).
+  static AppPalette _current = AppPalette.dark;
+  static void _sync(AppPalette palette) => _current = palette;
 
   static Color get background => _current.background;
   static Color get surface => _current.surface;

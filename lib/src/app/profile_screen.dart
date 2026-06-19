@@ -111,7 +111,7 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class ThemeSettingsScreen extends StatelessWidget {
+class ThemeSettingsScreen extends StatefulWidget {
   const ThemeSettingsScreen({
     super.key,
     required this.themeMode,
@@ -120,6 +120,24 @@ class ThemeSettingsScreen extends StatelessWidget {
 
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+
+  @override
+  State<ThemeSettingsScreen> createState() => _ThemeSettingsScreenState();
+}
+
+class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
+  late ThemeMode _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.themeMode;
+  }
+
+  void _select(ThemeMode mode) {
+    setState(() => _selected = mode);
+    widget.onThemeModeChanged(mode);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,14 +170,14 @@ class ThemeSettingsScreen extends StatelessWidget {
                           style: AppText.body,
                         ),
                         trailing: Icon(
-                          themeMode == mode
+                          _selected == mode
                               ? Icons.check_circle_rounded
                               : Icons.circle_outlined,
-                          color: themeMode == mode
+                          color: _selected == mode
                               ? AppColors.gold
                               : AppColors.muted,
                         ),
-                        onTap: () => onThemeModeChanged(mode),
+                        onTap: () => _select(mode),
                       ),
                     ),
                 ],

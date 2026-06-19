@@ -1206,6 +1206,38 @@ class _FinalCta extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 900),
           child: Column(
             children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0x14000000),
+                  borderRadius: BorderRadius.circular(40),
+                  border: Border.all(color: const Color(0x29000000)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.bolt_rounded,
+                      color: AppColors.background,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      'GET STARTED IN MINUTES',
+                      style: TextStyle(
+                        color: AppColors.background,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 26),
               Text(
                 'Your next asset can start here.',
                 textAlign: TextAlign.center,
@@ -1218,22 +1250,26 @@ class _FinalCta extends StatelessWidget {
                 ),
               ),
               SizedBox(height: 18),
-              Text(
-                'Install BrickClub, create your account, and explore verified '
-                'BrickShares built for long-term ownership.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.background,
-                  fontSize: 17,
-                  height: 1.5,
-                  fontWeight: FontWeight.w600,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Text(
+                  'Install BrickClub, create your account, and explore verified '
+                  'BrickShares built for long-term ownership.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: const Color(0xCC0B0D0F),
+                    fontSize: 17,
+                    height: 1.55,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              SizedBox(height: 32),
+              SizedBox(height: 34),
               Wrap(
                 alignment: WrapAlignment.center,
-                spacing: 12,
-                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 14,
+                runSpacing: 14,
                 children: [
                   _WebButton(
                     label: 'Install the app',
@@ -1242,7 +1278,8 @@ class _FinalCta extends StatelessWidget {
                     dark: true,
                   ),
                   _WebButton(
-                    label: 'Sign up',
+                    label: 'Create account',
+                    icon: Icons.arrow_forward_rounded,
                     onPressed: onSignUp,
                     darkOutline: true,
                   ),
@@ -1250,8 +1287,26 @@ class _FinalCta extends StatelessWidget {
                     onPressed: onSignIn,
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.background,
+                      textStyle: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    child: Text('Sign in'),
+                    child: const Text('I already have an account'),
+                  ),
+                ],
+              ),
+              SizedBox(height: 22),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 22,
+                runSpacing: 8,
+                children: const [
+                  _CtaReassurance(Icons.lock_outline_rounded, 'Secure KYC'),
+                  _CtaReassurance(Icons.payments_outlined, 'Free to browse'),
+                  _CtaReassurance(
+                    Icons.verified_outlined,
+                    'Verified assets only',
                   ),
                 ],
               ),
@@ -1259,6 +1314,32 @@ class _FinalCta extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CtaReassurance extends StatelessWidget {
+  const _CtaReassurance(this.icon, this.label);
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: const Color(0xCC0B0D0F), size: 16),
+        const SizedBox(width: 7),
+        Text(
+          label,
+          style: TextStyle(
+            color: const Color(0xCC0B0D0F),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1320,13 +1401,19 @@ class _WebButtonState extends State<_WebButton> {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = widget.dark || widget.darkOutline
+    // Light cream used for labels sitting on the near-black "dark" button so
+    // they stay legible against the dark fill (the button is used on the gold
+    // CTA band).
+    const onDark = Color(0xFFFAF6EE);
+    final foreground = widget.dark
+        ? onDark
+        : widget.darkOutline
         ? AppColors.background
         : widget.filled
         ? AppColors.background
         : AppColors.primary;
     final background = widget.dark
-        ? AppColors.background
+        ? (_hovered ? const Color(0xFF1B1F24) : AppColors.background)
         : widget.filled
         ? AppColors.gold
         : Colors.transparent;

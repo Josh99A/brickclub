@@ -76,7 +76,7 @@ class BrickClubApp extends StatefulWidget {
 }
 
 class _BrickClubAppState extends State<BrickClubApp> {
-  ThemeMode _themeMode = ThemeMode.system;
+  final _themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
   late final GoRouter _router;
 
   String get _authEntry => widget.showLandingPage ? '/landing' : '/signin';
@@ -84,8 +84,15 @@ class _BrickClubAppState extends State<BrickClubApp> {
   @override
   void initState() {
     super.initState();
+    _themeModeNotifier.addListener(() => setState(() {}));
     _loadThemeMode();
     _router = _createRouter();
+  }
+
+  @override
+  void dispose() {
+    _themeModeNotifier.dispose();
+    super.dispose();
   }
 
   Future<void> _loadThemeMode() async {
@@ -97,30 +104,30 @@ class _BrickClubAppState extends State<BrickClubApp> {
       _ => ThemeMode.system,
     };
     if (mounted) {
-      setState(() => _themeMode = mode);
+      _themeModeNotifier.value = mode;
     }
   }
 
   Future<void> _setThemeMode(ThemeMode mode) async {
-    setState(() => _themeMode = mode);
+    _themeModeNotifier.value = mode;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_themeModePreferenceKey, mode.name);
   }
 
   @override
   Widget build(BuildContext context) {
-    AppColors.useBrightness(_effectiveBrightness(context));
     return MaterialApp.router(
       title: 'BrickClub',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: rootScaffoldMessengerKey,
-      themeMode: _themeMode,
+      themeMode: _themeModeNotifier.value,
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       routerConfig: _router,
       builder: (context, child) {
-        AppColors.useBrightness(Theme.of(context).brightness);
-        return child ?? const SizedBox.shrink();
+        final palette = AppPalette.forBrightness(Theme.of(context).brightness);
+        AppColors._sync(palette);
+        return AppColors(palette: palette, child: child ?? const SizedBox.shrink());
       },
     );
   }
@@ -184,6 +191,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
                   path: '/home',
                   builder: (context, state) => Builder(
                     builder: (context) {
+                      AppColors.of(context);
                       final scope = MemberScope.of(context);
                       return HomeScreen(
                         kyc: scope.kyc,
@@ -203,6 +211,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
                   path: '/invest',
                   builder: (context, state) => Builder(
                     builder: (context) {
+                      AppColors.of(context);
                       final scope = MemberScope.of(context);
                       return InvestScreen(
                         kyc: scope.kyc,
@@ -221,6 +230,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
                   path: '/wallet',
                   builder: (context, state) => Builder(
                     builder: (context) {
+                      AppColors.of(context);
                       final scope = MemberScope.of(context);
                       return WalletScreen(
                         kyc: scope.kyc,
@@ -239,6 +249,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
                   path: '/portfolio',
                   builder: (context, state) => Builder(
                     builder: (context) {
+                      AppColors.of(context);
                       final scope = MemberScope.of(context);
                       return PortfolioScreen(
                         investmentRepository: widget.investmentRepository,
@@ -255,14 +266,18 @@ class _BrickClubAppState extends State<BrickClubApp> {
                   path: '/more',
                   builder: (context, state) => Builder(
                     builder: (context) {
+                      AppColors.of(context);
                       final scope = MemberScope.of(context);
-                      return ProfileScreen(
-                        user: widget.authRepository.currentUserDetails(),
-                        kyc: scope.kyc,
-                        supportRepository: widget.supportRepository,
-                        themeMode: _themeMode,
-                        onThemeModeChanged: _setThemeMode,
-                        onStartKyc: () => _openKyc(context),
+                      return ValueListenableBuilder<ThemeMode>(
+                        valueListenable: _themeModeNotifier,
+                        builder: (context, themeMode, _) => ProfileScreen(
+                          user: widget.authRepository.currentUserDetails(),
+                          kyc: scope.kyc,
+                          supportRepository: widget.supportRepository,
+                          themeMode: themeMode,
+                          onThemeModeChanged: _setThemeMode,
+                          onStartKyc: () => _openKyc(context),
+                        ),
                       );
                     },
                   ),
@@ -312,15 +327,6 @@ class _BrickClubAppState extends State<BrickClubApp> {
     );
   }
 
-  Brightness _effectiveBrightness(BuildContext context) {
-    return switch (_themeMode) {
-      ThemeMode.light => Brightness.light,
-      ThemeMode.dark => Brightness.dark,
-      ThemeMode.system =>
-        MediaQuery.maybePlatformBrightnessOf(context) ??
-            View.of(context).platformDispatcher.platformBrightness,
-    };
-  }
 }
 
 /// Shows the splash screen, then advances to sign in once [duration] elapses.
