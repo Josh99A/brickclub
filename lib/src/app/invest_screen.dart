@@ -38,6 +38,28 @@ class InvestScreen extends StatefulWidget {
 
 class _InvestScreenState extends State<InvestScreen> {
   BrickShareFilters filters = const BrickShareFilters();
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matchesSearch(InvestmentOpportunity opportunity) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return true;
+    final haystack = [
+      opportunity.title,
+      opportunity.location,
+      opportunity.assetClass,
+      opportunity.assetType,
+      opportunity.description,
+      opportunity.strategy,
+    ].join(' ').toLowerCase();
+    return haystack.contains(query);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +69,7 @@ class _InvestScreenState extends State<InvestScreen> {
         final allOpportunities = snapshot.data ?? const [];
         final opportunities = allOpportunities
             .where(filters.matches)
+            .where(_matchesSearch)
             .toList(growable: false);
         final featuredReturn = opportunities.isEmpty
             ? '0.0%'
@@ -57,6 +80,15 @@ class _InvestScreenState extends State<InvestScreen> {
           subtitle: 'Explore verified multi-asset BrickShares',
           onProfileTap: widget.onOpenProfile,
           children: [
+            AppTextField(
+              controller: _searchController,
+              compact: true,
+              hintText: 'Search by name, location, or asset class',
+              prefixIcon: Icons.search_rounded,
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.search,
+              onChanged: (value) => setState(() => _searchQuery = value),
+            ),
             SizedBox(
               height: 36,
               child: SingleChildScrollView(
@@ -123,16 +155,23 @@ class _InvestScreenState extends State<InvestScreen> {
                     Text(
                       allOpportunities.isEmpty
                           ? 'Admin-published verified assets will appear here.'
+                          : _searchQuery.trim().isNotEmpty
+                          ? 'No BrickShares match “${_searchQuery.trim()}”. Try a different search or adjust your filters.'
                           : 'Try a different asset class, risk level, or payment method.',
                       textAlign: TextAlign.center,
                       style: AppText.body,
                     ),
-                    SizedBox(height: 16),
-                    SecondaryButton(
-                      label: 'Reset filters',
-                      onPressed: () =>
-                          setState(() => filters = const BrickShareFilters()),
-                    ),
+                    if (allOpportunities.isNotEmpty) ...[
+                      SizedBox(height: 16),
+                      SecondaryButton(
+                        label: 'Reset filters',
+                        onPressed: () => setState(() {
+                          filters = const BrickShareFilters();
+                          _searchQuery = '';
+                          _searchController.clear();
+                        }),
+                      ),
+                    ],
                   ],
                 ),
               )

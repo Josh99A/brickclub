@@ -3148,7 +3148,9 @@ Future<void> _showAssetValuationDialog(
   required VoidCallback onChanged,
 }) async {
   final currentValue = TextEditingController(
-    text: asset.currentAssetValue.toStringAsFixed(0),
+    text: asset.currentAssetValue > 0
+        ? asset.currentAssetValue.toStringAsFixed(0)
+        : '',
   );
   final valuationDate = TextEditingController();
   final assetIncome = TextEditingController();
