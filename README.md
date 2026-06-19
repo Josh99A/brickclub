@@ -256,6 +256,43 @@ flutter build web --dart-define=USE_FIREBASE_EMULATORS=false
 flutter build apk --dart-define=USE_FIREBASE_EMULATORS=false
 ```
 
+### Production email and push notifications
+
+Operational emails (deposit, withdrawal, support, and KYC notifications) and FCM
+push are sent from `functions/src/index.ts`. In production these go through a
+real SMTP server instead of Mailpit, configured with deploy-time parameters plus
+one Secret Manager secret. Email sending is best-effort — if SMTP is unset or
+unreachable, the email is skipped and logged, never blocking the member or admin
+action that triggered it.
+
+Create the SMTP password secret (required — `firebase deploy --only functions`
+fails until it exists, because the secret is bound to every function):
+
+```powershell
+firebase functions:secrets:set SMTP_PASS
+```
+
+Set the non-secret SMTP parameters. Create `functions/.env.<production-project-id>`
+(git-ignored — never commit credentials):
+
+```dotenv
+SMTP_HOST=smtp.youremailprovider.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=apikey-or-username
+SMTP_FROM=BrickClub <no-reply@brickclub.app>
+```
+
+Push notifications require, in addition:
+
+- **iOS:** upload an APNs auth key (`.p8`) under Firebase Console → Project
+  Settings → Cloud Messaging, and enable the Push Notifications + Background
+  Modes capabilities in Xcode.
+- **Web:** build with the project's VAPID public key so `getToken()` can mint
+  web tokens:
+  `flutter build web --dart-define=FCM_VAPID_KEY=<public-vapid-key>`. The web
+  service worker is already at `web/firebase-messaging-sw.js`.
+
 Deploy Cloud Functions:
 
 ```powershell
@@ -277,6 +314,8 @@ Production checklist:
 - Set custom claims for initial admin users before exposing admin operations.
 - Deploy Firestore rules with `firebase deploy --only firestore:rules`.
 - Keep secrets out of source control; use Firebase environment/config or Secret Manager.
+- Set the `SMTP_PASS` secret and `functions/.env.<project>` SMTP parameters so operational emails send (see "Production email and push notifications").
+- Upload the APNs auth key for iOS push and build web with `FCM_VAPID_KEY` so push tokens can be minted on every platform.
 - Review Firebase security rules whenever Firestore, Storage, or other Firebase products are added.
 
 ## Verification

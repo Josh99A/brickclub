@@ -33,29 +33,7 @@ class WalletScreen extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  height: 170,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppColors.panel, AppColors.surface],
-                    ),
-                    border: Border.all(color: AppColors.border),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Verified wallet balance',
-                        style: AppText.bodyLarge,
-                      ),
-                      SizedBox(height: 10),
-                      Text(data.walletBalanceText, style: AppText.walletValue),
-                      SizedBox(height: 8),
-                      Text(data.cryptoRailsText, style: AppText.eyebrow),
-                    ],
-                  ),
-                ),
+                _WalletBalanceCard(data: data),
                 SizedBox(height: 18),
                 Text('Crypto order activity', style: AppText.h2),
                 _ActivityPanel(activity: data.activity),
@@ -111,6 +89,118 @@ class WalletScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _WalletBalanceCard extends StatelessWidget {
+  const _WalletBalanceCard({required this.data});
+
+  final MemberDashboardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRails = data.hasCryptoRails;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.panel, AppColors.surface],
+        ),
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.goldSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: AppColors.gold,
+                  size: 20,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Verified wallet balance',
+                  style: AppText.bodyLarge,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          Text(data.walletBalanceText, style: AppText.walletValue),
+          SizedBox(height: 14),
+          _CryptoRailsStatus(
+            label: data.cryptoRailsText,
+            active: hasRails,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CryptoRailsStatus extends StatelessWidget {
+  const _CryptoRailsStatus({required this.label, required this.active});
+
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.success : AppColors.muted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: active ? AppColors.goldSoft : AppColors.track,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: active ? AppColors.secondary : AppColors.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

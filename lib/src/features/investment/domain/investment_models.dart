@@ -203,9 +203,11 @@ class MemberDashboardData {
     return '$prefix${yearReturnPercent.toStringAsFixed(1)}% this year';
   }
 
+  bool get hasCryptoRails => cryptoRails.isNotEmpty;
+
   String get cryptoRailsText {
     if (cryptoRails.isEmpty) return 'No crypto rails enabled';
-    return 'Crypto rails: ${cryptoRails.join(' / ')}';
+    return cryptoRails.join(' · ');
   }
 
   bool get hasPortfolio => portfolioValueUsd > 0 || holdings.isNotEmpty;

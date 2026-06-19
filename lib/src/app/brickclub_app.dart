@@ -277,6 +277,10 @@ class _BrickClubAppState extends State<BrickClubApp> {
                           themeMode: themeMode,
                           onThemeModeChanged: _setThemeMode,
                           onStartKyc: () => _openKyc(context),
+                          onSignOut: () async {
+                            await widget.authRepository.signOut();
+                            _router.go(_authEntry);
+                          },
                         ),
                       );
                     },

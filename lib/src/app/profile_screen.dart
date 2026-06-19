@@ -9,6 +9,7 @@ class ProfileScreen extends StatelessWidget {
     required this.themeMode,
     required this.onThemeModeChanged,
     required this.onStartKyc,
+    required this.onSignOut,
   });
 
   final SignedInUserDetails? user;
@@ -17,6 +18,7 @@ class ProfileScreen extends StatelessWidget {
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final VoidCallback onStartKyc;
+  final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -89,8 +91,38 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
         ),
+        SizedBox(height: 18),
+        _LogoutButton(onSignOut: () => _confirmSignOut(context)),
       ],
     );
+  }
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final confirmed = await showAdaptiveDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.panel,
+        title: Text('Log out?', style: AppText.h2),
+        content: Text(
+          'You will need to sign in again to access your account.',
+          style: AppText.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) {
+      onSignOut();
+    }
   }
 
   String get _profileName {
@@ -108,6 +140,45 @@ class ProfileScreen extends StatelessWidget {
     if (email != null && email.isNotEmpty) return email;
 
     return 'Your account and BrickShares details';
+  }
+}
+
+class _LogoutButton extends StatelessWidget {
+  const _LogoutButton({required this.onSignOut});
+
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.red.shade400;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('profile-logout'),
+        onTap: onSignOut,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          height: 58,
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            color: AppColors.panel,
+            border: Border.all(color: color.withValues(alpha: .4)),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.logout_rounded, color: color, size: 20),
+              SizedBox(width: 14),
+              Text(
+                'Log out',
+                style: AppText.cardHeadingSmall.copyWith(color: color),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

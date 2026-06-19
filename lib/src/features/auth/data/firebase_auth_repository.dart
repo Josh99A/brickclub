@@ -28,6 +28,11 @@ class FirebaseAuthRepository implements AuthRepository {
   // Holds the web ConfirmationResult between sendPhoneVerificationCode and signInWithPhoneCode.
   ConfirmationResult? _webPhoneConfirmation;
 
+  // FCM tokens rotate over time. We subscribe to onTokenRefresh once so a
+  // rotated token is re-registered with the backend even without a fresh
+  // sign-in; otherwise the server would keep pushing to a dead token.
+  StreamSubscription<String>? _tokenRefreshSubscription;
+
   // Web push (FCM) needs the project's VAPID public key to mint a token. This
   // is a public key (it ships in client code), not a secret, and native
   // platforms ignore it — it sits alongside the other public Firebase web
@@ -231,11 +236,35 @@ class FirebaseAuthRepository implements AuthRepository {
   /// otherwise successful sign-in. It runs detached from the auth call and is
   /// time-boxed so a slow or unconfigured messaging stack cannot hang the UI.
   void _registerMessagingTokenInBackground() {
+    _listenForTokenRefresh();
     unawaited(
       _registerMessagingToken().timeout(
         _messagingTimeout,
         onTimeout: () {},
       ),
+    );
+  }
+
+  // Subscribe once to FCM token rotations and re-register the new token. The
+  // backend callable requires auth, so refreshes that fire while signed out
+  // simply fail and are swallowed inside _registerMessagingToken.
+  void _listenForTokenRefresh() {
+    if (_tokenRefreshSubscription != null) return;
+    if (kIsWeb && _webVapidKey.isEmpty) return;
+    _tokenRefreshSubscription = _firebaseMessaging.onTokenRefresh.listen(
+      (token) {
+        if (token.isEmpty) return;
+        unawaited(
+          _backendFunctions
+              .registerMessagingToken(
+                token: token,
+                platform: defaultTargetPlatform.name,
+              )
+              .timeout(_messagingTimeout, onTimeout: () {})
+              .catchError((_) {}),
+        );
+      },
+      onError: (_) {},
     );
   }
 

@@ -611,6 +611,16 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> signInWithGoogle() async {}
+
+  @override
+  Future<String> sendPhoneVerificationCode(String phoneNumber) async =>
+      'verification-id';
+
+  @override
+  Future<void> signInWithPhoneCode({
+    required String verificationId,
+    required String smsCode,
+  }) async {}
 }
 
 class FakeAdminRepository implements AdminRepository {
@@ -724,6 +734,8 @@ class FakeAdminRepository implements AdminRepository {
     required String displayName,
     required bool disabled,
     required bool admin,
+    bool emailVerified = false,
+    String phoneNumber = '',
   }) async {}
 
   @override
@@ -752,11 +764,58 @@ class FakeAdminRepository implements AdminRepository {
     required bool disabled,
     required bool admin,
     String? password,
+    bool? emailVerified,
+    String phoneNumber = '',
+  }) async {}
+
+  @override
+  Future<AdminUserDetail> loadUserDetail(String uid) async {
+    return AdminUserDetail(
+      user: data.users.firstWhere(
+        (user) => user.uid == uid,
+        orElse: () => data.users.first,
+      ),
+      kyc: null,
+      portfolio: const AdminUserPortfolio(
+        totalInvested: 0,
+        totalCurrentValue: 0,
+        totalDividends: 0,
+        totalProfitLoss: 0,
+        overallReturnPercentage: 0,
+        holdings: [],
+      ),
+      orders: const [],
+    );
+  }
+
+  @override
+  Future<void> updateAssetValuation({
+    required String id,
+    required double currentAssetValue,
+    String valuationDate = '',
+    String performanceNotes = '',
+    double assetIncome = 0,
+    double expenses = 0,
+    double netIncome = 0,
+    double occupancyRate = 0,
+  }) async {}
+
+  @override
+  Future<void> approveKycProfile(String uid) async {}
+
+  @override
+  Future<void> rejectKycProfile({
+    required String uid,
+    required String reason,
   }) async {}
 
   @override
   Future<String> uploadCryptoPaymentQrCode(AdminUploadFile file) async =>
       'https://example.com/${file.name}';
+
+  @override
+  Future<String> uploadAssetImage(AdminUploadFile file) async =>
+      'https://example.com/asset/${file.name}';
 
   @override
   Future<void> verifyDepositRequest(String id) async {}

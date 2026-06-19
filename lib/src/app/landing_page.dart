@@ -101,29 +101,231 @@ class _LandingPageState extends State<LandingPage> {
   }
 
   Future<void> _install() async {
-    if (!canInstallPwa()) {
-      showMessage(
-        context,
-        'Native app store links are coming soon. On Chrome or Edge desktop, '
-        'use the browser menu to install BrickClub.',
-      );
+    // Already added to the home screen / app drawer and launched standalone.
+    if (isPwaStandalone()) {
+      showMessage(context, 'BrickClub is already installed on this device.');
       return;
     }
-    final outcome = await promptPwaInstall();
-    if (!mounted) {
+
+    // Chromium-based browsers (Android Chrome, desktop Chrome/Edge) expose a
+    // native install prompt we can fire directly.
+    if (canInstallPwa()) {
+      final outcome = await promptPwaInstall();
+      if (!mounted) {
+        return;
+      }
+      switch (outcome) {
+        case 'accepted':
+          showMessage(context, 'Installing BrickClub on your device…');
+        case 'dismissed':
+          showMessage(context, 'Install dismissed. You can install any time.');
+        default:
+          // Prompt was lost (e.g. already consumed) — fall back to guidance.
+          await _showInstallInstructions();
+      }
       return;
     }
-    switch (outcome) {
-      case 'accepted':
-        showMessage(context, 'Installing BrickClub on your device…');
-      case 'dismissed':
-        showMessage(context, 'Install dismissed. You can install any time.');
-      default:
-        showMessage(
-          context,
-          'Native app store links are coming soon.',
-        );
-    }
+
+    // No native prompt available. iOS Safari never fires one, and other
+    // browsers may not have captured it yet — guide the user manually.
+    await _showInstallInstructions();
+  }
+
+  Future<void> _showInstallInstructions() {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.panel,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _InstallInstructionsSheet(platform: pwaPlatform()),
+    );
+  }
+}
+
+/// Step-by-step guidance for adding BrickClub to a phone home screen / app
+/// drawer when the browser does not expose a one-tap install prompt (always
+/// the case on iOS Safari).
+class _InstallInstructionsSheet extends StatelessWidget {
+  const _InstallInstructionsSheet({required this.platform});
+
+  final String platform;
+
+  @override
+  Widget build(BuildContext context) {
+    final ({String title, String intro, List<_InstallStep> steps}) content =
+        switch (platform) {
+      'ios' => (
+          title: 'Install on iPhone or iPad',
+          intro: 'Add BrickClub to your home screen straight from Safari — no '
+              'App Store needed.',
+          steps: const [
+            _InstallStep(
+              Icons.ios_share_rounded,
+              'Tap the Share button in Safari\'s toolbar.',
+            ),
+            _InstallStep(
+              Icons.add_box_outlined,
+              'Scroll down and choose “Add to Home Screen”.',
+            ),
+            _InstallStep(
+              Icons.check_circle_outline_rounded,
+              'Tap “Add” — BrickClub lands on your home screen.',
+            ),
+          ],
+        ),
+      'android' => (
+          title: 'Install on Android',
+          intro: 'Add BrickClub to your device in a couple of taps from your '
+              'browser.',
+          steps: const [
+            _InstallStep(
+              Icons.more_vert_rounded,
+              'Open your browser menu (⋮ in the top corner).',
+            ),
+            _InstallStep(
+              Icons.install_mobile_rounded,
+              'Tap “Install app” or “Add to Home screen”.',
+            ),
+            _InstallStep(
+              Icons.check_circle_outline_rounded,
+              'Confirm — BrickClub appears in your app drawer.',
+            ),
+          ],
+        ),
+      _ => (
+          title: 'Install on desktop',
+          intro: 'Install BrickClub as an app from Chrome or Edge.',
+          steps: const [
+            _InstallStep(
+              Icons.install_desktop_rounded,
+              'Click the install icon in the address bar, or open the '
+                  'browser menu.',
+            ),
+            _InstallStep(
+              Icons.check_circle_outline_rounded,
+              'Choose “Install” to launch BrickClub in its own window.',
+            ),
+          ],
+        ),
+    };
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.track,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.goldSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.download_rounded,
+                    color: AppColors.gold,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Text(content.title, style: AppText.h2)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(content.intro, style: AppText.bodyLarge),
+            const SizedBox(height: 20),
+            for (var i = 0; i < content.steps.length; i++) ...[
+              _InstallStepRow(index: i + 1, step: content.steps[i]),
+              if (i < content.steps.length - 1) const SizedBox(height: 14),
+            ],
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: _WebButton(
+                label: 'Got it',
+                icon: Icons.check_rounded,
+                filled: true,
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InstallStep {
+  const _InstallStep(this.icon, this.label);
+
+  final IconData icon;
+  final String label;
+}
+
+class _InstallStepRow extends StatelessWidget {
+  const _InstallStepRow({required this.index, required this.step});
+
+  final int index;
+  final _InstallStep step;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.track,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            '$index',
+            style: TextStyle(
+              color: AppColors.primary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Icon(step.icon, color: AppColors.gold, size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(
+              step.label,
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 14,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

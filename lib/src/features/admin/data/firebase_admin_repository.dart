@@ -29,6 +29,8 @@ class FirebaseAdminRepository implements AdminRepository {
     required String displayName,
     required bool disabled,
     required bool admin,
+    bool emailVerified = false,
+    String phoneNumber = '',
   }) {
     return _callVoid('createAdminUser', {
       'email': email,
@@ -36,6 +38,8 @@ class FirebaseAdminRepository implements AdminRepository {
       'displayName': displayName,
       'disabled': disabled,
       'admin': admin,
+      'emailVerified': emailVerified,
+      'phoneNumber': phoneNumber,
     });
   }
 
@@ -47,6 +51,8 @@ class FirebaseAdminRepository implements AdminRepository {
     required bool disabled,
     required bool admin,
     String? password,
+    bool? emailVerified,
+    String phoneNumber = '',
   }) {
     return _callVoid('updateAdminUser', {
       'uid': uid,
@@ -55,6 +61,8 @@ class FirebaseAdminRepository implements AdminRepository {
       'displayName': displayName,
       'disabled': disabled,
       'admin': admin,
+      'emailVerified': ?emailVerified,
+      'phoneNumber': phoneNumber,
     });
   }
 
@@ -66,6 +74,12 @@ class FirebaseAdminRepository implements AdminRepository {
   @override
   Future<void> setUserAdmin({required String uid, required bool admin}) {
     return _callVoid('setUserAdmin', {'uid': uid, 'admin': admin});
+  }
+
+  @override
+  Future<AdminUserDetail> loadUserDetail(String uid) async {
+    final data = await _callMap('getAdminUserDetail', {'uid': uid});
+    return AdminUserDetail.fromJson(data);
   }
 
   @override
@@ -126,6 +140,22 @@ class FirebaseAdminRepository implements AdminRepository {
     final safeName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '-');
     final reference = _storage.ref(
       'admin/payment-qr/${DateTime.now().millisecondsSinceEpoch}-$safeName',
+    );
+    await reference.putData(
+      Uint8List.fromList(file.bytes),
+      SettableMetadata(
+        contentType: file.contentType,
+        customMetadata: {'originalName': file.name},
+      ),
+    );
+    return reference.getDownloadURL();
+  }
+
+  @override
+  Future<String> uploadAssetImage(AdminUploadFile file) async {
+    final safeName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '-');
+    final reference = _storage.ref(
+      'admin/asset-images/${DateTime.now().millisecondsSinceEpoch}-$safeName',
     );
     await reference.putData(
       Uint8List.fromList(file.bytes),

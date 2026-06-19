@@ -207,6 +207,62 @@ class _BottomNavItem extends StatelessWidget {
   }
 }
 
+/// Shows an asset photo from a remote [imageUrl], falling back to the bundled
+/// placeholder while loading, on error, or when no URL is provided.
+class AssetImageView extends StatelessWidget {
+  const AssetImageView({
+    super.key,
+    required this.imageUrl,
+    required this.width,
+    required this.height,
+  });
+
+  final String? imageUrl;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl;
+    if (url == null || url.isEmpty) {
+      return _fallback();
+    }
+    return Image.network(
+      url,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return Container(
+          width: width,
+          height: height,
+          color: AppColors.surface,
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.gold,
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) => _fallback(),
+    );
+  }
+
+  Widget _fallback() {
+    return Image.asset(
+      'assets/images/skyline_heights.png',
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+    );
+  }
+}
+
 class InvestmentCard extends StatelessWidget {
   const InvestmentCard({
     super.key,
@@ -217,6 +273,7 @@ class InvestmentCard extends StatelessWidget {
     this.location = 'Central Business District',
     this.minimum = '\$50',
     this.returnText = '11.8%',
+    this.imageUrl,
   });
 
   final VoidCallback onTap;
@@ -226,6 +283,7 @@ class InvestmentCard extends StatelessWidget {
   final String location;
   final String minimum;
   final String returnText;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -253,11 +311,10 @@ class InvestmentCard extends StatelessWidget {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.asset(
-                        'assets/images/skyline_heights.png',
+                      child: AssetImageView(
+                        imageUrl: imageUrl,
                         width: compact ? 134 : 128,
                         height: height,
-                        fit: BoxFit.cover,
                       ),
                     ),
                     Positioned(
@@ -595,19 +652,22 @@ class SecondaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: compact ? 95 : double.infinity,
-      height: compact ? 38 : 46,
+      width: compact ? null : double.infinity,
+      height: compact ? 40 : 46,
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
           side: BorderSide(color: AppColors.border),
           backgroundColor: AppColors.panel,
+          padding: compact
+              ? const EdgeInsets.symmetric(horizontal: 18)
+              : null,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: Text(label),
+        child: Text(label, overflow: TextOverflow.ellipsis),
       ),
     );
   }
@@ -618,6 +678,7 @@ class AppTextField extends StatefulWidget {
     super.key,
     this.initialValue,
     this.controller,
+    this.label,
     this.hintText,
     this.obscureText = false,
     this.compact = false,
@@ -630,6 +691,7 @@ class AppTextField extends StatefulWidget {
 
   final String? initialValue;
   final TextEditingController? controller;
+  final String? label;
   final String? hintText;
   final bool obscureText;
   final bool compact;
@@ -662,7 +724,7 @@ class _AppTextFieldState extends State<AppTextField> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final field = SizedBox(
       height: widget.compact ? 44 : 50,
       child: TextFormField(
         controller: widget.controller,
@@ -715,6 +777,19 @@ class _AppTextFieldState extends State<AppTextField> {
           ),
         ),
       ),
+    );
+
+    if (widget.label == null) return field;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          child: Text(widget.label!, style: AppText.fieldLabel),
+        ),
+        field,
+      ],
     );
   }
 }

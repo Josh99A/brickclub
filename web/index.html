@@ -80,8 +80,32 @@
       window.addEventListener('appinstalled', function () {
         deferred = null;
       });
+
+      function detectPlatform() {
+        var ua = navigator.userAgent || navigator.vendor || '';
+        // iPadOS 13+ reports as desktop Safari, so also treat touch-capable
+        // Macs as iOS for install-instruction purposes.
+        var isIosDevice = /iPad|iPhone|iPod/.test(ua) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIosDevice) {
+          return 'ios';
+        }
+        if (/android/i.test(ua)) {
+          return 'android';
+        }
+        return 'desktop';
+      }
+
+      function isStandalone() {
+        return (window.matchMedia &&
+            window.matchMedia('(display-mode: standalone)').matches) ||
+          window.navigator.standalone === true;
+      }
+
       return {
         canInstall: function () { return deferred !== null; },
+        platform: function () { return detectPlatform(); },
+        isStandalone: function () { return isStandalone(); },
         prompt: function () {
           if (deferred === null) {
             return Promise.resolve('unavailable');
