@@ -9,6 +9,8 @@ abstract interface class AdminRepository {
     required String displayName,
     required bool disabled,
     required bool admin,
+    bool emailVerified = false,
+    String phoneNumber = '',
   });
 
   Future<void> updateUser({
@@ -18,11 +20,15 @@ abstract interface class AdminRepository {
     required bool disabled,
     required bool admin,
     String? password,
+    bool? emailVerified,
+    String phoneNumber = '',
   });
 
   Future<void> deleteUser(String uid);
 
   Future<void> setUserAdmin({required String uid, required bool admin});
+
+  Future<AdminUserDetail> loadUserDetail(String uid);
 
   Future<void> createAsset(AdminAsset asset);
 
@@ -48,6 +54,8 @@ abstract interface class AdminRepository {
   Future<void> deleteCryptoPaymentOption(String id);
 
   Future<String> uploadCryptoPaymentQrCode(AdminUploadFile file);
+
+  Future<String> uploadAssetImage(AdminUploadFile file);
 
   Future<void> verifyDepositRequest(String id);
 

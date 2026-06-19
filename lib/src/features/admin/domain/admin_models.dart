@@ -88,6 +88,7 @@ class AdminUser {
     required this.admin,
     required this.createdAt,
     required this.lastSignInAt,
+    this.phoneNumber = '',
   });
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {
@@ -100,6 +101,7 @@ class AdminUser {
       admin: json['admin'] as bool? ?? false,
       createdAt: json['createdAt'] as String?,
       lastSignInAt: json['lastSignInAt'] as String?,
+      phoneNumber: json['phoneNumber'] as String? ?? '',
     );
   }
 
@@ -111,6 +113,175 @@ class AdminUser {
   final bool admin;
   final String? createdAt;
   final String? lastSignInAt;
+  final String phoneNumber;
+}
+
+class AdminUserDetail {
+  const AdminUserDetail({
+    required this.user,
+    required this.kyc,
+    required this.portfolio,
+    required this.orders,
+  });
+
+  factory AdminUserDetail.fromJson(Map<String, dynamic> json) {
+    final kycJson = json['kyc'];
+    return AdminUserDetail(
+      user: AdminUser.fromJson(
+        Map<String, dynamic>.from(json['user'] as Map? ?? {}),
+      ),
+      kyc: kycJson is Map
+          ? AdminUserKyc.fromJson(Map<String, dynamic>.from(kycJson))
+          : null,
+      portfolio: AdminUserPortfolio.fromJson(
+        Map<String, dynamic>.from(json['portfolio'] as Map? ?? {}),
+      ),
+      orders: _list(json['orders'], AdminUserOrder.fromJson),
+    );
+  }
+
+  final AdminUser user;
+  final AdminUserKyc? kyc;
+  final AdminUserPortfolio portfolio;
+  final List<AdminUserOrder> orders;
+}
+
+class AdminUserKyc {
+  const AdminUserKyc({
+    required this.fullLegalName,
+    required this.email,
+    required this.phoneNumber,
+    required this.dateOfBirth,
+    required this.status,
+    required this.rejectionReason,
+    required this.phoneVerified,
+    required this.governmentIdUrl,
+    required this.selfieUrl,
+    required this.addressProofUrl,
+    required this.submittedAt,
+  });
+
+  factory AdminUserKyc.fromJson(Map<String, dynamic> json) {
+    return AdminUserKyc(
+      fullLegalName: json['fullLegalName'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      phoneNumber: json['phoneNumber'] as String? ?? '',
+      dateOfBirth: json['dateOfBirth'] as String? ?? '',
+      status: json['status'] as String? ?? 'notStarted',
+      rejectionReason: json['rejectionReason'] as String? ?? '',
+      phoneVerified: json['phoneVerified'] as bool? ?? false,
+      governmentIdUrl: json['governmentIdUrl'] as String? ?? '',
+      selfieUrl: json['selfieUrl'] as String? ?? '',
+      addressProofUrl: json['addressProofUrl'] as String? ?? '',
+      submittedAt: json['submittedAt'] as String? ?? '',
+    );
+  }
+
+  final String fullLegalName;
+  final String email;
+  final String phoneNumber;
+  final String dateOfBirth;
+  final String status;
+  final String rejectionReason;
+  final bool phoneVerified;
+  final String governmentIdUrl;
+  final String selfieUrl;
+  final String addressProofUrl;
+  final String submittedAt;
+
+  String get statusLabel => switch (status) {
+    'notStarted' => 'Not started',
+    'inProgress' => 'In progress',
+    'submitted' => 'Submitted',
+    'approved' => 'Approved',
+    'rejected' => 'Rejected',
+    _ => status,
+  };
+}
+
+class AdminUserPortfolio {
+  const AdminUserPortfolio({
+    required this.totalInvested,
+    required this.totalCurrentValue,
+    required this.totalDividends,
+    required this.totalProfitLoss,
+    required this.overallReturnPercentage,
+    required this.holdings,
+  });
+
+  factory AdminUserPortfolio.fromJson(Map<String, dynamic> json) {
+    return AdminUserPortfolio(
+      totalInvested: (json['totalInvested'] as num?)?.toDouble() ?? 0,
+      totalCurrentValue: (json['totalCurrentValue'] as num?)?.toDouble() ?? 0,
+      totalDividends: (json['totalDividends'] as num?)?.toDouble() ?? 0,
+      totalProfitLoss: (json['totalProfitLoss'] as num?)?.toDouble() ?? 0,
+      overallReturnPercentage:
+          (json['overallReturnPercentage'] as num?)?.toDouble() ?? 0,
+      holdings: _list(json['holdings'], AdminUserHolding.fromJson),
+    );
+  }
+
+  final double totalInvested;
+  final double totalCurrentValue;
+  final double totalDividends;
+  final double totalProfitLoss;
+  final double overallReturnPercentage;
+  final List<AdminUserHolding> holdings;
+}
+
+class AdminUserHolding {
+  const AdminUserHolding({
+    required this.assetId,
+    required this.assetTitle,
+    required this.amountInvested,
+    required this.currentValue,
+    required this.profitLoss,
+    required this.returnPercentage,
+  });
+
+  factory AdminUserHolding.fromJson(Map<String, dynamic> json) {
+    return AdminUserHolding(
+      assetId: json['assetId'] as String? ?? '',
+      assetTitle: json['assetTitle'] as String? ?? '',
+      amountInvested: (json['amountInvested'] as num?)?.toDouble() ?? 0,
+      currentValue: (json['currentValue'] as num?)?.toDouble() ?? 0,
+      profitLoss: (json['profitLoss'] as num?)?.toDouble() ?? 0,
+      returnPercentage: (json['returnPercentage'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  final String assetId;
+  final String assetTitle;
+  final double amountInvested;
+  final double currentValue;
+  final double profitLoss;
+  final double returnPercentage;
+}
+
+class AdminUserOrder {
+  const AdminUserOrder({
+    required this.id,
+    required this.opportunityTitle,
+    required this.amountUsd,
+    required this.status,
+    required this.updatedAt,
+  });
+
+  factory AdminUserOrder.fromJson(Map<String, dynamic> json) {
+    return AdminUserOrder(
+      id: json['id'] as String? ?? '',
+      opportunityTitle: json['opportunityTitle'] as String? ?? '',
+      amountUsd: (json['amountUsd'] as num?)?.toDouble() ?? 0,
+      status: json['status'] as String? ?? '',
+      updatedAt: json['updatedAt'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String opportunityTitle;
+  final double amountUsd;
+  final String status;
+  final String updatedAt;
 }
 
 class AdminAsset {
@@ -124,6 +295,7 @@ class AdminAsset {
     required this.publishedStatus,
     this.description = '',
     this.category = 'realEstate',
+    this.images = const [],
     this.purchasePrice = 0,
     this.fundingTarget = 0,
     this.amountFunded = 0,
@@ -165,6 +337,7 @@ class AdminAsset {
       publishedStatus: json['publishedStatus'] as String? ?? 'Draft',
       description: json['description'] as String? ?? '',
       category: json['category'] as String? ?? 'realEstate',
+      images: _stringList(json['images']),
       purchasePrice: purchasePrice,
       fundingTarget: (json['fundingTarget'] as num?)?.toDouble() ?? 0,
       amountFunded: (json['amountFunded'] as num?)?.toDouble() ?? 0,
@@ -196,6 +369,7 @@ class AdminAsset {
       'publishedStatus': publishedStatus,
       'description': description,
       'category': category,
+      'images': images,
       'assetType': type,
       'purchasePrice': purchasePrice,
       'fundingTarget': fundingTarget,
@@ -224,6 +398,7 @@ class AdminAsset {
     String? publishedStatus,
     String? description,
     String? category,
+    List<String>? images,
     double? purchasePrice,
     double? fundingTarget,
     double? amountFunded,
@@ -250,6 +425,7 @@ class AdminAsset {
       publishedStatus: publishedStatus ?? this.publishedStatus,
       description: description ?? this.description,
       category: category ?? this.category,
+      images: images ?? this.images,
       purchasePrice: purchasePrice ?? this.purchasePrice,
       fundingTarget: fundingTarget ?? this.fundingTarget,
       amountFunded: amountFunded ?? this.amountFunded,
@@ -277,6 +453,7 @@ class AdminAsset {
   final String publishedStatus;
   final String description;
   final String category;
+  final List<String> images;
   final double purchasePrice;
   final double fundingTarget;
   final double amountFunded;
@@ -588,5 +765,16 @@ List<T> _list<T>(
   return value
       .whereType<Map>()
       .map((item) => fromJson(Map<String, dynamic>.from(item)))
+      .toList();
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! List) {
+    return const [];
+  }
+
+  return value
+      .map((item) => item?.toString() ?? '')
+      .where((item) => item.isNotEmpty)
       .toList();
 }

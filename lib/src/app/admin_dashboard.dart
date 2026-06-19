@@ -258,9 +258,11 @@ class _AdminTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 600;
     return Container(
-      height: 78,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      height: compact ? 62 : 78,
+      padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 24),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
@@ -274,14 +276,17 @@ class _AdminTopBar extends StatelessWidget {
                 icon: Icon(Icons.menu_rounded),
               ),
             ),
-            SizedBox(width: 8),
+            SizedBox(width: compact ? 2 : 8),
           ],
-          Text(
-            title == 'Overview' ? 'Admin overview' : title,
-            style: TextStyle(
-              color: AppColors.primary,
-              fontSize: 23,
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              title == 'Overview' ? 'Admin overview' : title,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: compact ? 18 : 23,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
           const Spacer(),
@@ -616,43 +621,63 @@ class _OverviewPanel extends StatelessWidget {
           style: TextStyle(color: AppColors.secondary, fontSize: 14),
         ),
         SizedBox(height: 26),
-        Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          children: [
-            _AdminMetricCard(
-              'Total users',
-              '${data.users.length}',
-              '$activeUsers active',
-              Icons.people_alt_outlined,
-            ),
-            _AdminMetricCard(
-              'Live assets',
-              '$liveAssets',
-              '${data.assets.length} total',
-              Icons.apartment_outlined,
-            ),
-            _AdminMetricCard(
-              'Payment options',
-              '$enabledPaymentOptions',
-              'enabled networks',
-              Icons.currency_bitcoin_rounded,
-            ),
-            _AdminMetricCard(
-              'Pending reviews',
-              '${pendingAssets + pendingDeposits + pendingSupport}',
-              '$pendingDeposits deposits',
-              Icons.pending_actions_outlined,
-              warning: true,
-            ),
-            _AdminMetricCard(
-              'Support tickets',
-              '${data.supportTickets.length}',
-              '$pendingSupport need reply',
-              Icons.support_agent_rounded,
-              warning: pendingSupport > 0,
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const spacing = 14.0;
+            final width = constraints.maxWidth;
+            final columns = width >= 900
+                ? 4
+                : width >= 620
+                ? 3
+                : width >= 360
+                ? 2
+                : 1;
+            final cardWidth =
+                (width - spacing * (columns - 1)) / columns;
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                _AdminMetricCard(
+                  'Total users',
+                  '${data.users.length}',
+                  '$activeUsers active',
+                  Icons.people_alt_outlined,
+                  width: cardWidth,
+                ),
+                _AdminMetricCard(
+                  'Live assets',
+                  '$liveAssets',
+                  '${data.assets.length} total',
+                  Icons.apartment_outlined,
+                  width: cardWidth,
+                ),
+                _AdminMetricCard(
+                  'Payment options',
+                  '$enabledPaymentOptions',
+                  'enabled networks',
+                  Icons.currency_bitcoin_rounded,
+                  width: cardWidth,
+                ),
+                _AdminMetricCard(
+                  'Pending reviews',
+                  '${pendingAssets + pendingDeposits + pendingSupport}',
+                  '$pendingDeposits deposits',
+                  Icons.pending_actions_outlined,
+                  warning: true,
+                  width: cardWidth,
+                ),
+                _AdminMetricCard(
+                  'Support tickets',
+                  '${data.supportTickets.length}',
+                  '$pendingSupport need reply',
+                  Icons.support_agent_rounded,
+                  warning: pendingSupport > 0,
+                  width: cardWidth,
+                ),
+              ],
+            );
+          },
         ),
         SizedBox(height: 20),
         LayoutBuilder(
@@ -734,6 +759,7 @@ class _AdminMetricCard extends StatelessWidget {
     this.change,
     this.icon, {
     this.warning = false,
+    this.width,
   });
 
   final String label;
@@ -741,11 +767,12 @@ class _AdminMetricCard extends StatelessWidget {
   final String change;
   final IconData icon;
   final bool warning;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 226,
+      width: width ?? 226,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.panel,
@@ -1028,17 +1055,37 @@ class _UsersPanel extends StatelessWidget {
         title: 'Users',
         child: _UserTable(
           users: users,
+          onView: (user) => _showUserDetailDialog(
+            context,
+            repository: repository,
+            user: user,
+            onChanged: onChanged,
+          ),
           onEdit: (user) => _showUserDialog(
             context,
             repository: repository,
             user: user,
             onChanged: onChanged,
           ),
-          onDelete: (user) => _runAdminAction(
-            context,
-            action: () => repository.deleteUser(user.uid),
-            onChanged: onChanged,
-          ),
+          onDelete: (user) async {
+            final label = user.displayName?.isNotEmpty == true
+                ? user.displayName!
+                : user.email;
+            final confirmed = await _confirmDestructiveAction(
+              context,
+              title: 'Delete user?',
+              message:
+                  'This permanently deletes $label and removes their account '
+                  'access. This action cannot be undone.',
+            );
+            if (!confirmed || !context.mounted) return;
+            await _runAdminAction(
+              context,
+              action: () => repository.deleteUser(user.uid),
+              onChanged: onChanged,
+              successMessage: 'User deleted',
+            );
+          },
           onToggleAdmin: (user, admin) => _runAdminAction(
             context,
             action: () => repository.setUserAdmin(uid: user.uid, admin: admin),
@@ -1335,11 +1382,22 @@ class _AssetsPanel extends StatelessWidget {
             asset: asset,
             onChanged: onChanged,
           ),
-          onDelete: (asset) => _runAdminAction(
-            context,
-            action: () => repository.deleteAsset(asset.id),
-            onChanged: onChanged,
-          ),
+          onDelete: (asset) async {
+            final confirmed = await _confirmDestructiveAction(
+              context,
+              title: 'Delete asset?',
+              message:
+                  'This permanently removes "${asset.title}" from the catalog. '
+                  'This action cannot be undone.',
+            );
+            if (!confirmed || !context.mounted) return;
+            await _runAdminAction(
+              context,
+              action: () => repository.deleteAsset(asset.id),
+              onChanged: onChanged,
+              successMessage: 'Asset deleted',
+            );
+          },
           onValuation: (asset) => _showAssetValuationDialog(
             context,
             repository: repository,
@@ -1389,11 +1447,24 @@ class _PaymentsPanel extends StatelessWidget {
                 option: option,
                 onChanged: onChanged,
               ),
-              onDelete: (option) => _runAdminAction(
-                context,
-                action: () => repository.deleteCryptoPaymentOption(option.id),
-                onChanged: onChanged,
-              ),
+              onDelete: (option) async {
+                final confirmed = await _confirmDestructiveAction(
+                  context,
+                  title: 'Delete payment option?',
+                  message:
+                      'This permanently removes the ${option.network} '
+                      '(${option.assetSymbol}) payment option. '
+                      'This action cannot be undone.',
+                );
+                if (!confirmed || !context.mounted) return;
+                await _runAdminAction(
+                  context,
+                  action: () =>
+                      repository.deleteCryptoPaymentOption(option.id),
+                  onChanged: onChanged,
+                  successMessage: 'Payment option deleted',
+                );
+              },
             ),
             SizedBox(height: 24),
             Text('Deposit proof review', style: AppText.cardHeadingSmall),
@@ -1716,19 +1787,39 @@ class _SectionPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: Text(description, style: AppText.bodyLarge)),
-            if (actionLabel != null) ...[
-              const SizedBox(width: 16),
-              _SectionActionButton(
-                label: actionLabel!,
-                icon: actionIcon,
-                onPressed: onAction,
-              ),
-            ],
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final description = Text(this.description, style: AppText.bodyLarge);
+            if (actionLabel == null) return description;
+            // Stack the action below the description on narrow screens so the
+            // button keeps its full label instead of crowding the text.
+            if (constraints.maxWidth < 520) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  description,
+                  const SizedBox(height: 14),
+                  _SectionActionButton(
+                    label: actionLabel!,
+                    icon: actionIcon,
+                    onPressed: onAction,
+                  ),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: description),
+                const SizedBox(width: 16),
+                _SectionActionButton(
+                  label: actionLabel!,
+                  icon: actionIcon,
+                  onPressed: onAction,
+                ),
+              ],
+            );
+          },
         ),
         SizedBox(height: 20),
         child,
@@ -1795,6 +1886,7 @@ class _UserTable extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onToggleAdmin,
+    this.onView,
   });
 
   final List<AdminUser> users;
@@ -1802,6 +1894,7 @@ class _UserTable extends StatelessWidget {
   final ValueChanged<AdminUser>? onEdit;
   final ValueChanged<AdminUser>? onDelete;
   final void Function(AdminUser user, bool admin)? onToggleAdmin;
+  final ValueChanged<AdminUser>? onView;
 
   @override
   Widget build(BuildContext context) {
@@ -1824,14 +1917,26 @@ class _UserTable extends StatelessWidget {
       onDelete: onDelete == null
           ? null
           : (row) => onDelete!(row.source as AdminUser),
-      trailingBuilder: compact || onToggleAdmin == null
+      trailingBuilder: compact
           ? null
           : (row) {
               final user = row.source as AdminUser;
-              return Switch(
-                value: user.admin,
-                onChanged: (value) => onToggleAdmin!(user, value),
-                activeThumbColor: AppColors.gold,
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onView != null)
+                    IconButton(
+                      tooltip: 'View details',
+                      onPressed: () => onView!(user),
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                    ),
+                  if (onToggleAdmin != null)
+                    Switch(
+                      value: user.admin,
+                      onChanged: (value) => onToggleAdmin!(user, value),
+                      activeThumbColor: AppColors.gold,
+                    ),
+                ],
               );
             },
     );
@@ -2141,6 +2246,262 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+Future<void> _showUserDetailDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required AdminUser user,
+  required VoidCallback onChanged,
+}) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        backgroundColor: AppColors.panel,
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                user.displayName?.isNotEmpty == true
+                    ? user.displayName!
+                    : user.email,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Edit user',
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _showUserDialog(
+                  context,
+                  repository: repository,
+                  user: user,
+                  onChanged: onChanged,
+                );
+              },
+              icon: const Icon(Icons.edit_outlined, size: 20),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 460,
+          child: FutureBuilder<AdminUserDetail>(
+            future: repository.loadUserDetail(user.uid),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const SizedBox(
+                  height: 160,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snapshot.hasError) {
+                return SizedBox(
+                  height: 120,
+                  child: Center(
+                    child: Text(
+                      'Could not load user details.\n${snapshot.error}',
+                      style: AppText.small,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
+              return _UserDetailBody(detail: snapshot.data!);
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _UserDetailBody extends StatelessWidget {
+  const _UserDetailBody({required this.detail});
+
+  final AdminUserDetail detail;
+
+  String _money(double value) => '\$${value.toStringAsFixed(2)}';
+
+  String _date(String? value) {
+    if (value == null || value.isEmpty) return '-';
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return value;
+    final local = parsed.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = detail.user;
+    final kyc = detail.kyc;
+    final portfolio = detail.portfolio;
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _DetailSection('Account'),
+          _DetailRow('User ID', user.uid),
+          _DetailRow('Email', user.email),
+          _DetailRow('Email verified', user.emailVerified ? 'Yes' : 'No'),
+          _DetailRow(
+            'Phone',
+            user.phoneNumber.isNotEmpty ? user.phoneNumber : '-',
+          ),
+          _DetailRow('Role', user.admin ? 'Admin' : 'Member'),
+          _DetailRow('Status', user.disabled ? 'Disabled' : 'Active'),
+          _DetailRow('Created', _date(user.createdAt)),
+          _DetailRow('Last sign-in', _date(user.lastSignInAt)),
+          const SizedBox(height: 14),
+          const _DetailSection('KYC'),
+          if (kyc == null)
+            _DetailRow('Status', 'Not submitted')
+          else ...[
+            _DetailRow('Status', kyc.statusLabel),
+            _DetailRow('Legal name', kyc.fullLegalName),
+            _DetailRow('Date of birth', _date(kyc.dateOfBirth)),
+            _DetailRow(
+              'KYC phone',
+              kyc.phoneNumber.isNotEmpty ? kyc.phoneNumber : '-',
+            ),
+            _DetailRow('Phone verified', kyc.phoneVerified ? 'Yes' : 'No'),
+            if (kyc.rejectionReason.isNotEmpty)
+              _DetailRow('Rejection reason', kyc.rejectionReason),
+            _DetailRow('Submitted', _date(kyc.submittedAt)),
+            if (kyc.governmentIdUrl.isNotEmpty ||
+                kyc.selfieUrl.isNotEmpty ||
+                kyc.addressProofUrl.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    if (kyc.governmentIdUrl.isNotEmpty)
+                      _DocLink('Government ID', kyc.governmentIdUrl),
+                    if (kyc.selfieUrl.isNotEmpty)
+                      _DocLink('Selfie', kyc.selfieUrl),
+                    if (kyc.addressProofUrl.isNotEmpty)
+                      _DocLink('Address proof', kyc.addressProofUrl),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: 14),
+          const _DetailSection('Portfolio'),
+          _DetailRow('Total invested', _money(portfolio.totalInvested)),
+          _DetailRow('Current value', _money(portfolio.totalCurrentValue)),
+          _DetailRow('Dividends', _money(portfolio.totalDividends)),
+          _DetailRow(
+            'Profit / loss',
+            '${_money(portfolio.totalProfitLoss)} '
+                '(${portfolio.overallReturnPercentage.toStringAsFixed(2)}%)',
+          ),
+          if (portfolio.holdings.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final holding in portfolio.holdings)
+              _DetailRow(
+                holding.assetTitle.isNotEmpty ? holding.assetTitle : 'Holding',
+                '${_money(holding.currentValue)} '
+                    '(${holding.returnPercentage.toStringAsFixed(1)}%)',
+              ),
+          ],
+          const SizedBox(height: 14),
+          const _DetailSection('Recent orders'),
+          if (detail.orders.isEmpty)
+            _DetailRow('Orders', 'None')
+          else
+            for (final order in detail.orders.take(8))
+              _DetailRow(
+                order.opportunityTitle.isNotEmpty
+                    ? order.opportunityTitle
+                    : order.id,
+                '${_money(order.amountUsd)} · ${order.status}',
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailSection extends StatelessWidget {
+  const _DetailSection(this.title);
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          color: AppColors.gold,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .6,
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow(this.label, this.value);
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: AppText.tiny),
+          ),
+          Expanded(
+            child: Text(value, style: AppText.fieldLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DocLink extends StatelessWidget {
+  const _DocLink(this.label, this.url);
+  final String label;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: const Icon(Icons.description_outlined, size: 16),
+      label: Text(label),
+      onPressed: () => _openExternalUrl(context, url),
+    );
+  }
+}
+
+Future<void> _openExternalUrl(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url);
+  final launched = uri == null
+      ? false
+      : await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!launched && context.mounted) {
+    showMessage(context, 'Could not open $url');
+  }
+}
+
 Future<void> _showUserDialog(
   BuildContext context, {
   required AdminRepository repository,
@@ -2149,9 +2510,11 @@ Future<void> _showUserDialog(
 }) async {
   final email = TextEditingController(text: user?.email ?? '');
   final name = TextEditingController(text: user?.displayName ?? '');
+  final phone = TextEditingController(text: user?.phoneNumber ?? '');
   final password = TextEditingController();
   var disabled = user?.disabled ?? false;
   var admin = user?.admin ?? false;
+  var emailVerified = user?.emailVerified ?? false;
 
   await showDialog<void>(
     context: context,
@@ -2180,6 +2543,14 @@ Future<void> _showUserDialog(
                 ),
                 SizedBox(height: 10),
                 AppTextField(
+                  controller: phone,
+                  label: 'Phone number',
+                  hintText: '+14155552671',
+                  keyboardType: TextInputType.phone,
+                  initialValue: null,
+                ),
+                SizedBox(height: 10),
+                AppTextField(
                   controller: password,
                   label: 'Password',
                   hintText: user == null
@@ -2192,6 +2563,12 @@ Future<void> _showUserDialog(
                   value: admin,
                   onChanged: (value) => setState(() => admin = value),
                   title: Text('Admin access'),
+                  activeThumbColor: AppColors.gold,
+                ),
+                SwitchListTile(
+                  value: emailVerified,
+                  onChanged: (value) => setState(() => emailVerified = value),
+                  title: Text('Email verified'),
                   activeThumbColor: AppColors.gold,
                 ),
                 SwitchListTile(
@@ -2219,6 +2596,8 @@ Future<void> _showUserDialog(
                           displayName: name.text,
                           disabled: disabled,
                           admin: admin,
+                          emailVerified: emailVerified,
+                          phoneNumber: phone.text.trim(),
                         )
                       : repository.updateUser(
                           uid: user.uid,
@@ -2227,6 +2606,8 @@ Future<void> _showUserDialog(
                           displayName: name.text,
                           disabled: disabled,
                           admin: admin,
+                          emailVerified: emailVerified,
+                          phoneNumber: phone.text.trim(),
                         ),
                   onChanged: onChanged,
                 );
@@ -2244,6 +2625,7 @@ Future<void> _showUserDialog(
 
   email.dispose();
   name.dispose();
+  phone.dispose();
   password.dispose();
 }
 
@@ -2308,6 +2690,7 @@ Future<void> _showAssetDialog(
   );
   final exitPeriod = TextEditingController(text: value.exitPeriod);
   final regulationNote = TextEditingController(text: value.regulationNote);
+  var images = List<String>.from(value.images);
   var category = _assetCategories.contains(value.category)
       ? value.category
       : _assetCategories.first;
@@ -2362,6 +2745,12 @@ Future<void> _showAssetDialog(
                     controller: description,
                     label: 'Description',
                     hintText: 'Short summary of the asset',
+                  ),
+                  SizedBox(height: 10),
+                  _AssetGalleryField(
+                    images: images,
+                    repository: repository,
+                    onChanged: (next) => setState(() => images = next),
                   ),
                   SizedBox(height: 10),
                   _AssetDropdown(
@@ -2497,6 +2886,7 @@ Future<void> _showAssetDialog(
                   type: type.text.trim(),
                   description: description.text.trim(),
                   category: category,
+                  images: images,
                   strategy: strategy,
                   riskLevel: riskLevel,
                   purchasePrice: double.tryParse(purchasePrice.text) ?? 0,
@@ -2593,6 +2983,162 @@ class _AssetDropdown extends StatelessWidget {
       },
     );
   }
+}
+
+class _AssetGalleryField extends StatefulWidget {
+  const _AssetGalleryField({
+    required this.images,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<String> images;
+  final AdminRepository repository;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  State<_AssetGalleryField> createState() => _AssetGalleryFieldState();
+}
+
+class _AssetGalleryFieldState extends State<_AssetGalleryField> {
+  bool _uploading = false;
+
+  Future<void> _addImages() async {
+    setState(() => _uploading = true);
+    try {
+      final uploaded = await _pickAdminAssetImages(widget.repository);
+      if (uploaded.isNotEmpty) {
+        widget.onChanged([...widget.images, ...uploaded]);
+      }
+    } catch (error) {
+      if (mounted) showMessage(context, _adminErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  void _removeAt(int index) {
+    final next = [...widget.images]..removeAt(index);
+    widget.onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          child: Text('Photos / gallery', style: AppText.fieldLabel),
+        ),
+        if (widget.images.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var index = 0; index < widget.images.length; index++)
+                  _AssetGalleryThumb(
+                    url: widget.images[index],
+                    onRemove: () => _removeAt(index),
+                  ),
+              ],
+            ),
+          ),
+        _PickerTile(
+          icon: _uploading
+              ? Icons.hourglass_top_rounded
+              : Icons.add_photo_alternate_outlined,
+          title: _uploading
+              ? 'Uploading photos…'
+              : widget.images.isEmpty
+              ? 'Add asset photos'
+              : 'Add more photos (${widget.images.length})',
+          onTap: _uploading ? () {} : _addImages,
+        ),
+      ],
+    );
+  }
+}
+
+class _AssetGalleryThumb extends StatelessWidget {
+  const _AssetGalleryThumb({required this.url, required this.onRemove});
+
+  final String url;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.network(
+            url,
+            width: 84,
+            height: 84,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              width: 84,
+              height: 84,
+              color: AppColors.surface,
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: AppColors.muted,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: -6,
+          right: -6,
+          child: GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.black87,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(3),
+              child: const Icon(
+                Icons.close_rounded,
+                size: 15,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+Future<List<String>> _pickAdminAssetImages(AdminRepository repository) async {
+  final result = await FilePicker.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['jpg', 'jpeg', 'png'],
+    withData: true,
+    allowMultiple: true,
+  );
+  if (result == null) return const [];
+
+  final urls = <String>[];
+  for (final file in result.files) {
+    final bytes = file.bytes;
+    if (bytes == null) continue;
+    final url = await repository.uploadAssetImage(
+      AdminUploadFile(
+        name: file.name,
+        bytes: bytes,
+        contentType: _contentTypeForName(file.name),
+      ),
+    );
+    urls.add(url);
+  }
+  return urls;
 }
 
 Future<void> _showAssetValuationDialog(
@@ -3102,6 +3648,37 @@ Future<void> _showSupportReplyDialog(
     ),
   );
   reply.dispose();
+}
+
+/// Shows a confirmation dialog before a destructive, irreversible admin action
+/// (e.g. deleting a user, asset, or payment option). Returns `true` only when
+/// the admin explicitly confirms.
+Future<bool> _confirmDestructiveAction(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String confirmLabel = 'Delete',
+}) async {
+  final confirmed = await showAdaptiveDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: Text(title, style: AppText.h2),
+      content: Text(message, style: AppText.body),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }
 
 Future<void> _runAdminAction(

@@ -29,12 +29,7 @@ class DetailScreen extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: Image.asset(
-                      'assets/images/skyline_heights.png',
-                      height: 206,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
+                    child: _AssetGalleryHero(images: opportunity.images),
                   ),
                   const Positioned(
                     top: 16,
@@ -141,6 +136,84 @@ class DetailScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Hero image area for an asset. Shows a swipeable carousel with page dots when
+/// the asset has multiple photos, a single image for one photo, and the bundled
+/// placeholder when none have been uploaded.
+class _AssetGalleryHero extends StatefulWidget {
+  const _AssetGalleryHero({required this.images});
+
+  final List<String> images;
+
+  @override
+  State<_AssetGalleryHero> createState() => _AssetGalleryHeroState();
+}
+
+class _AssetGalleryHeroState extends State<_AssetGalleryHero> {
+  final _controller = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const height = 206.0;
+    final images = widget.images;
+
+    if (images.length <= 1) {
+      return AssetImageView(
+        imageUrl: images.isEmpty ? null : images.first,
+        width: double.infinity,
+        height: height,
+      );
+    }
+
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: images.length,
+            onPageChanged: (value) => setState(() => _page = value),
+            itemBuilder: (context, index) => AssetImageView(
+              imageUrl: images[index],
+              width: double.infinity,
+              height: height,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var index = 0; index < images.length; index++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: _page == index ? 18 : 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _page == index
+                          ? AppColors.gold
+                          : Colors.white.withValues(alpha: .7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

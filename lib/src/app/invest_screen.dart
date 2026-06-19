@@ -144,6 +144,9 @@ class _InvestScreenState extends State<InvestScreen> {
                   location: opportunity.location,
                   minimum: opportunity.minimumText,
                   returnText: opportunity.returnText,
+                  imageUrl: opportunity.images.isEmpty
+                      ? null
+                      : opportunity.images.first,
                   onTap: () => openDetail(
                     context,
                     widget.kyc,

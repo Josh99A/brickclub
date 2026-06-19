@@ -130,6 +130,8 @@ type UserPayload = {
   displayName?: string;
   disabled?: boolean;
   admin?: boolean;
+  emailVerified?: boolean;
+  phoneNumber?: string;
 };
 
 type KycDocumentPayload = {
@@ -1003,11 +1005,17 @@ export const createAdminUser = onAdminCall(async (data) => {
     throw new HttpsError("invalid-argument", "Password is required.");
   }
 
+  const phoneNumber = normalizePhoneNumber(payload.phoneNumber, {
+    allowClear: false,
+  });
+
   const user = await auth.createUser({
     email: payload.email,
     password: payload.password,
     displayName: payload.displayName,
     disabled: payload.disabled ?? false,
+    emailVerified: payload.emailVerified ?? false,
+    ...(phoneNumber ? {phoneNumber} : {}),
   });
 
   if (payload.admin) {
@@ -1021,11 +1029,19 @@ export const updateAdminUser = onAdminCall(async (data) => {
   const uid = readString(data, "uid");
   const payload = readUserPayload(data, {passwordOptional: true});
 
+  const phoneNumber = normalizePhoneNumber(payload.phoneNumber, {
+    allowClear: true,
+  });
+
   await auth.updateUser(uid, {
     email: payload.email,
     password: payload.password,
     displayName: payload.displayName,
     disabled: payload.disabled,
+    ...(payload.emailVerified !== undefined ?
+      {emailVerified: payload.emailVerified} :
+      {}),
+    ...(phoneNumber !== undefined ? {phoneNumber} : {}),
   });
 
   if (payload.admin !== undefined) {
@@ -1048,6 +1064,83 @@ export const setUserAdmin = onAdminCall(async (data) => {
   await auth.setCustomUserClaims(uid, admin ? {admin: true} : null);
 
   return userToJson(await auth.getUser(uid));
+});
+
+export const getAdminUserDetail = onAdminCall(async (data) => {
+  const uid = readString(data, "uid");
+
+  const [user, kycSnapshot, holdingsSnapshot, ordersSnapshot] =
+    await Promise.all([
+      auth.getUser(uid),
+      kycProfilesCollection.doc(uid).get(),
+      memberHoldingsCollection.where("userId", "==", uid).get(),
+      purchaseOrdersCollection.where("uid", "==", uid).get(),
+    ]);
+
+  const holdings = holdingsSnapshot.docs.map((doc) => holdingFromDoc(doc));
+  const totalInvested = roundMoney(
+    holdings.reduce((total, holding) => total + holding.amountInvested, 0),
+  );
+  const totalCurrentValue = roundMoney(
+    holdings.reduce((total, holding) => total + holding.currentValue, 0),
+  );
+  const totalDividends = roundMoney(
+    holdings.reduce((total, holding) => total + holding.dividendsReceived, 0),
+  );
+  const totalProfitLoss = roundMoney(
+    totalCurrentValue + totalDividends - totalInvested,
+  );
+  const overallReturnPercentage = totalInvested > 0 ?
+    roundMoney((totalProfitLoss / totalInvested) * 100) :
+    0;
+
+  const orders = ordersSnapshot.docs
+    .map((doc) => memberOrderFromDoc(doc))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const kyc = kycSnapshot.exists ? kycSnapshot.data()! : undefined;
+
+  return {
+    user: userToJson(user),
+    kyc: kyc ?
+      {
+        uid,
+        fullLegalName: String(kyc.fullLegalName ?? ""),
+        email: String(kyc.email ?? user.email ?? ""),
+        phoneNumber: String(kyc.phoneNumber ?? ""),
+        dateOfBirth: readSerializableDate(kyc.dateOfBirth),
+        status: String(kyc.status ?? "notStarted"),
+        rejectionReason: String(kyc.rejectionReason ?? ""),
+        phoneVerified: kyc.phoneVerified === true,
+        governmentIdUrl: String(kyc.documents?.governmentIdUrl ?? ""),
+        selfieUrl: String(kyc.documents?.selfieUrl ?? ""),
+        addressProofUrl: String(kyc.documents?.addressProofUrl ?? ""),
+        submittedAt: readSerializableDate(kyc.submittedAt),
+      } :
+      null,
+    portfolio: {
+      totalInvested,
+      totalCurrentValue,
+      totalDividends,
+      totalProfitLoss,
+      overallReturnPercentage,
+      holdings: holdings.map((holding) => ({
+        assetId: holding.assetId,
+        assetTitle: holding.assetTitle,
+        amountInvested: holding.amountInvested,
+        currentValue: holding.currentValue,
+        profitLoss: holding.profitLoss,
+        returnPercentage: holding.returnPercentage,
+      })),
+    },
+    orders: orders.map((order) => ({
+      id: order.id,
+      opportunityTitle: order.opportunityTitle,
+      amountUsd: order.amountUsd,
+      status: order.status,
+      updatedAt: order.updatedAt,
+    })),
+  };
 });
 
 export const submitKycProfile = onMemberCall(async (request) => {
@@ -1346,6 +1439,7 @@ function userToJson(user: UserRecord) {
     uid: user.uid,
     email: user.email,
     displayName: user.displayName,
+    phoneNumber: user.phoneNumber ?? "",
     disabled: user.disabled,
     emailVerified: user.emailVerified,
     admin: user.customClaims?.admin === true,
@@ -1977,6 +2071,8 @@ function readUserPayload(
     displayName: readOptionalString(value, "displayName"),
     disabled: readOptionalBoolean(value, "disabled"),
     admin: readOptionalBoolean(value, "admin"),
+    emailVerified: readOptionalBoolean(value, "emailVerified"),
+    phoneNumber: readOptionalString(value, "phoneNumber"),
   };
   const password = readOptionalString(value, "password");
 
@@ -1985,6 +2081,29 @@ function readUserPayload(
   }
 
   return payload;
+}
+
+// Firebase Auth requires phone numbers in E.164 format (e.g. +14155552671).
+// Returns the validated number, `null` to clear an existing number, or
+// `undefined` to leave the value untouched.
+function normalizePhoneNumber(
+  phoneNumber: string | undefined,
+  {allowClear}: {allowClear: boolean},
+): string | null | undefined {
+  if (phoneNumber === undefined) {
+    return undefined;
+  }
+  const trimmed = phoneNumber.trim();
+  if (!trimmed) {
+    return allowClear ? null : undefined;
+  }
+  if (!/^\+[1-9]\d{6,14}$/.test(trimmed)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Phone number must be in E.164 format, e.g. +14155552671.",
+    );
+  }
+  return trimmed;
 }
 
 function readAssetPayload(data: unknown): Omit<AdminAsset, "id"> {
