@@ -1185,6 +1185,30 @@ String _friendlyFirebaseMessage(String? message, {required String fallback}) {
 }
 
 String _friendlyUnexpectedMessage(Object error) {
+  // Callable backend errors carry a deliberate, user-facing message (e.g.
+  // "Selected payment asset is not enabled."). For the validation codes our
+  // Cloud Functions throw on purpose, surface that message instead of a generic
+  // fallback so members know exactly what to fix. Reserve the generic handling
+  // below for internal/unknown failures that leak no useful detail.
+  if (error is FirebaseFunctionsException) {
+    final message = error.message?.trim();
+    switch (error.code) {
+      case 'failed-precondition':
+      case 'invalid-argument':
+      case 'not-found':
+      case 'already-exists':
+      case 'out-of-range':
+      case 'resource-exhausted':
+        if (message != null && message.isNotEmpty) {
+          return message;
+        }
+      case 'unauthenticated':
+        return 'Sign in again to continue.';
+      case 'permission-denied':
+        return 'You do not have permission to do that.';
+    }
+  }
+
   final text = error.toString().toLowerCase();
   if (text.contains('network') ||
       text.contains('socket') ||

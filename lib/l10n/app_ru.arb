@@ -1,0 +1,9 @@
+{
+  "@@locale": "ru",
+  "appTitle": "BrickClub",
+  "profileLanguage": "Язык",
+  "languageScreenTitle": "Язык",
+  "languageHeading": "Язык интерфейса",
+  "languageDescription": "Выберите язык, который BrickClub использует на этом устройстве.",
+  "languageSystemDefault": "Системный язык"
+}

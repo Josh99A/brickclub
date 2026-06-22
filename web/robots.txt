@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://brickclub.web.app/sitemap.xml

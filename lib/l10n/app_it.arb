@@ -1,0 +1,9 @@
+{
+  "@@locale": "it",
+  "appTitle": "BrickClub",
+  "profileLanguage": "Lingua",
+  "languageScreenTitle": "Lingua",
+  "languageHeading": "Lingua di visualizzazione",
+  "languageDescription": "Scegli la lingua che BrickClub usa su questo dispositivo.",
+  "languageSystemDefault": "Predefinito di sistema"
+}
