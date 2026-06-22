@@ -1,0 +1,27 @@
+{
+  "@@locale": "en",
+  "appTitle": "BrickClub",
+  "@appTitle": {
+    "description": "Application name, shown as the app title."
+  },
+  "profileLanguage": "Language",
+  "@profileLanguage": {
+    "description": "Label for the language row in the profile settings list."
+  },
+  "languageScreenTitle": "Language",
+  "@languageScreenTitle": {
+    "description": "App bar title of the language selection screen."
+  },
+  "languageHeading": "Display language",
+  "@languageHeading": {
+    "description": "Heading on the language selection screen."
+  },
+  "languageDescription": "Choose the language BrickClub uses on this device.",
+  "@languageDescription": {
+    "description": "Subtitle explaining what the language setting does."
+  },
+  "languageSystemDefault": "System default",
+  "@languageSystemDefault": {
+    "description": "Option that follows the device's language automatically."
+  }
+}

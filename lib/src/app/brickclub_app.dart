@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../core/web/pwa_install.dart';
 import '../features/admin/domain/admin_models.dart';
 import '../features/admin/domain/admin_repository.dart';
@@ -50,6 +51,7 @@ final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 const _themeModePreferenceKey = 'brickclub.themeMode';
+const _localePreferenceKey = 'brickclub.locale';
 
 class BrickClubApp extends StatefulWidget {
   const BrickClubApp({
@@ -77,6 +79,8 @@ class BrickClubApp extends StatefulWidget {
 
 class _BrickClubAppState extends State<BrickClubApp> {
   final _themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
+  // null = follow the device language (Flutter resolves to a supported locale).
+  final _localeNotifier = ValueNotifier<Locale?>(null);
   late final GoRouter _router;
 
   String get _authEntry => widget.showLandingPage ? '/landing' : '/signin';
@@ -85,13 +89,16 @@ class _BrickClubAppState extends State<BrickClubApp> {
   void initState() {
     super.initState();
     _themeModeNotifier.addListener(() => setState(() {}));
+    _localeNotifier.addListener(() => setState(() {}));
     _loadThemeMode();
+    _loadLocale();
     _router = _createRouter();
   }
 
   @override
   void dispose() {
     _themeModeNotifier.dispose();
+    _localeNotifier.dispose();
     super.dispose();
   }
 
@@ -114,6 +121,29 @@ class _BrickClubAppState extends State<BrickClubApp> {
     await preferences.setString(_themeModePreferenceKey, mode.name);
   }
 
+  Future<void> _loadLocale() async {
+    final preferences = await SharedPreferences.getInstance();
+    final stored = preferences.getString(_localePreferenceKey);
+    if (stored == null || stored.isEmpty) return;
+    final locale = Locale(stored);
+    final isSupported = AppLocalizations.supportedLocales
+        .any((supported) => supported.languageCode == locale.languageCode);
+    if (mounted && isSupported) {
+      _localeNotifier.value = locale;
+    }
+  }
+
+  // Pass null to clear the override and follow the device language.
+  Future<void> _setLocale(Locale? locale) async {
+    _localeNotifier.value = locale;
+    final preferences = await SharedPreferences.getInstance();
+    if (locale == null) {
+      await preferences.remove(_localePreferenceKey);
+    } else {
+      await preferences.setString(_localePreferenceKey, locale.languageCode);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
@@ -123,6 +153,10 @@ class _BrickClubAppState extends State<BrickClubApp> {
       themeMode: _themeModeNotifier.value,
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
+      locale: _localeNotifier.value,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       routerConfig: _router,
       builder: (context, child) {
         final palette = AppPalette.forBrightness(Theme.of(context).brightness);
@@ -276,6 +310,8 @@ class _BrickClubAppState extends State<BrickClubApp> {
                           supportRepository: widget.supportRepository,
                           themeMode: themeMode,
                           onThemeModeChanged: _setThemeMode,
+                          locale: _localeNotifier.value,
+                          onLocaleChanged: _setLocale,
                           onStartKyc: () => _openKyc(context),
                           onSignOut: () async {
                             await widget.authRepository.signOut();
