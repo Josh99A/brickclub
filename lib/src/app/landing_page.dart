@@ -101,9 +101,10 @@ class _LandingPageState extends State<LandingPage> {
   }
 
   Future<void> _install() async {
+    final l10n = AppLocalizations.of(context);
     // Already added to the home screen / app drawer and launched standalone.
     if (isPwaStandalone()) {
-      showMessage(context, 'BrickClub is already installed on this device.');
+      showMessage(context, l10n.installAlready);
       return;
     }
 
@@ -116,9 +117,9 @@ class _LandingPageState extends State<LandingPage> {
       }
       switch (outcome) {
         case 'accepted':
-          showMessage(context, 'Installing BrickClub on your device…');
+          showMessage(context, l10n.installInstalling);
         case 'dismissed':
-          showMessage(context, 'Install dismissed. You can install any time.');
+          showMessage(context, l10n.installDismissed);
         default:
           // Prompt was lost (e.g. already consumed) — fall back to guidance.
           await _showInstallInstructions();
@@ -154,58 +155,47 @@ class _InstallInstructionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final ({String title, String intro, List<_InstallStep> steps}) content =
         switch (platform) {
       'ios' => (
-          title: 'Install on iPhone or iPad',
-          intro: 'Add BrickClub to your home screen straight from Safari — no '
-              'App Store needed.',
-          steps: const [
-            _InstallStep(
-              Icons.ios_share_rounded,
-              'Tap the Share button in Safari\'s toolbar.',
-            ),
-            _InstallStep(
-              Icons.add_box_outlined,
-              'Scroll down and choose “Add to Home Screen”.',
-            ),
+          title: l10n.installIosTitle,
+          intro: l10n.installIosIntro,
+          steps: [
+            _InstallStep(Icons.ios_share_rounded, l10n.installIosStep1),
+            _InstallStep(Icons.add_box_outlined, l10n.installIosStep2),
             _InstallStep(
               Icons.check_circle_outline_rounded,
-              'Tap “Add” — BrickClub lands on your home screen.',
+              l10n.installIosStep3,
             ),
           ],
         ),
       'android' => (
-          title: 'Install on Android',
-          intro: 'Add BrickClub to your device in a couple of taps from your '
-              'browser.',
-          steps: const [
-            _InstallStep(
-              Icons.more_vert_rounded,
-              'Open your browser menu (⋮ in the top corner).',
-            ),
+          title: l10n.installAndroidTitle,
+          intro: l10n.installAndroidIntro,
+          steps: [
+            _InstallStep(Icons.more_vert_rounded, l10n.installAndroidStep1),
             _InstallStep(
               Icons.install_mobile_rounded,
-              'Tap “Install app” or “Add to Home screen”.',
+              l10n.installAndroidStep2,
             ),
             _InstallStep(
               Icons.check_circle_outline_rounded,
-              'Confirm — BrickClub appears in your app drawer.',
+              l10n.installAndroidStep3,
             ),
           ],
         ),
       _ => (
-          title: 'Install on desktop',
-          intro: 'Install BrickClub as an app from Chrome or Edge.',
-          steps: const [
+          title: l10n.installDesktopTitle,
+          intro: l10n.installDesktopIntro,
+          steps: [
             _InstallStep(
               Icons.install_desktop_rounded,
-              'Click the install icon in the address bar, or open the '
-                  'browser menu.',
+              l10n.installDesktopStep1,
             ),
             _InstallStep(
               Icons.check_circle_outline_rounded,
-              'Choose “Install” to launch BrickClub in its own window.',
+              l10n.installDesktopStep2,
             ),
           ],
         ),
@@ -259,7 +249,7 @@ class _InstallInstructionsSheet extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: _WebButton(
-                label: 'Got it',
+                label: l10n.installGotIt,
                 icon: Icons.check_rounded,
                 filled: true,
                 onPressed: () => Navigator.of(context).maybePop(),
@@ -347,6 +337,7 @@ class _LandingHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       height: 82,
       padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -372,9 +363,9 @@ class _LandingHeader extends StatelessWidget {
                   const Spacer(),
                   if (!compact) ...[
                     for (final item in [
-                      ('Features', 'features'),
-                      ('How it works', 'how-it-works'),
-                      ('Testimonials', 'testimonials'),
+                      (l10n.navFeatures, 'features'),
+                      (l10n.navHowItWorks, 'how-it-works'),
+                      (l10n.navTestimonials, 'testimonials'),
                     ])
                       _NavLink(
                         label: item.$1,
@@ -389,11 +380,11 @@ class _LandingHeader extends StatelessWidget {
                   TextButton(
                     key: const ValueKey('landing-sign-in'),
                     onPressed: onSignIn,
-                    child: Text('Sign in'),
+                    child: Text(l10n.landingSignIn),
                   ),
                   SizedBox(width: 10),
                   _WebButton(
-                    label: compact ? 'Join' : 'Create account',
+                    label: compact ? l10n.landingJoin : l10n.landingCreateAccount,
                     onPressed: onSignUp,
                     filled: true,
                   ),
@@ -539,11 +530,12 @@ class _HeroCopy extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Own more than\na dream.',
+          l10n.heroTitle,
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 68,
@@ -556,9 +548,7 @@ class _HeroCopy extends StatelessWidget {
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Text(
-            'Build real ownership through verified property-backed '
-            'BrickShares, with transparent performance and trusted crypto '
-            'settlement from one secure app.',
+            l10n.heroBody,
             style: TextStyle(
               color: AppColors.secondary,
               fontSize: 18,
@@ -573,26 +563,26 @@ class _HeroCopy extends StatelessWidget {
           children: [
             _WebButton(
               key: const ValueKey('install-app'),
-              label: 'Install the app',
+              label: l10n.heroInstall,
               icon: Icons.download_rounded,
               onPressed: onInstall,
               filled: true,
             ),
             _WebButton(
-              label: 'Explore BrickShares',
+              label: l10n.heroExplore,
               icon: Icons.arrow_forward_rounded,
               onPressed: onExplore,
             ),
           ],
         ),
         SizedBox(height: 34),
-        const Wrap(
+        Wrap(
           spacing: 28,
           runSpacing: 12,
           children: [
-            _ProofPoint(Icons.verified_user_outlined, 'Verified assets'),
-            _ProofPoint(Icons.wallet_outlined, 'Trusted settlement'),
-            _ProofPoint(Icons.insights_outlined, 'Clear performance'),
+            _ProofPoint(Icons.verified_user_outlined, l10n.proofVerifiedAssets),
+            _ProofPoint(Icons.wallet_outlined, l10n.proofTrustedSettlement),
+            _ProofPoint(Icons.insights_outlined, l10n.proofClearPerformance),
           ],
         ),
       ],
@@ -740,7 +730,10 @@ class _HeroVisualState extends State<_HeroVisual>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Target annual return', style: AppText.small),
+                    Text(
+                      AppLocalizations.of(context).heroCardTargetReturn,
+                      style: AppText.small,
+                    ),
                     SizedBox(height: 6),
                     _CountUp(
                       progress: _metric,
@@ -771,6 +764,7 @@ class _PhonePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ColoredBox(
       color: AppColors.background,
       child: Padding(
@@ -809,7 +803,7 @@ class _PhonePreview extends StatelessWidget {
               ],
             ),
             SizedBox(height: 18),
-            Text('Portfolio value', style: AppText.small),
+            Text(l10n.previewPortfolioValue, style: AppText.small),
             SizedBox(height: 4),
             Text(
               '\$5,000',
@@ -843,8 +837,8 @@ class _PhonePreview extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Minimum', style: AppText.tinyLight),
-                Text('Target return', style: AppText.tinyLight),
+                Text(l10n.previewMinimum, style: AppText.tinyLight),
+                Text(l10n.previewTargetReturn, style: AppText.tinyLight),
               ],
             ),
             SizedBox(height: 4),
@@ -867,19 +861,20 @@ class _TrustStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
       color: AppColors.gold,
-      child: const Wrap(
+      child: Wrap(
         alignment: WrapAlignment.center,
         spacing: 58,
         runSpacing: 18,
         children: [
-          _DarkProof('PROPERTY DUE DILIGENCE'),
-          _DarkProof('KYC VERIFIED MEMBERS'),
-          _DarkProof('USDT SETTLEMENT'),
-          _DarkProof('CLEAR OWNERSHIP RECORDS'),
+          _DarkProof(l10n.trustDueDiligence),
+          _DarkProof(l10n.trustKycVerified),
+          _DarkProof(l10n.trustUsdtSettlement),
+          _DarkProof(l10n.trustOwnershipRecords),
         ],
       ),
     );
@@ -909,31 +904,20 @@ class _HowItWorksSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _LandingSection(
-      title: 'From signup to ownership.',
-      subtitle:
-          'A clear path designed for investors who want confidence at every step.',
+    final l10n = AppLocalizations.of(context);
+    return _LandingSection(
+      title: l10n.howTitle,
+      subtitle: l10n.howSubtitle,
       child: LayoutBuilder(builder: _buildSteps),
     );
   }
 
   static Widget _buildSteps(BuildContext context, BoxConstraints constraints) {
-    const steps = [
-      _Step(
-        '01',
-        'Create and verify',
-        'Open your account, complete KYC, and connect a verified wallet.',
-      ),
-      _Step(
-        '02',
-        'Choose BrickShares',
-        'Review verified assets, target returns, risks, and ownership terms.',
-      ),
-      _Step(
-        '03',
-        'Fund and track',
-        'Settle securely with supported crypto and monitor your portfolio.',
-      ),
+    final l10n = AppLocalizations.of(context);
+    final steps = [
+      _Step('01', l10n.howStep1Title, l10n.howStep1Body),
+      _Step('02', l10n.howStep2Title, l10n.howStep2Body),
+      _Step('03', l10n.howStep3Title, l10n.howStep3Body),
     ];
     if (constraints.maxWidth < 760) {
       return Column(
@@ -1025,19 +1009,17 @@ class _FeatureSection extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 96),
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final l10n = AppLocalizations.of(context);
                 final details = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Built for clarity,\nnot speculation.',
+                      l10n.featuresTitle,
                       style: _LandingSection.headingStyle,
                     ),
                     SizedBox(height: 22),
                     Text(
-                      'Every opportunity brings the important information '
-                      'forward: ownership structure, asset verification, '
-                      'target returns, risks, funding network, and settlement '
-                      'status.',
+                      l10n.featuresBody,
                       style: TextStyle(
                         color: AppColors.secondary,
                         fontSize: 17,
@@ -1045,19 +1027,10 @@ class _FeatureSection extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: 34),
-                    for (final feature in const [
-                      (
-                        Icons.fact_check_outlined,
-                        'Verified asset documentation',
-                      ),
-                      (
-                        Icons.currency_bitcoin_rounded,
-                        'Transparent crypto quotes and network fees',
-                      ),
-                      (
-                        Icons.lock_outline_rounded,
-                        'Confirmation before every financial action',
-                      ),
+                    for (final feature in [
+                      (Icons.fact_check_outlined, l10n.feature1),
+                      (Icons.currency_bitcoin_rounded, l10n.feature2),
+                      (Icons.lock_outline_rounded, l10n.feature3),
                     ])
                       Padding(
                         padding: const EdgeInsets.only(bottom: 18),
@@ -1126,6 +1099,7 @@ class _AssetReviewPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return _HoverLift(
       child: Container(
         padding: const EdgeInsets.all(24),
@@ -1169,9 +1143,9 @@ class _AssetReviewPanel extends StatelessWidget {
                           size: 14,
                         ),
                         const SizedBox(width: 6),
-                        const Text(
-                          'VERIFIED ASSET',
-                          style: TextStyle(
+                        Text(
+                          l10n.assetVerifiedBadge,
+                          style: const TextStyle(
                             color: Color(0xFFF4F5F6),
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -1188,7 +1162,7 @@ class _AssetReviewPanel extends StatelessWidget {
             Text('Skyline Heights', style: AppText.cardHeading),
             SizedBox(height: 8),
             Text(
-              'Income-producing residential property',
+              l10n.assetSampleDescription,
               style: AppText.bodyLarge,
             ),
             SizedBox(height: 22),
@@ -1199,13 +1173,13 @@ class _AssetReviewPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Metric('12.4%', 'Target return', gold: true),
+                      Metric('12.4%', l10n.previewTargetReturn, gold: true),
                       const SizedBox(height: 18),
-                      Metric('\$50', 'Minimum'),
+                      Metric('\$50', l10n.previewMinimum),
                     ],
                   ),
                 ),
-                const _FundingRing(value: .62, label: 'Funded'),
+                _FundingRing(value: .62, label: l10n.assetFunded),
               ],
             ),
           ],
@@ -1220,9 +1194,10 @@ class _TestimonialsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _LandingSection(
-      title: 'Built on investor confidence.',
-      subtitle: 'What early BrickClub members value most about the experience.',
+    final l10n = AppLocalizations.of(context);
+    return _LandingSection(
+      title: l10n.testimonialsTitle,
+      subtitle: l10n.testimonialsSubtitle,
       child: LayoutBuilder(builder: _buildTestimonials),
     );
   }
@@ -1231,24 +1206,22 @@ class _TestimonialsSection extends StatelessWidget {
     BuildContext context,
     BoxConstraints constraints,
   ) {
-    const items = [
+    final l10n = AppLocalizations.of(context);
+    final items = [
       _Testimonial(
-        'BrickClub makes the important details easy to understand. I know '
-            'what I own, how it is performing, and what happens before I fund.',
+        l10n.testimonial1Quote,
         'Sarah N.',
-        'Entrepreneur, London',
+        l10n.testimonial1Role,
       ),
       _Testimonial(
-        'The verification and confirmation flow gave me confidence. It feels '
-            'like a serious investment platform, not another crypto shortcut.',
+        l10n.testimonial2Quote,
         'Daniel K.',
-        'Product lead, Singapore',
+        l10n.testimonial2Role,
       ),
       _Testimonial(
-        'I can start at a practical amount and still get access to assets I '
-            'would normally only watch from the outside.',
+        l10n.testimonial3Quote,
         'Amina M.',
-        'Consultant, Dubai',
+        l10n.testimonial3Role,
       ),
     ];
     if (constraints.maxWidth < 820) {
@@ -1399,6 +1372,7 @@ class _FinalCta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       width: double.infinity,
       color: AppColors.gold,
@@ -1428,7 +1402,7 @@ class _FinalCta extends StatelessWidget {
                     ),
                     const SizedBox(width: 7),
                     Text(
-                      'GET STARTED IN MINUTES',
+                      l10n.ctaBadge,
                       style: TextStyle(
                         color: AppColors.background,
                         fontSize: 11.5,
@@ -1441,7 +1415,7 @@ class _FinalCta extends StatelessWidget {
               ),
               SizedBox(height: 26),
               Text(
-                'Your next asset can start here.',
+                l10n.ctaTitle,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.background,
@@ -1455,8 +1429,7 @@ class _FinalCta extends StatelessWidget {
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 560),
                 child: Text(
-                  'Install BrickClub, create your account, and explore verified '
-                  'BrickShares built for long-term ownership.',
+                  l10n.ctaBody,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: const Color(0xCC0B0D0F),
@@ -1474,13 +1447,13 @@ class _FinalCta extends StatelessWidget {
                 runSpacing: 14,
                 children: [
                   _WebButton(
-                    label: 'Install the app',
+                    label: l10n.heroInstall,
                     icon: Icons.download_rounded,
                     onPressed: onInstall,
                     dark: true,
                   ),
                   _WebButton(
-                    label: 'Create account',
+                    label: l10n.landingCreateAccount,
                     icon: Icons.arrow_forward_rounded,
                     onPressed: onSignUp,
                     darkOutline: true,
@@ -1494,7 +1467,7 @@ class _FinalCta extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    child: const Text('I already have an account'),
+                    child: Text(l10n.ctaHaveAccount),
                   ),
                 ],
               ),
@@ -1503,12 +1476,12 @@ class _FinalCta extends StatelessWidget {
                 alignment: WrapAlignment.center,
                 spacing: 22,
                 runSpacing: 8,
-                children: const [
-                  _CtaReassurance(Icons.lock_outline_rounded, 'Secure KYC'),
-                  _CtaReassurance(Icons.payments_outlined, 'Free to browse'),
+                children: [
+                  _CtaReassurance(Icons.lock_outline_rounded, l10n.ctaSecureKyc),
+                  _CtaReassurance(Icons.payments_outlined, l10n.ctaFreeToBrowse),
                   _CtaReassurance(
                     Icons.verified_outlined,
-                    'Verified assets only',
+                    l10n.ctaVerifiedOnly,
                   ),
                 ],
               ),
@@ -1554,6 +1527,7 @@ class _LandingFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       color: AppColors.background,
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
@@ -1564,10 +1538,10 @@ class _LandingFooter extends StatelessWidget {
             children: [
               const _BrandLockup(),
               const Spacer(),
-              TextButton(onPressed: onSignIn, child: Text('Sign in')),
-              TextButton(onPressed: onSignUp, child: Text('Sign up')),
+              TextButton(onPressed: onSignIn, child: Text(l10n.landingSignIn)),
+              TextButton(onPressed: onSignUp, child: Text(l10n.landingSignUp)),
               SizedBox(width: 10),
-              Text('© 2026 BrickClub', style: AppText.small),
+              Text(l10n.footerCopyright, style: AppText.small),
             ],
           ),
         ),
@@ -1884,34 +1858,35 @@ class _StatsBandState extends State<_StatsBand>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final tiles = <Widget>[
       _StatTile(
         progress: _progress,
         value: 12.4,
         decimals: 1,
         suffix: '%',
-        label: 'Average target return',
+        label: l10n.statTargetReturn,
         icon: Icons.trending_up_rounded,
       ),
       _StatTile(
         progress: _progress,
         value: 50,
         prefix: '\$',
-        label: 'Minimum to start',
+        label: l10n.statMinimum,
         icon: Icons.savings_outlined,
       ),
       _StatTile(
         progress: _progress,
         value: 100,
         suffix: '%',
-        label: 'On-chain settlement',
+        label: l10n.statSettlement,
         icon: Icons.shield_moon_outlined,
       ),
       _StatTile(
         progress: _progress,
         value: 24,
         suffix: '/7',
-        label: 'Portfolio visibility',
+        label: l10n.statVisibility,
         icon: Icons.visibility_outlined,
       ),
     ];

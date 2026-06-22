@@ -445,6 +445,462 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use a different number'**
   String get phoneUseDifferentNumber;
+
+  /// No description provided for @installIosTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install on iPhone or iPad'**
+  String get installIosTitle;
+
+  /// No description provided for @installIosIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Add BrickClub to your home screen straight from Safari — no App Store needed.'**
+  String get installIosIntro;
+
+  /// No description provided for @installIosStep1.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the Share button in Safari\'s toolbar.'**
+  String get installIosStep1;
+
+  /// No description provided for @installIosStep2.
+  ///
+  /// In en, this message translates to:
+  /// **'Scroll down and choose “Add to Home Screen”.'**
+  String get installIosStep2;
+
+  /// No description provided for @installIosStep3.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap “Add” — BrickClub lands on your home screen.'**
+  String get installIosStep3;
+
+  /// No description provided for @installAndroidTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install on Android'**
+  String get installAndroidTitle;
+
+  /// No description provided for @installAndroidIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Add BrickClub to your device in a couple of taps from your browser.'**
+  String get installAndroidIntro;
+
+  /// No description provided for @installAndroidStep1.
+  ///
+  /// In en, this message translates to:
+  /// **'Open your browser menu (⋮ in the top corner).'**
+  String get installAndroidStep1;
+
+  /// No description provided for @installAndroidStep2.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap “Install app” or “Add to Home screen”.'**
+  String get installAndroidStep2;
+
+  /// No description provided for @installAndroidStep3.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm — BrickClub appears in your app drawer.'**
+  String get installAndroidStep3;
+
+  /// No description provided for @installDesktopTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install on desktop'**
+  String get installDesktopTitle;
+
+  /// No description provided for @installDesktopIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Install BrickClub as an app from Chrome or Edge.'**
+  String get installDesktopIntro;
+
+  /// No description provided for @installDesktopStep1.
+  ///
+  /// In en, this message translates to:
+  /// **'Click the install icon in the address bar, or open the browser menu.'**
+  String get installDesktopStep1;
+
+  /// No description provided for @installDesktopStep2.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose “Install” to launch BrickClub in its own window.'**
+  String get installDesktopStep2;
+
+  /// No description provided for @installGotIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get installGotIt;
+
+  /// No description provided for @installAlready.
+  ///
+  /// In en, this message translates to:
+  /// **'BrickClub is already installed on this device.'**
+  String get installAlready;
+
+  /// No description provided for @installInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing BrickClub on your device…'**
+  String get installInstalling;
+
+  /// No description provided for @installDismissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Install dismissed. You can install any time.'**
+  String get installDismissed;
+
+  /// No description provided for @navFeatures.
+  ///
+  /// In en, this message translates to:
+  /// **'Features'**
+  String get navFeatures;
+
+  /// No description provided for @navHowItWorks.
+  ///
+  /// In en, this message translates to:
+  /// **'How it works'**
+  String get navHowItWorks;
+
+  /// No description provided for @navTestimonials.
+  ///
+  /// In en, this message translates to:
+  /// **'Testimonials'**
+  String get navTestimonials;
+
+  /// No description provided for @landingSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in'**
+  String get landingSignIn;
+
+  /// No description provided for @landingSignUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign up'**
+  String get landingSignUp;
+
+  /// No description provided for @landingJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join'**
+  String get landingJoin;
+
+  /// No description provided for @landingCreateAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get landingCreateAccount;
+
+  /// No description provided for @heroTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Own more than\na dream.'**
+  String get heroTitle;
+
+  /// No description provided for @heroBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Build real ownership through verified property-backed BrickShares, with transparent performance and trusted crypto settlement from one secure app.'**
+  String get heroBody;
+
+  /// No description provided for @heroInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the app'**
+  String get heroInstall;
+
+  /// No description provided for @heroExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore BrickShares'**
+  String get heroExplore;
+
+  /// No description provided for @proofVerifiedAssets.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified assets'**
+  String get proofVerifiedAssets;
+
+  /// No description provided for @proofTrustedSettlement.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted settlement'**
+  String get proofTrustedSettlement;
+
+  /// No description provided for @proofClearPerformance.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear performance'**
+  String get proofClearPerformance;
+
+  /// No description provided for @previewPortfolioValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Portfolio value'**
+  String get previewPortfolioValue;
+
+  /// No description provided for @previewMinimum.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum'**
+  String get previewMinimum;
+
+  /// No description provided for @previewTargetReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Target return'**
+  String get previewTargetReturn;
+
+  /// No description provided for @heroCardTargetReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Target annual return'**
+  String get heroCardTargetReturn;
+
+  /// No description provided for @assetVerifiedBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'VERIFIED ASSET'**
+  String get assetVerifiedBadge;
+
+  /// No description provided for @assetSampleDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Income-producing residential property'**
+  String get assetSampleDescription;
+
+  /// No description provided for @assetFunded.
+  ///
+  /// In en, this message translates to:
+  /// **'Funded'**
+  String get assetFunded;
+
+  /// No description provided for @trustDueDiligence.
+  ///
+  /// In en, this message translates to:
+  /// **'PROPERTY DUE DILIGENCE'**
+  String get trustDueDiligence;
+
+  /// No description provided for @trustKycVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'KYC VERIFIED MEMBERS'**
+  String get trustKycVerified;
+
+  /// No description provided for @trustUsdtSettlement.
+  ///
+  /// In en, this message translates to:
+  /// **'USDT SETTLEMENT'**
+  String get trustUsdtSettlement;
+
+  /// No description provided for @trustOwnershipRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'CLEAR OWNERSHIP RECORDS'**
+  String get trustOwnershipRecords;
+
+  /// No description provided for @statTargetReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Average target return'**
+  String get statTargetReturn;
+
+  /// No description provided for @statMinimum.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum to start'**
+  String get statMinimum;
+
+  /// No description provided for @statSettlement.
+  ///
+  /// In en, this message translates to:
+  /// **'On-chain settlement'**
+  String get statSettlement;
+
+  /// No description provided for @statVisibility.
+  ///
+  /// In en, this message translates to:
+  /// **'Portfolio visibility'**
+  String get statVisibility;
+
+  /// No description provided for @howTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'From signup to ownership.'**
+  String get howTitle;
+
+  /// No description provided for @howSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A clear path designed for investors who want confidence at every step.'**
+  String get howSubtitle;
+
+  /// No description provided for @howStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Create and verify'**
+  String get howStep1Title;
+
+  /// No description provided for @howStep1Body.
+  ///
+  /// In en, this message translates to:
+  /// **'Open your account, complete KYC, and connect a verified wallet.'**
+  String get howStep1Body;
+
+  /// No description provided for @howStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose BrickShares'**
+  String get howStep2Title;
+
+  /// No description provided for @howStep2Body.
+  ///
+  /// In en, this message translates to:
+  /// **'Review verified assets, target returns, risks, and ownership terms.'**
+  String get howStep2Body;
+
+  /// No description provided for @howStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Fund and track'**
+  String get howStep3Title;
+
+  /// No description provided for @howStep3Body.
+  ///
+  /// In en, this message translates to:
+  /// **'Settle securely with supported crypto and monitor your portfolio.'**
+  String get howStep3Body;
+
+  /// No description provided for @featuresTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Built for clarity,\nnot speculation.'**
+  String get featuresTitle;
+
+  /// No description provided for @featuresBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Every opportunity brings the important information forward: ownership structure, asset verification, target returns, risks, funding network, and settlement status.'**
+  String get featuresBody;
+
+  /// No description provided for @feature1.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified asset documentation'**
+  String get feature1;
+
+  /// No description provided for @feature2.
+  ///
+  /// In en, this message translates to:
+  /// **'Transparent crypto quotes and network fees'**
+  String get feature2;
+
+  /// No description provided for @feature3.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmation before every financial action'**
+  String get feature3;
+
+  /// No description provided for @testimonialsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Built on investor confidence.'**
+  String get testimonialsTitle;
+
+  /// No description provided for @testimonialsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What early BrickClub members value most about the experience.'**
+  String get testimonialsSubtitle;
+
+  /// No description provided for @testimonial1Quote.
+  ///
+  /// In en, this message translates to:
+  /// **'BrickClub makes the important details easy to understand. I know what I own, how it is performing, and what happens before I fund.'**
+  String get testimonial1Quote;
+
+  /// No description provided for @testimonial1Role.
+  ///
+  /// In en, this message translates to:
+  /// **'Entrepreneur, London'**
+  String get testimonial1Role;
+
+  /// No description provided for @testimonial2Quote.
+  ///
+  /// In en, this message translates to:
+  /// **'The verification and confirmation flow gave me confidence. It feels like a serious investment platform, not another crypto shortcut.'**
+  String get testimonial2Quote;
+
+  /// No description provided for @testimonial2Role.
+  ///
+  /// In en, this message translates to:
+  /// **'Product lead, Singapore'**
+  String get testimonial2Role;
+
+  /// No description provided for @testimonial3Quote.
+  ///
+  /// In en, this message translates to:
+  /// **'I can start at a practical amount and still get access to assets I would normally only watch from the outside.'**
+  String get testimonial3Quote;
+
+  /// No description provided for @testimonial3Role.
+  ///
+  /// In en, this message translates to:
+  /// **'Consultant, Dubai'**
+  String get testimonial3Role;
+
+  /// No description provided for @ctaBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'GET STARTED IN MINUTES'**
+  String get ctaBadge;
+
+  /// No description provided for @ctaTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your next asset can start here.'**
+  String get ctaTitle;
+
+  /// No description provided for @ctaBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Install BrickClub, create your account, and explore verified BrickShares built for long-term ownership.'**
+  String get ctaBody;
+
+  /// No description provided for @ctaHaveAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'I already have an account'**
+  String get ctaHaveAccount;
+
+  /// No description provided for @ctaSecureKyc.
+  ///
+  /// In en, this message translates to:
+  /// **'Secure KYC'**
+  String get ctaSecureKyc;
+
+  /// No description provided for @ctaFreeToBrowse.
+  ///
+  /// In en, this message translates to:
+  /// **'Free to browse'**
+  String get ctaFreeToBrowse;
+
+  /// No description provided for @ctaVerifiedOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified assets only'**
+  String get ctaVerifiedOnly;
+
+  /// No description provided for @footerCopyright.
+  ///
+  /// In en, this message translates to:
+  /// **'© 2026 BrickClub'**
+  String get footerCopyright;
 }
 
 class _AppLocalizationsDelegate

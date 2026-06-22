@@ -177,4 +177,234 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get phoneUseDifferentNumber => '使用其他号码';
+
+  @override
+  String get installIosTitle => '在 iPhone 或 iPad 上安装';
+
+  @override
+  String get installIosIntro => '直接从 Safari 将 BrickClub 添加到主屏幕——无需 App Store。';
+
+  @override
+  String get installIosStep1 => '点按 Safari 工具栏中的“分享”按钮。';
+
+  @override
+  String get installIosStep2 => '向下滚动并选择“添加到主屏幕”。';
+
+  @override
+  String get installIosStep3 => '点按“添加”——BrickClub 即会出现在主屏幕上。';
+
+  @override
+  String get installAndroidTitle => '在 Android 上安装';
+
+  @override
+  String get installAndroidIntro => '在浏览器中只需轻点几下即可将 BrickClub 添加到设备。';
+
+  @override
+  String get installAndroidStep1 => '打开浏览器菜单（右上角的 ⋮）。';
+
+  @override
+  String get installAndroidStep2 => '点按“安装应用”或“添加到主屏幕”。';
+
+  @override
+  String get installAndroidStep3 => '确认——BrickClub 即会出现在应用抽屉中。';
+
+  @override
+  String get installDesktopTitle => '在桌面上安装';
+
+  @override
+  String get installDesktopIntro => '从 Chrome 或 Edge 将 BrickClub 安装为应用。';
+
+  @override
+  String get installDesktopStep1 => '点击地址栏中的安装图标，或打开浏览器菜单。';
+
+  @override
+  String get installDesktopStep2 => '选择“安装”，在独立窗口中启动 BrickClub。';
+
+  @override
+  String get installGotIt => '知道了';
+
+  @override
+  String get installAlready => 'BrickClub 已安装在此设备上。';
+
+  @override
+  String get installInstalling => '正在将 BrickClub 安装到您的设备…';
+
+  @override
+  String get installDismissed => '已取消安装。您可以随时安装。';
+
+  @override
+  String get navFeatures => '功能';
+
+  @override
+  String get navHowItWorks => '工作原理';
+
+  @override
+  String get navTestimonials => '用户评价';
+
+  @override
+  String get landingSignIn => '登录';
+
+  @override
+  String get landingSignUp => '注册';
+
+  @override
+  String get landingJoin => '加入';
+
+  @override
+  String get landingCreateAccount => '创建账户';
+
+  @override
+  String get heroTitle => '拥有的，\n不止是梦想。';
+
+  @override
+  String get heroBody =>
+      '通过经过验证的房产支持型 BrickShares 建立真正的所有权，在一个安全的应用中享受透明的业绩和可信的加密结算。';
+
+  @override
+  String get heroInstall => '安装应用';
+
+  @override
+  String get heroExplore => '探索 BrickShares';
+
+  @override
+  String get proofVerifiedAssets => '已验证资产';
+
+  @override
+  String get proofTrustedSettlement => '可信结算';
+
+  @override
+  String get proofClearPerformance => '清晰的业绩';
+
+  @override
+  String get previewPortfolioValue => '投资组合价值';
+
+  @override
+  String get previewMinimum => '最低投资';
+
+  @override
+  String get previewTargetReturn => '目标回报';
+
+  @override
+  String get heroCardTargetReturn => '目标年化回报';
+
+  @override
+  String get assetVerifiedBadge => '已验证资产';
+
+  @override
+  String get assetSampleDescription => '可产生收入的住宅物业';
+
+  @override
+  String get assetFunded => '已募集';
+
+  @override
+  String get trustDueDiligence => '房产尽职调查';
+
+  @override
+  String get trustKycVerified => 'KYC 已验证会员';
+
+  @override
+  String get trustUsdtSettlement => 'USDT 结算';
+
+  @override
+  String get trustOwnershipRecords => '清晰的所有权记录';
+
+  @override
+  String get statTargetReturn => '平均目标回报';
+
+  @override
+  String get statMinimum => '起投金额';
+
+  @override
+  String get statSettlement => '链上结算';
+
+  @override
+  String get statVisibility => '投资组合可见性';
+
+  @override
+  String get howTitle => '从注册到拥有。';
+
+  @override
+  String get howSubtitle => '为希望在每一步都充满信心的投资者设计的清晰路径。';
+
+  @override
+  String get howStep1Title => '创建并验证';
+
+  @override
+  String get howStep1Body => '开设账户，完成 KYC，并连接已验证的钱包。';
+
+  @override
+  String get howStep2Title => '选择 BrickShares';
+
+  @override
+  String get howStep2Body => '查看已验证资产、目标回报、风险和所有权条款。';
+
+  @override
+  String get howStep3Title => '出资并跟踪';
+
+  @override
+  String get howStep3Body => '使用支持的加密货币安全结算，并监控您的投资组合。';
+
+  @override
+  String get featuresTitle => '为清晰而建，\n而非投机。';
+
+  @override
+  String get featuresBody => '每个机会都会突出重要信息：所有权结构、资产验证、目标回报、风险、出资网络和结算状态。';
+
+  @override
+  String get feature1 => '已验证的资产文件';
+
+  @override
+  String get feature2 => '透明的加密报价和网络手续费';
+
+  @override
+  String get feature3 => '每次金融操作前都需确认';
+
+  @override
+  String get testimonialsTitle => '建立在投资者信任之上。';
+
+  @override
+  String get testimonialsSubtitle => '早期 BrickClub 会员最看重的体验。';
+
+  @override
+  String get testimonial1Quote =>
+      'BrickClub 让重要细节一目了然。我清楚自己拥有什么、表现如何，以及出资前会发生什么。';
+
+  @override
+  String get testimonial1Role => '企业家，伦敦';
+
+  @override
+  String get testimonial2Quote => '验证和确认流程让我很有信心。它感觉像是一个严肃的投资平台，而不是又一个加密捷径。';
+
+  @override
+  String get testimonial2Role => '产品负责人，新加坡';
+
+  @override
+  String get testimonial3Quote => '我可以从一个切实可行的金额起步，同时还能接触到通常只能旁观的资产。';
+
+  @override
+  String get testimonial3Role => '顾问，迪拜';
+
+  @override
+  String get ctaBadge => '几分钟即可开始';
+
+  @override
+  String get ctaTitle => '您的下一项资产可以从这里开始。';
+
+  @override
+  String get ctaBody => '安装 BrickClub，创建账户，探索为长期持有而打造的经过验证的 BrickShares。';
+
+  @override
+  String get ctaHaveAccount => '我已有账户';
+
+  @override
+  String get ctaSecureKyc => '安全的 KYC';
+
+  @override
+  String get ctaFreeToBrowse => '免费浏览';
+
+  @override
+  String get ctaVerifiedOnly => '仅限已验证资产';
+
+  @override
+  String get footerCopyright => '© 2026 BrickClub';
 }

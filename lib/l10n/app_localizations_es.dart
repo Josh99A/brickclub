@@ -187,4 +187,258 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get phoneUseDifferentNumber => 'Usar otro número';
+
+  @override
+  String get installIosTitle => 'Instalar en iPhone o iPad';
+
+  @override
+  String get installIosIntro =>
+      'Añade BrickClub a tu pantalla de inicio directamente desde Safari, sin App Store.';
+
+  @override
+  String get installIosStep1 =>
+      'Toca el botón Compartir en la barra de herramientas de Safari.';
+
+  @override
+  String get installIosStep2 =>
+      'Desplázate hacia abajo y elige «Añadir a pantalla de inicio».';
+
+  @override
+  String get installIosStep3 =>
+      'Toca «Añadir»: BrickClub aparecerá en tu pantalla de inicio.';
+
+  @override
+  String get installAndroidTitle => 'Instalar en Android';
+
+  @override
+  String get installAndroidIntro =>
+      'Añade BrickClub a tu dispositivo con un par de toques desde tu navegador.';
+
+  @override
+  String get installAndroidStep1 =>
+      'Abre el menú del navegador (⋮ en la esquina superior).';
+
+  @override
+  String get installAndroidStep2 =>
+      'Toca «Instalar app» o «Añadir a pantalla de inicio».';
+
+  @override
+  String get installAndroidStep3 =>
+      'Confirma: BrickClub aparecerá en tu cajón de aplicaciones.';
+
+  @override
+  String get installDesktopTitle => 'Instalar en el escritorio';
+
+  @override
+  String get installDesktopIntro =>
+      'Instala BrickClub como aplicación desde Chrome o Edge.';
+
+  @override
+  String get installDesktopStep1 =>
+      'Haz clic en el icono de instalación en la barra de direcciones o abre el menú del navegador.';
+
+  @override
+  String get installDesktopStep2 =>
+      'Elige «Instalar» para abrir BrickClub en su propia ventana.';
+
+  @override
+  String get installGotIt => 'Entendido';
+
+  @override
+  String get installAlready =>
+      'BrickClub ya está instalado en este dispositivo.';
+
+  @override
+  String get installInstalling => 'Instalando BrickClub en tu dispositivo…';
+
+  @override
+  String get installDismissed =>
+      'Instalación cancelada. Puedes instalarlo cuando quieras.';
+
+  @override
+  String get navFeatures => 'Funciones';
+
+  @override
+  String get navHowItWorks => 'Cómo funciona';
+
+  @override
+  String get navTestimonials => 'Testimonios';
+
+  @override
+  String get landingSignIn => 'Iniciar sesión';
+
+  @override
+  String get landingSignUp => 'Registrarse';
+
+  @override
+  String get landingJoin => 'Únete';
+
+  @override
+  String get landingCreateAccount => 'Crear cuenta';
+
+  @override
+  String get heroTitle => 'Posee más que\nun sueño.';
+
+  @override
+  String get heroBody =>
+      'Construye una propiedad real a través de BrickShares verificadas y respaldadas por inmuebles, con un rendimiento transparente y una liquidación cripto confiable desde una sola app segura.';
+
+  @override
+  String get heroInstall => 'Instalar la app';
+
+  @override
+  String get heroExplore => 'Explorar BrickShares';
+
+  @override
+  String get proofVerifiedAssets => 'Activos verificados';
+
+  @override
+  String get proofTrustedSettlement => 'Liquidación confiable';
+
+  @override
+  String get proofClearPerformance => 'Rendimiento claro';
+
+  @override
+  String get previewPortfolioValue => 'Valor de la cartera';
+
+  @override
+  String get previewMinimum => 'Mínimo';
+
+  @override
+  String get previewTargetReturn => 'Rendimiento objetivo';
+
+  @override
+  String get heroCardTargetReturn => 'Rendimiento anual objetivo';
+
+  @override
+  String get assetVerifiedBadge => 'ACTIVO VERIFICADO';
+
+  @override
+  String get assetSampleDescription =>
+      'Propiedad residencial generadora de ingresos';
+
+  @override
+  String get assetFunded => 'Financiado';
+
+  @override
+  String get trustDueDiligence => 'DEBIDA DILIGENCIA DE INMUEBLES';
+
+  @override
+  String get trustKycVerified => 'MIEMBROS VERIFICADOS POR KYC';
+
+  @override
+  String get trustUsdtSettlement => 'LIQUIDACIÓN EN USDT';
+
+  @override
+  String get trustOwnershipRecords => 'REGISTROS DE PROPIEDAD CLAROS';
+
+  @override
+  String get statTargetReturn => 'Rendimiento objetivo medio';
+
+  @override
+  String get statMinimum => 'Mínimo para empezar';
+
+  @override
+  String get statSettlement => 'Liquidación on-chain';
+
+  @override
+  String get statVisibility => 'Visibilidad de la cartera';
+
+  @override
+  String get howTitle => 'Del registro a la propiedad.';
+
+  @override
+  String get howSubtitle =>
+      'Un camino claro diseñado para inversores que quieren confianza en cada paso.';
+
+  @override
+  String get howStep1Title => 'Crea y verifica';
+
+  @override
+  String get howStep1Body =>
+      'Abre tu cuenta, completa el KYC y conecta una cartera verificada.';
+
+  @override
+  String get howStep2Title => 'Elige BrickShares';
+
+  @override
+  String get howStep2Body =>
+      'Revisa activos verificados, rendimientos objetivo, riesgos y condiciones de propiedad.';
+
+  @override
+  String get howStep3Title => 'Financia y haz seguimiento';
+
+  @override
+  String get howStep3Body =>
+      'Liquida de forma segura con las criptos admitidas y supervisa tu cartera.';
+
+  @override
+  String get featuresTitle => 'Hecho para la claridad,\nno la especulación.';
+
+  @override
+  String get featuresBody =>
+      'Cada oportunidad pone por delante la información importante: estructura de propiedad, verificación del activo, rendimientos objetivo, riesgos, red de financiación y estado de la liquidación.';
+
+  @override
+  String get feature1 => 'Documentación de activos verificada';
+
+  @override
+  String get feature2 =>
+      'Cotizaciones cripto y comisiones de red transparentes';
+
+  @override
+  String get feature3 => 'Confirmación antes de cada acción financiera';
+
+  @override
+  String get testimonialsTitle => 'Construido sobre la confianza del inversor.';
+
+  @override
+  String get testimonialsSubtitle =>
+      'Lo que más valoran de la experiencia los primeros miembros de BrickClub.';
+
+  @override
+  String get testimonial1Quote =>
+      'BrickClub hace que los detalles importantes sean fáciles de entender. Sé qué poseo, cómo rinde y qué ocurre antes de financiar.';
+
+  @override
+  String get testimonial1Role => 'Emprendedora, Londres';
+
+  @override
+  String get testimonial2Quote =>
+      'El flujo de verificación y confirmación me dio confianza. Parece una plataforma de inversión seria, no otro atajo cripto.';
+
+  @override
+  String get testimonial2Role => 'Líder de producto, Singapur';
+
+  @override
+  String get testimonial3Quote =>
+      'Puedo empezar con una cantidad práctica y aun así acceder a activos que normalmente solo observaría desde fuera.';
+
+  @override
+  String get testimonial3Role => 'Consultora, Dubái';
+
+  @override
+  String get ctaBadge => 'EMPIEZA EN MINUTOS';
+
+  @override
+  String get ctaTitle => 'Tu próximo activo puede empezar aquí.';
+
+  @override
+  String get ctaBody =>
+      'Instala BrickClub, crea tu cuenta y explora BrickShares verificadas creadas para la propiedad a largo plazo.';
+
+  @override
+  String get ctaHaveAccount => 'Ya tengo una cuenta';
+
+  @override
+  String get ctaSecureKyc => 'KYC seguro';
+
+  @override
+  String get ctaFreeToBrowse => 'Explorar es gratis';
+
+  @override
+  String get ctaVerifiedOnly => 'Solo activos verificados';
+
+  @override
+  String get footerCopyright => '© 2026 BrickClub';
 }
