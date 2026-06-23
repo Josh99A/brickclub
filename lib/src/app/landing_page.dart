@@ -388,6 +388,8 @@ class _LandingHeader extends StatelessWidget {
                     onPressed: onSignUp,
                     filled: true,
                   ),
+                  SizedBox(width: 10),
+                  LanguageSwitcher(compact: compact),
                 ],
               );
             },

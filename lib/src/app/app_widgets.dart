@@ -70,6 +70,8 @@ class AppHeader extends StatelessWidget {
           const _BrickMark(),
           SizedBox(width: 10),
           Expanded(child: Text(title, style: AppText.topTitle)),
+          const LanguageSwitcher(compact: true),
+          SizedBox(width: 9),
           HeaderCircle(
             onTap: () => showMessage(context, l10n.notificationsNone),
             child: Icon(
@@ -92,6 +94,111 @@ class AppHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Sentinel popup-menu value for the "follow the device language" option,
+/// since a null menu value would not trigger onSelected.
+const String _systemLocaleId = 'system';
+
+/// A compact language picker for the top bar. Works whether the member is
+/// signed in or not — it reads/writes the locale via [LocaleControllerScope].
+/// In [compact] mode it renders as a circular icon button (for the member
+/// header); otherwise as a labelled pill (for the landing header).
+class LanguageSwitcher extends StatelessWidget {
+  const LanguageSwitcher({super.key, this.compact = false});
+
+  final bool compact;
+
+  String _endonymFor(String languageCode) {
+    for (final language in _appLanguages) {
+      if (language.locale.languageCode == languageCode) return language.endonym;
+    }
+    return _appLanguages.first.endonym;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = LocaleControllerScope.of(context);
+    final l10n = AppLocalizations.of(context);
+    final current = scope.locale;
+    // When following the system, show the language actually resolved for display.
+    final activeCode =
+        (current ?? Localizations.localeOf(context)).languageCode;
+
+    return PopupMenuButton<String>(
+      tooltip: l10n.profileLanguage,
+      position: PopupMenuPosition.under,
+      color: AppColors.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: AppColors.border),
+      ),
+      onSelected: (id) =>
+          scope.onLocaleChanged(id == _systemLocaleId ? null : Locale(id)),
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem<String>(
+          value: _systemLocaleId,
+          checked: current == null,
+          child: Text(l10n.languageSystemDefault),
+        ),
+        for (final language in _appLanguages)
+          CheckedPopupMenuItem<String>(
+            value: language.locale.languageCode,
+            checked: current?.languageCode == language.locale.languageCode,
+            child: Text(language.endonym),
+          ),
+      ],
+      child: compact
+          ? Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.panel,
+                border: Border.all(color: AppColors.border),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.language_rounded,
+                color: AppColors.secondary,
+                size: 17,
+              ),
+            )
+          : Container(
+              height: 40,
+              padding: const EdgeInsetsDirectional.only(start: 12, end: 8),
+              decoration: BoxDecoration(
+                color: AppColors.panel,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.language_rounded,
+                    color: AppColors.secondary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    _endonymFor(activeCode),
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: AppColors.muted,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
