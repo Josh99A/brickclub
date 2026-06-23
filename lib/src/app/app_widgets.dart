@@ -330,9 +330,9 @@ class InvestmentCard extends StatelessWidget {
                         height: height,
                       ),
                     ),
-                    Positioned(
+                    PositionedDirectional(
                       top: 12,
-                      left: 12,
+                      start: 12,
                       child: ChoicePill(label: category, selected: true),
                     ),
                   ],
@@ -804,7 +804,7 @@ class _AppTextFieldState extends State<AppTextField> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          padding: const EdgeInsetsDirectional.only(start: 2, bottom: 6),
           child: Text(widget.label!, style: AppText.fieldLabel),
         ),
         field,
@@ -1034,6 +1034,7 @@ class PhoneFrame extends StatelessWidget {
 }
 
 PreferredSizeWidget detailAppBar(BuildContext context, String title) {
+  final isRtl = Directionality.of(context) == TextDirection.rtl;
   return AppBar(
     toolbarHeight: 76,
     backgroundColor: AppColors.background,
@@ -1041,7 +1042,7 @@ PreferredSizeWidget detailAppBar(BuildContext context, String title) {
     centerTitle: true,
     leading: IconButton(
       onPressed: () => Navigator.pop(context),
-      icon: Icon(Icons.chevron_left, size: 32),
+      icon: Icon(isRtl ? Icons.chevron_right : Icons.chevron_left, size: 32),
     ),
     title: Text(title, style: AppText.detailAppBar),
     bottom: PreferredSize(

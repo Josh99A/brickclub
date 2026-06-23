@@ -32,9 +32,9 @@ class DetailScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     child: _AssetGalleryHero(images: opportunity.images),
                   ),
-                  Positioned(
+                  PositionedDirectional(
                     top: 16,
-                    left: 14,
+                    start: 14,
                     child: ChoicePill(
                       label: l10n.detailVerifiedDocs,
                       selected: true,

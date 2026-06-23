@@ -45,6 +45,7 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Row(
@@ -64,10 +65,14 @@ class _SignInScreenState extends State<SignInScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Align(
-                            alignment: Alignment.centerLeft,
+                            alignment: AlignmentDirectional.centerStart,
                             child: IconButton(
                               onPressed: widget.onBack,
-                              icon: Icon(Icons.arrow_back_rounded),
+                              icon: Icon(
+                                isRtl
+                                    ? Icons.arrow_forward_rounded
+                                    : Icons.arrow_back_rounded,
+                              ),
                             ),
                           ),
                           SizedBox(height: 18),
@@ -115,7 +120,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                           SizedBox(height: 8),
                           Align(
-                            alignment: Alignment.centerRight,
+                            alignment: AlignmentDirectional.centerEnd,
                             child: TextButton(
                               onPressed: _sendPasswordReset,
                               child: Text(l10n.signInForgotPassword),

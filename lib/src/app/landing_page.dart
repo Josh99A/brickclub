@@ -414,7 +414,7 @@ class _NavLinkState extends State<_NavLink> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 28),
+      padding: const EdgeInsetsDirectional.only(end: 28),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hovered = true),
@@ -958,7 +958,7 @@ class _Step extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 28),
+      padding: const EdgeInsetsDirectional.only(end: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1122,9 +1122,9 @@ class _AssetReviewPanel extends StatelessWidget {
                     fit: BoxFit.cover,
                   ),
                 ),
-                Positioned(
+                PositionedDirectional(
                   top: 14,
-                  left: 14,
+                  start: 14,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -1264,7 +1264,7 @@ class _Testimonial extends StatelessWidget {
   Widget build(BuildContext context) {
     return _HoverLift(
       child: Container(
-        margin: const EdgeInsets.only(right: 18),
+        margin: const EdgeInsetsDirectional.only(end: 18),
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
           color: AppColors.panel,
