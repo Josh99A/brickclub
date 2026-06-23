@@ -42,6 +42,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
     return PhoneFrame(
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -55,10 +56,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 children: [
                   IconButton(
                     onPressed: widget.onBack,
-                    icon: Icon(Icons.chevron_left, size: 34),
+                    icon: Icon(
+                      isRtl ? Icons.chevron_right : Icons.chevron_left,
+                      size: 34,
+                    ),
                     padding: EdgeInsets.zero,
-                    alignment: Alignment.centerLeft,
+                    alignment: AlignmentDirectional.centerStart,
                   ),
+
                   const _BrandLockup(height: 112),
                   SizedBox(height: 10),
                   Text(
