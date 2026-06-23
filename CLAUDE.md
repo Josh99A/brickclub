@@ -126,6 +126,14 @@ skipped and logged, never blocking the triggering action.
   for safe backend work.
 - Web push needs a build-time VAPID key:
   `flutter build web --dart-define=FCM_VAPID_KEY=<public-vapid-key>`.
+- **Storage CORS is required for web image rendering.** Flutter web (CanvasKit)
+  fetches `Image.network` bytes to draw onto the canvas, so uploaded asset photos /
+  payment QR codes load from `brickclub.firebasestorage.app` only if the bucket has
+  a CORS policy. Without it, `AssetImageView` silently falls back to the bundled
+  `skyline_heights.png` placeholder and uploads appear to "do nothing". Config lives
+  in `storage-cors.json`; re-apply after any bucket recreation with
+  `gsutil cors set storage-cors.json gs://brickclub.firebasestorage.app`
+  (verify with `gsutil cors get gs://brickclub.firebasestorage.app`).
 - Functions target Node 22; client SDK is on the Firebase v4/v6 line (see
   `pubspec.yaml`).
 
