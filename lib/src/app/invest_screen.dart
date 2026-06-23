@@ -103,11 +103,26 @@ class _InvestScreenState extends State<InvestScreen> {
                       selected: true,
                     ),
                     SizedBox(width: 8),
-                    ChoicePill(label: localizeAssetTerm(l10n, filters.asset)),
+                    _filterPill(
+                      l10n: l10n,
+                      value: filters.asset,
+                      defaultLabel: l10n.filtersAssetClass,
+                      opportunities: allOpportunities,
+                    ),
                     SizedBox(width: 8),
-                    ChoicePill(label: localizeAssetTerm(l10n, filters.risk)),
+                    _filterPill(
+                      l10n: l10n,
+                      value: filters.risk,
+                      defaultLabel: l10n.filtersRiskLevel,
+                      opportunities: allOpportunities,
+                    ),
                     SizedBox(width: 8),
-                    ChoicePill(label: localizeAssetTerm(l10n, filters.payment)),
+                    _filterPill(
+                      l10n: l10n,
+                      value: filters.payment,
+                      defaultLabel: l10n.filtersPaymentMethod,
+                      opportunities: allOpportunities,
+                    ),
                   ],
                 ),
               ),
@@ -200,6 +215,23 @@ class _InvestScreenState extends State<InvestScreen> {
           ],
         );
       },
+    );
+  }
+
+  /// A filter shortcut pill: shows the dimension name (e.g. "Risk level") while
+  /// unset, or the chosen value highlighted once a filter is applied. Tapping it
+  /// opens the full filters screen. Disabled when there are no opportunities.
+  Widget _filterPill({
+    required AppLocalizations l10n,
+    required String value,
+    required String defaultLabel,
+    required List<InvestmentOpportunity> opportunities,
+  }) {
+    final active = value != 'All';
+    return ChoicePill(
+      label: active ? localizeAssetTerm(l10n, value) : defaultLabel,
+      selected: active,
+      onTap: opportunities.isEmpty ? null : () => _openFilters(opportunities),
     );
   }
 
