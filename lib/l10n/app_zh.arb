@@ -402,5 +402,15 @@
   "errKycStorageUnauthorized": "您没有权限上传此文件。",
   "errKycStorageCanceled": "文件上传已取消。",
   "errKycStorageRetry": "上传耗时过长。请检查您的网络后重试。",
-  "errKycStorageQuota": "文件上传暂时不可用。请稍后再试。"
+  "errKycStorageQuota": "文件上传暂时不可用。请稍后再试。",
+
+  "filterAll": "全部",
+  "enumAssetRealEstate": "房地产",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "指数基金",
+  "enumAssetAlternative": "另类投资",
+  "enumRiskConservative": "保守型",
+  "enumRiskBalanced": "平衡型",
+  "enumRiskGrowth": "成长型"
 }

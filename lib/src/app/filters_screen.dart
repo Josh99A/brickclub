@@ -54,6 +54,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                             FilterChoices(
                               values: _assetOptions,
                               selected: asset,
+                              labelBuilder: (v) => localizeAssetTerm(l10n, v),
                               onChanged: (value) =>
                                   setState(() => asset = value),
                             ),
@@ -71,6 +72,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                             FilterChoices(
                               values: _riskOptions,
                               selected: risk,
+                              labelBuilder: (v) => localizeAssetTerm(l10n, v),
                               onChanged: (value) =>
                                   setState(() => risk = value),
                             ),
@@ -88,6 +90,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                             FilterChoices(
                               values: _paymentOptions,
                               selected: payment,
+                              labelBuilder: (v) => localizeAssetTerm(l10n, v),
                               onChanged: (value) =>
                                   setState(() => payment = value),
                             ),

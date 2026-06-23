@@ -402,5 +402,15 @@
   "errKycStorageUnauthorized": "No tienes permiso para subir este documento.",
   "errKycStorageCanceled": "La subida del documento se canceló.",
   "errKycStorageRetry": "La subida tardó demasiado. Comprueba tu conexión e inténtalo de nuevo.",
-  "errKycStorageQuota": "Las subidas de documentos no están disponibles temporalmente. Inténtalo de nuevo más tarde."
+  "errKycStorageQuota": "Las subidas de documentos no están disponibles temporalmente. Inténtalo de nuevo más tarde.",
+
+  "filterAll": "Todos",
+  "enumAssetRealEstate": "Bienes raíces",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "Fondo indexado",
+  "enumAssetAlternative": "Alternativa",
+  "enumRiskConservative": "Conservador",
+  "enumRiskBalanced": "Equilibrado",
+  "enumRiskGrowth": "Crecimiento"
 }

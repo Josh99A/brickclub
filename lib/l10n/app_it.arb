@@ -402,5 +402,15 @@
   "errKycStorageUnauthorized": "Non hai l'autorizzazione per caricare questo documento.",
   "errKycStorageCanceled": "Il caricamento del documento è stato annullato.",
   "errKycStorageRetry": "Il caricamento ha richiesto troppo tempo. Controlla la connessione e riprova.",
-  "errKycStorageQuota": "I caricamenti di documenti sono temporaneamente non disponibili. Riprova più tardi."
+  "errKycStorageQuota": "I caricamenti di documenti sono temporaneamente non disponibili. Riprova più tardi.",
+
+  "filterAll": "Tutti",
+  "enumAssetRealEstate": "Immobiliare",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "Fondo indicizzato",
+  "enumAssetAlternative": "Alternativo",
+  "enumRiskConservative": "Conservativo",
+  "enumRiskBalanced": "Bilanciato",
+  "enumRiskGrowth": "Crescita"
 }

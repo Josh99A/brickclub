@@ -6,6 +6,7 @@ class ProfileScreen extends StatelessWidget {
     required this.user,
     required this.kyc,
     required this.supportRepository,
+    required this.referralRepository,
     required this.themeMode,
     required this.onThemeModeChanged,
     required this.locale,
@@ -17,6 +18,7 @@ class ProfileScreen extends StatelessWidget {
   final SignedInUserDetails? user;
   final KycProfile kyc;
   final SupportRepository supportRepository;
+  final ReferralRepository referralRepository;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final Locale? locale;
@@ -99,6 +101,16 @@ class ProfileScreen extends StatelessWidget {
             subtitle: item.$2,
             onTap: () => showMessage(context, l10n.profileRowOpened(item.$1)),
           ),
+        ProfileRow(
+          key: const ValueKey('profile-referral'),
+          title: l10n.profileReferral,
+          subtitle: l10n.profileReferralSubtitle,
+          onTap: () => Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(
+              builder: (_) => ReferralScreen(repository: referralRepository),
+            ),
+          ),
+        ),
         ProfileRow(
           key: const ValueKey('profile-support'),
           title: l10n.profileSupport,

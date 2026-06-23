@@ -402,5 +402,15 @@
   "errKycStorageUnauthorized": "आपको यह दस्तावेज़ अपलोड करने की अनुमति नहीं है।",
   "errKycStorageCanceled": "दस्तावेज़ अपलोड रद्द किया गया।",
   "errKycStorageRetry": "अपलोड में बहुत समय लगा। कृपया अपना कनेक्शन जाँचें और फिर से प्रयास करें।",
-  "errKycStorageQuota": "दस्तावेज़ अपलोड अस्थायी रूप से अनुपलब्ध हैं। कृपया बाद में फिर से प्रयास करें।"
+  "errKycStorageQuota": "दस्तावेज़ अपलोड अस्थायी रूप से अनुपलब्ध हैं। कृपया बाद में फिर से प्रयास करें।",
+
+  "filterAll": "सभी",
+  "enumAssetRealEstate": "रियल एस्टेट",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "इंडेक्स फंड",
+  "enumAssetAlternative": "वैकल्पिक",
+  "enumRiskConservative": "रूढ़िवादी",
+  "enumRiskBalanced": "संतुलित",
+  "enumRiskGrowth": "विकास"
 }

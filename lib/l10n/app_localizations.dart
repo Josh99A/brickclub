@@ -1304,6 +1304,132 @@ abstract class AppLocalizations {
   /// **'Your account and BrickShares details'**
   String get profileDefaultSubtitle;
 
+  /// No description provided for @commonRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get commonRetry;
+
+  /// No description provided for @profileReferral.
+  ///
+  /// In en, this message translates to:
+  /// **'Refer & earn'**
+  String get profileReferral;
+
+  /// No description provided for @profileReferralSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite friends and earn commission'**
+  String get profileReferralSubtitle;
+
+  /// No description provided for @referralScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Refer & earn'**
+  String get referralScreenTitle;
+
+  /// No description provided for @referralHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite friends, earn commission'**
+  String get referralHeadline;
+
+  /// No description provided for @referralHowItWorksBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Share your code. When someone you invited makes an investment, you earn {rate} of the amount they invest — credited straight to your wallet.'**
+  String referralHowItWorksBody(String rate);
+
+  /// No description provided for @referralYourCodeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your referral code'**
+  String get referralYourCodeTitle;
+
+  /// No description provided for @referralCopyCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy code'**
+  String get referralCopyCode;
+
+  /// No description provided for @referralCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Referral code copied'**
+  String get referralCopied;
+
+  /// No description provided for @referralLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite link copied'**
+  String get referralLinkCopied;
+
+  /// No description provided for @referralShareInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Share invite'**
+  String get referralShareInvite;
+
+  /// No description provided for @referralFriendsJoined.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends joined'**
+  String get referralFriendsJoined;
+
+  /// No description provided for @referralTotalEarned.
+  ///
+  /// In en, this message translates to:
+  /// **'Total earned'**
+  String get referralTotalEarned;
+
+  /// No description provided for @referralPaidToWalletNote.
+  ///
+  /// In en, this message translates to:
+  /// **'You earn {rate} of every investment your referrals make, paid to your wallet.'**
+  String referralPaidToWalletNote(String rate);
+
+  /// No description provided for @referralDisabledNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Referral rewards are currently paused. Your code still works — earnings resume when rewards are switched back on.'**
+  String get referralDisabledNote;
+
+  /// No description provided for @referralRecentEarningsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent earnings'**
+  String get referralRecentEarningsTitle;
+
+  /// No description provided for @referralNoEarningsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No referral earnings yet. Share your code to get started.'**
+  String get referralNoEarningsYet;
+
+  /// No description provided for @referralCommissionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{rate} of a {amount} investment'**
+  String referralCommissionSubtitle(String rate, String amount);
+
+  /// No description provided for @referralLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t load your referral details. Please try again.'**
+  String get referralLoadError;
+
+  /// No description provided for @signUpReferralCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Referral code (optional)'**
+  String get signUpReferralCode;
+
+  /// No description provided for @signUpReferralCodeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a friend\'s code'**
+  String get signUpReferralCodeHint;
+
   /// No description provided for @themeScreenTitle.
   ///
   /// In en, this message translates to:
@@ -2323,6 +2449,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Document uploads are temporarily unavailable. Please try again later.'**
   String get errKycStorageQuota;
+
+  /// No description provided for @filterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get filterAll;
+
+  /// No description provided for @enumAssetRealEstate.
+  ///
+  /// In en, this message translates to:
+  /// **'Real Estate'**
+  String get enumAssetRealEstate;
+
+  /// No description provided for @enumAssetReit.
+  ///
+  /// In en, this message translates to:
+  /// **'REIT'**
+  String get enumAssetReit;
+
+  /// No description provided for @enumAssetEtf.
+  ///
+  /// In en, this message translates to:
+  /// **'ETF'**
+  String get enumAssetEtf;
+
+  /// No description provided for @enumAssetIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'Index Fund'**
+  String get enumAssetIndex;
+
+  /// No description provided for @enumAssetAlternative.
+  ///
+  /// In en, this message translates to:
+  /// **'Alternative'**
+  String get enumAssetAlternative;
+
+  /// No description provided for @enumRiskConservative.
+  ///
+  /// In en, this message translates to:
+  /// **'Conservative'**
+  String get enumRiskConservative;
+
+  /// No description provided for @enumRiskBalanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced'**
+  String get enumRiskBalanced;
+
+  /// No description provided for @enumRiskGrowth.
+  ///
+  /// In en, this message translates to:
+  /// **'Growth'**
+  String get enumRiskGrowth;
 }
 
 class _AppLocalizationsDelegate

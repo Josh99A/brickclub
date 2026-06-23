@@ -611,11 +611,16 @@ class FilterChoices extends StatelessWidget {
     required this.values,
     required this.selected,
     required this.onChanged,
+    this.labelBuilder,
   });
 
   final List<String> values;
   final String selected;
   final ValueChanged<String> onChanged;
+
+  /// Optional display transform for each value (e.g. localization). The raw
+  /// [values] are still what gets selected and matched against.
+  final String Function(String value)? labelBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -625,7 +630,7 @@ class FilterChoices extends StatelessWidget {
       children: [
         for (final value in values)
           ChoicePill(
-            label: value,
+            label: labelBuilder?.call(value) ?? value,
             selected: selected == value,
             onTap: () => onChanged(value),
           ),
@@ -1157,6 +1162,25 @@ PreferredSizeWidget detailAppBar(BuildContext context, String title) {
       child: Divider(height: 1, color: AppColors.border),
     ),
   );
+}
+
+/// Localizes a known asset enum value (category/risk code, or the "All" filter
+/// sentinel) for display only. Unknown/legacy values (free text or already
+/// human-readable strings) are returned unchanged; filtering always matches on
+/// the raw value, so display localization never affects matching.
+String localizeAssetTerm(AppLocalizations l10n, String value) {
+  return switch (value) {
+    'All' => l10n.filterAll,
+    'realEstate' => l10n.enumAssetRealEstate,
+    'reit' => l10n.enumAssetReit,
+    'etf' => l10n.enumAssetEtf,
+    'index' => l10n.enumAssetIndex,
+    'alternative' => l10n.enumAssetAlternative,
+    'conservative' => l10n.enumRiskConservative,
+    'balanced' => l10n.enumRiskBalanced,
+    'growth' => l10n.enumRiskGrowth,
+    _ => value,
+  };
 }
 
 void openDetail(

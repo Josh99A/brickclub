@@ -582,6 +582,7 @@ class _AdminSection extends StatelessWidget {
       6 => _ReportsPanel(data: data),
       _ => _SettingsPanel(
         policy: data.withdrawalPolicy,
+        referralPolicy: data.referralPolicy,
         repository: repository,
         onChanged: onChanged,
       ),
@@ -1467,7 +1468,7 @@ class _PaymentsPanel extends StatelessWidget {
               },
             ),
             SizedBox(height: 24),
-            Text('Deposit proof review', style: AppText.cardHeadingSmall),
+            Text('Deposit requests', style: AppText.cardHeadingSmall),
             SizedBox(height: 12),
             _DepositRequestTable(
               requests: depositRequests,
@@ -1505,7 +1506,7 @@ class _DepositRequestTable extends StatelessWidget {
   Widget build(BuildContext context) {
     if (requests.isEmpty) {
       return Panel(
-        child: Text('No submitted deposit proofs yet.', style: AppText.body),
+        child: Text('No deposit requests yet.', style: AppText.body),
       );
     }
 
@@ -1528,6 +1529,10 @@ class _DepositRequestTable extends StatelessWidget {
       trailingBuilder: (row) {
         final request = row.source as AdminDepositRequest;
         final submitted = request.status == 'proof_submitted';
+        // Admins can verify a submitted proof, or manually approve a request
+        // still awaiting payment (funds confirmed off-platform). Rejection only
+        // applies to a submitted proof.
+        final canVerify = submitted || request.status == 'pending_payment';
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1539,8 +1544,10 @@ class _DepositRequestTable extends StatelessWidget {
               icon: Icon(Icons.receipt_long_outlined, size: 18),
             ),
             IconButton(
-              tooltip: 'Verify',
-              onPressed: submitted ? () => onVerify(request) : null,
+              tooltip: request.status == 'pending_payment'
+                  ? 'Approve manually'
+                  : 'Verify',
+              onPressed: canVerify ? () => onVerify(request) : null,
               icon: Icon(Icons.verified_outlined, size: 18),
             ),
             IconButton(
@@ -1709,11 +1716,13 @@ class _ReportsPanel extends StatelessWidget {
 class _SettingsPanel extends StatelessWidget {
   const _SettingsPanel({
     required this.policy,
+    required this.referralPolicy,
     required this.repository,
     required this.onChanged,
   });
 
   final WithdrawalPolicy policy;
+  final ReferralPolicy referralPolicy;
   final AdminRepository repository;
   final VoidCallback onChanged;
 
@@ -1730,38 +1739,78 @@ class _SettingsPanel extends StatelessWidget {
         policy: policy,
         onChanged: onChanged,
       ),
-      child: _AdminPanel(
-        title: 'Withdrawal requirements',
-        child: Column(
-          children: [
-            _SettingRow(
-              'Withdrawals',
-              policy.enabled ? 'Enabled' : 'Disabled',
-              switchValue: policy.enabled,
+      child: Column(
+        children: [
+          _AdminPanel(
+            title: 'Withdrawal requirements',
+            child: Column(
+              children: [
+                _SettingRow(
+                  'Withdrawals',
+                  policy.enabled ? 'Enabled' : 'Disabled',
+                  switchValue: policy.enabled,
+                ),
+                _SettingRow(
+                  'Minimum amount',
+                  '\$${policy.minimumAmountUsd.toStringAsFixed(0)}',
+                ),
+                _SettingRow(
+                  'Fees',
+                  '\$${policy.flatFeeUsd.toStringAsFixed(0)} + ${policy.percentageFee.toStringAsFixed(2)}%',
+                ),
+                _SettingRow(
+                  'Destination wallet',
+                  policy.requiresDestinationWalletVerification
+                      ? 'Verification required'
+                      : 'Address format only',
+                  switchValue: policy.requiresDestinationWalletVerification,
+                ),
+                _SettingRow(
+                  'Approvals',
+                  '${policy.requiredApprovals} admin approval${policy.requiredApprovals == 1 ? '' : 's'}',
+                ),
+                _SettingRow('Processing time', policy.processingTime),
+                _SettingRow('Notes', policy.notes),
+              ],
             ),
-            _SettingRow(
-              'Minimum amount',
-              '\$${policy.minimumAmountUsd.toStringAsFixed(0)}',
+          ),
+          SizedBox(height: 24),
+          _AdminPanel(
+            title: 'Referral rewards',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SettingRow(
+                  'Referral rewards',
+                  referralPolicy.enabled ? 'Enabled' : 'Disabled',
+                  switchValue: referralPolicy.enabled,
+                ),
+                _SettingRow(
+                  'Commission',
+                  '${referralPolicy.commissionPercent.toStringAsFixed(referralPolicy.commissionPercent.truncateToDouble() == referralPolicy.commissionPercent ? 0 : 2)}% of each investment',
+                ),
+                _SettingRow(
+                  'Scope',
+                  referralPolicy.firstInvestmentOnly
+                      ? 'First investment only'
+                      : 'Every investment',
+                  switchValue: referralPolicy.firstInvestmentOnly,
+                ),
+                SizedBox(height: 12),
+                _SectionActionButton(
+                  label: 'Edit referrals',
+                  icon: Icons.edit_outlined,
+                  onPressed: () => _showReferralPolicyDialog(
+                    context,
+                    repository: repository,
+                    policy: referralPolicy,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ],
             ),
-            _SettingRow(
-              'Fees',
-              '\$${policy.flatFeeUsd.toStringAsFixed(0)} + ${policy.percentageFee.toStringAsFixed(2)}%',
-            ),
-            _SettingRow(
-              'Destination wallet',
-              policy.requiresDestinationWalletVerification
-                  ? 'Verification required'
-                  : 'Address format only',
-              switchValue: policy.requiresDestinationWalletVerification,
-            ),
-            _SettingRow(
-              'Approvals',
-              '${policy.requiredApprovals} admin approval${policy.requiredApprovals == 1 ? '' : 's'}',
-            ),
-            _SettingRow('Processing time', policy.processingTime),
-            _SettingRow('Notes', policy.notes),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2255,74 +2304,94 @@ Future<void> _showUserDetailDialog(
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
-      return AlertDialog(
-        backgroundColor: AppColors.panel,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                user.displayName?.isNotEmpty == true
-                    ? user.displayName!
-                    : user.email,
+      var detailFuture = repository.loadUserDetail(user.uid);
+      return StatefulBuilder(
+        builder: (statefulContext, setState) {
+          return AlertDialog(
+            backgroundColor: AppColors.panel,
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    user.displayName?.isNotEmpty == true
+                        ? user.displayName!
+                        : user.email,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Edit user',
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _showUserDialog(
+                      context,
+                      repository: repository,
+                      user: user,
+                      onChanged: onChanged,
+                    );
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 460,
+              child: FutureBuilder<AdminUserDetail>(
+                future: detailFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const SizedBox(
+                      height: 160,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return SizedBox(
+                      height: 120,
+                      child: Center(
+                        child: Text(
+                          'Could not load user details.\n${snapshot.error}',
+                          style: AppText.small,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+                  return _UserDetailBody(
+                    detail: snapshot.data!,
+                    repository: repository,
+                    onWalletChanged: () {
+                      onChanged();
+                      setState(() {
+                        detailFuture = repository.loadUserDetail(user.uid);
+                      });
+                    },
+                  );
+                },
               ),
             ),
-            IconButton(
-              tooltip: 'Edit user',
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _showUserDialog(
-                  context,
-                  repository: repository,
-                  user: user,
-                  onChanged: onChanged,
-                );
-              },
-              icon: const Icon(Icons.edit_outlined, size: 20),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 460,
-          child: FutureBuilder<AdminUserDetail>(
-            future: repository.loadUserDetail(user.uid),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const SizedBox(
-                  height: 160,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (snapshot.hasError) {
-                return SizedBox(
-                  height: 120,
-                  child: Center(
-                    child: Text(
-                      'Could not load user details.\n${snapshot.error}',
-                      style: AppText.small,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }
-              return _UserDetailBody(detail: snapshot.data!);
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Close'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
       );
     },
   );
 }
 
 class _UserDetailBody extends StatelessWidget {
-  const _UserDetailBody({required this.detail});
+  const _UserDetailBody({
+    required this.detail,
+    required this.repository,
+    required this.onWalletChanged,
+  });
 
   final AdminUserDetail detail;
+  final AdminRepository repository;
+  final VoidCallback onWalletChanged;
 
   String _money(double value) => '\$${value.toStringAsFixed(2)}';
 
@@ -2335,6 +2404,16 @@ class _UserDetailBody extends StatelessWidget {
     final m = local.month.toString().padLeft(2, '0');
     final d = local.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
+  }
+
+  Future<void> _adjustWallet(BuildContext context, String direction) async {
+    await _showWalletAdjustmentDialog(
+      context,
+      repository: repository,
+      uid: detail.user.uid,
+      direction: direction,
+      onChanged: onWalletChanged,
+    );
   }
 
   @override
@@ -2359,6 +2438,37 @@ class _UserDetailBody extends StatelessWidget {
           _DetailRow('Status', user.disabled ? 'Disabled' : 'Active'),
           _DetailRow('Created', _date(user.createdAt)),
           _DetailRow('Last sign-in', _date(user.lastSignInAt)),
+          const SizedBox(height: 14),
+          const _DetailSection('Wallet'),
+          _DetailRow('Balance', _money(detail.wallet.balanceUsd)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _adjustWallet(context, 'credit'),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add funds'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _adjustWallet(context, 'debit'),
+                  icon: const Icon(Icons.remove_rounded, size: 18),
+                  label: const Text('Deduct funds'),
+                ),
+              ),
+            ],
+          ),
+          if (detail.wallet.transactions.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final tx in detail.wallet.transactions.take(8))
+              _DetailRow(
+                '${tx.isCredit ? '+' : '-'}${_money(tx.amountUsd)} · ${_date(tx.createdAt)}',
+                tx.reason.isNotEmpty ? tx.reason : tx.type,
+              ),
+          ],
           const SizedBox(height: 14),
           const _DetailSection('KYC'),
           if (kyc == null)
@@ -3438,6 +3548,81 @@ Future<void> _showRejectDepositDialog(
   reason.dispose();
 }
 
+Future<void> _showWalletAdjustmentDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required String uid,
+  required String direction,
+  required VoidCallback onChanged,
+}) async {
+  final isCredit = direction == 'credit';
+  final amount = TextEditingController();
+  final reason = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: Text(isCredit ? 'Add funds to wallet' : 'Deduct funds from wallet'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppTextField(
+              controller: amount,
+              label: 'Amount (USD)',
+              hintText: '0.00',
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              controller: reason,
+              label: 'Reason',
+              hintText: isCredit
+                  ? 'e.g. Bank transfer received off-platform'
+                  : 'e.g. Correcting a duplicate credit',
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final value = double.tryParse(amount.text.trim());
+            if (value == null || value <= 0) {
+              showMessage(context, 'Enter an amount greater than 0.');
+              return;
+            }
+            if (reason.text.trim().isEmpty) {
+              showMessage(context, 'A reason is required.');
+              return;
+            }
+            await _runAdminAction(
+              context,
+              action: () => repository.adjustMemberWallet(
+                uid: uid,
+                amountUsd: value,
+                direction: direction,
+                reason: reason.text.trim(),
+              ),
+              onChanged: onChanged,
+              successMessage: isCredit ? 'Funds added' : 'Funds deducted',
+            );
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+          },
+          child: Text(isCredit ? 'Add funds' : 'Deduct funds'),
+        ),
+      ],
+    ),
+  );
+  amount.dispose();
+  reason.dispose();
+}
+
 Future<void> _showWithdrawalPolicyDialog(
   BuildContext context, {
   required AdminRepository repository,
@@ -3572,6 +3757,96 @@ Future<void> _showWithdrawalPolicyDialog(
   approvals.dispose();
   processingTime.dispose();
   notes.dispose();
+}
+
+Future<void> _showReferralPolicyDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required ReferralPolicy policy,
+  required VoidCallback onChanged,
+}) async {
+  final commissionPercent = TextEditingController(
+    text: policy.commissionPercent.toStringAsFixed(
+      policy.commissionPercent.truncateToDouble() == policy.commissionPercent
+          ? 0
+          : 2,
+    ),
+  );
+  var enabled = policy.enabled;
+  var firstInvestmentOnly = policy.firstInvestmentOnly;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        return AlertDialog(
+          backgroundColor: AppColors.panel,
+          title: Text('Referral rewards'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    value: enabled,
+                    onChanged: (value) => setState(() => enabled = value),
+                    title: Text('Referral rewards enabled'),
+                    activeThumbColor: AppColors.gold,
+                  ),
+                  SwitchListTile(
+                    value: firstInvestmentOnly,
+                    onChanged: (value) =>
+                        setState(() => firstInvestmentOnly = value),
+                    title: Text('First investment only'),
+                    subtitle: Text(
+                      'Pay commission only on each referral\'s first '
+                      'verified investment.',
+                    ),
+                    activeThumbColor: AppColors.gold,
+                  ),
+                  SizedBox(height: 10),
+                  AppTextField(
+                    controller: commissionPercent,
+                    label: 'Commission percent',
+                    hintText: '5',
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final payload = ReferralPolicy(
+                  enabled: enabled,
+                  commissionPercent:
+                      double.tryParse(commissionPercent.text) ?? 0,
+                  firstInvestmentOnly: firstInvestmentOnly,
+                );
+
+                await _runAdminAction(
+                  context,
+                  action: () => repository.updateReferralPolicy(payload),
+                  onChanged: onChanged,
+                  successMessage: 'Referral rewards updated',
+                );
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: Text('Save'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  commissionPercent.dispose();
 }
 
 Future<void> _showSupportReplyDialog(

@@ -402,5 +402,15 @@
   "errKycStorageUnauthorized": "ليس لديك صلاحية رفع هذا المستند.",
   "errKycStorageCanceled": "تم إلغاء رفع المستند.",
   "errKycStorageRetry": "استغرق الرفع وقتًا طويلًا. تحقق من اتصالك وحاول مرة أخرى.",
-  "errKycStorageQuota": "رفع المستندات غير متاح مؤقتًا. يُرجى المحاولة لاحقًا."
+  "errKycStorageQuota": "رفع المستندات غير متاح مؤقتًا. يُرجى المحاولة لاحقًا.",
+
+  "filterAll": "الكل",
+  "enumAssetRealEstate": "عقارات",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "صندوق مؤشر",
+  "enumAssetAlternative": "بدائل",
+  "enumRiskConservative": "متحفظ",
+  "enumRiskBalanced": "متوازن",
+  "enumRiskGrowth": "نمو"
 }

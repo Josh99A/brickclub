@@ -28,6 +28,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+  final referralController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Prefill the referral code from a shared invite link (e.g. ?ref=ABC123).
+    // On non-web platforms Uri.base has no query, so this is a no-op there.
+    final referral = Uri.base.queryParameters['ref']?.trim() ?? '';
+    if (referral.isNotEmpty) {
+      referralController.text = referral.toUpperCase();
+    }
+  }
 
   @override
   void dispose() {
@@ -36,6 +48,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     emailController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
+    referralController.dispose();
     super.dispose();
   }
 
@@ -166,6 +179,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             autofillHints: const [AutofillHints.newPassword],
                           ),
                         ),
+                        SizedBox(height: 14),
+                        _SignUpField(
+                          label: l10n.signUpReferralCode,
+                          child: AppTextField(
+                            controller: referralController,
+                            hintText: l10n.signUpReferralCodeHint,
+                            compact: true,
+                            prefixIcon: Icons.card_giftcard_rounded,
+                            textInputAction: TextInputAction.done,
+                          ),
+                        ),
                         SizedBox(height: 12),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,6 +299,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           email: emailController.text,
           password: passwordController.text,
           confirmPassword: confirmPasswordController.text,
+          referralCode: referralController.text,
         ),
       );
 

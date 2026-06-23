@@ -24,6 +24,8 @@ import '../features/investment/domain/investment_models.dart';
 import '../features/investment/domain/investment_repository.dart';
 import '../features/kyc/domain/kyc_models.dart';
 import '../features/kyc/domain/kyc_repository.dart';
+import '../features/referral/domain/referral_models.dart';
+import '../features/referral/domain/referral_repository.dart';
 import '../features/support/domain/support_models.dart';
 import '../features/support/domain/support_repository.dart';
 
@@ -39,6 +41,7 @@ part 'invest_screen.dart';
 part 'wallet_screen.dart';
 part 'portfolio_screen.dart';
 part 'profile_screen.dart';
+part 'referral_screen.dart';
 part 'support_screens.dart';
 part 'filters_screen.dart';
 part 'detail_screen.dart';
@@ -88,6 +91,7 @@ class BrickClubApp extends StatefulWidget {
     required this.adminRepository,
     required this.investmentRepository,
     required this.kycRepository,
+    required this.referralRepository,
     required this.supportRepository,
     this.showLandingPage = kIsWeb,
     this.splashDuration = const Duration(seconds: 2),
@@ -97,6 +101,7 @@ class BrickClubApp extends StatefulWidget {
   final AdminRepository adminRepository;
   final InvestmentRepository investmentRepository;
   final KycRepository kycRepository;
+  final ReferralRepository referralRepository;
   final SupportRepository supportRepository;
   final bool showLandingPage;
   final Duration splashDuration;
@@ -343,6 +348,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
                           user: widget.authRepository.currentUserDetails(),
                           kyc: scope.kyc,
                           supportRepository: widget.supportRepository,
+                          referralRepository: widget.referralRepository,
                           themeMode: themeMode,
                           onThemeModeChanged: _setThemeMode,
                           locale: _localeNotifier.value,

@@ -9,6 +9,8 @@ import 'package:brickclub/src/features/investment/domain/investment_models.dart'
 import 'package:brickclub/src/features/investment/domain/investment_repository.dart';
 import 'package:brickclub/src/features/kyc/domain/kyc_models.dart';
 import 'package:brickclub/src/features/kyc/domain/kyc_repository.dart';
+import 'package:brickclub/src/features/referral/domain/referral_models.dart';
+import 'package:brickclub/src/features/referral/domain/referral_repository.dart';
 import 'package:brickclub/src/features/support/domain/support_models.dart';
 import 'package:brickclub/src/features/support/domain/support_repository.dart';
 import 'package:file_picker/file_picker.dart';
@@ -24,6 +26,7 @@ void main() {
   final adminRepository = FakeAdminRepository();
   final investmentRepository = FakeInvestmentRepository();
   final kycRepository = FakeKycRepository.approved();
+  final referralRepository = FakeReferralRepository();
   final supportRepository = FakeSupportRepository();
 
   setUpAll(() {
@@ -46,6 +49,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -70,6 +74,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -88,6 +93,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: false,
         splashDuration: Duration.zero,
@@ -116,6 +122,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -148,6 +155,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -178,6 +186,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -207,6 +216,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -335,6 +345,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -367,6 +378,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -414,6 +426,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: kycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: false,
         splashDuration: Duration.zero,
@@ -494,6 +507,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: pendingKycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -536,6 +550,7 @@ void main() {
         adminRepository: adminRepository,
         investmentRepository: investmentRepository,
         kycRepository: pendingKycRepository,
+        referralRepository: referralRepository,
         supportRepository: supportRepository,
         showLandingPage: true,
       ),
@@ -706,6 +721,11 @@ class FakeAdminRepository implements AdminRepository {
       enabled: true,
       notes: 'Withdrawals are reviewed by operations.',
     ),
+    referralPolicy: ReferralPolicy(
+      enabled: true,
+      commissionPercent: 5,
+      firstInvestmentOnly: false,
+    ),
     notifications: [
       AdminNotification(
         id: 'notification-1',
@@ -785,6 +805,7 @@ class FakeAdminRepository implements AdminRepository {
         holdings: [],
       ),
       orders: const [],
+      wallet: const AdminUserWallet(balanceUsd: 0, transactions: []),
     );
   }
 
@@ -821,6 +842,14 @@ class FakeAdminRepository implements AdminRepository {
   Future<void> verifyDepositRequest(String id) async {}
 
   @override
+  Future<void> adjustMemberWallet({
+    required String uid,
+    required double amountUsd,
+    required String direction,
+    required String reason,
+  }) async {}
+
+  @override
   Future<void> rejectDepositRequest({
     required String id,
     required String reason,
@@ -838,11 +867,28 @@ class FakeAdminRepository implements AdminRepository {
   @override
   Future<void> updateWithdrawalPolicy(WithdrawalPolicy policy) async {}
 
+  @override
+  Future<void> updateReferralPolicy(ReferralPolicy policy) async {}
+
   bool markedNotificationsRead = false;
 
   @override
   Future<void> markNotificationsRead() async {
     markedNotificationsRead = true;
+  }
+}
+
+class FakeReferralRepository implements ReferralRepository {
+  @override
+  Future<ReferralProfile> getReferralProfile() async {
+    return const ReferralProfile(
+      referralCode: 'BRICK42',
+      referralCount: 2,
+      totalEarnedUsd: 75,
+      commissionPercent: 5,
+      referralsEnabled: true,
+      commissions: [],
+    );
   }
 }
 

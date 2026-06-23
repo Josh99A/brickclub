@@ -6,6 +6,7 @@ class AdminDashboardData {
     required this.depositRequests,
     required this.supportTickets,
     required this.withdrawalPolicy,
+    required this.referralPolicy,
     this.notifications = const [],
     this.kycProfiles = const [],
   });
@@ -30,6 +31,9 @@ class AdminDashboardData {
       withdrawalPolicy: WithdrawalPolicy.fromJson(
         Map<String, dynamic>.from(json['withdrawalPolicy'] as Map? ?? {}),
       ),
+      referralPolicy: ReferralPolicy.fromJson(
+        Map<String, dynamic>.from(json['referralPolicy'] as Map? ?? {}),
+      ),
       kycProfiles: _list(json['kycProfiles'], AdminKycProfile.fromJson),
     );
   }
@@ -41,6 +45,7 @@ class AdminDashboardData {
   final List<AdminSupportTicket> supportTickets;
   final List<AdminNotification> notifications;
   final WithdrawalPolicy withdrawalPolicy;
+  final ReferralPolicy referralPolicy;
   final List<AdminKycProfile> kycProfiles;
 
   int get unreadNotificationCount =>
@@ -122,6 +127,7 @@ class AdminUserDetail {
     required this.kyc,
     required this.portfolio,
     required this.orders,
+    required this.wallet,
   });
 
   factory AdminUserDetail.fromJson(Map<String, dynamic> json) {
@@ -137,6 +143,9 @@ class AdminUserDetail {
         Map<String, dynamic>.from(json['portfolio'] as Map? ?? {}),
       ),
       orders: _list(json['orders'], AdminUserOrder.fromJson),
+      wallet: AdminUserWallet.fromJson(
+        Map<String, dynamic>.from(json['wallet'] as Map? ?? {}),
+      ),
     );
   }
 
@@ -144,6 +153,58 @@ class AdminUserDetail {
   final AdminUserKyc? kyc;
   final AdminUserPortfolio portfolio;
   final List<AdminUserOrder> orders;
+  final AdminUserWallet wallet;
+}
+
+class AdminUserWallet {
+  const AdminUserWallet({
+    required this.balanceUsd,
+    required this.transactions,
+  });
+
+  factory AdminUserWallet.fromJson(Map<String, dynamic> json) {
+    return AdminUserWallet(
+      balanceUsd: (json['balanceUsd'] as num?)?.toDouble() ?? 0,
+      transactions: _list(
+        json['transactions'],
+        AdminWalletTransaction.fromJson,
+      ),
+    );
+  }
+
+  final double balanceUsd;
+  final List<AdminWalletTransaction> transactions;
+}
+
+class AdminWalletTransaction {
+  const AdminWalletTransaction({
+    required this.id,
+    required this.type,
+    required this.amountUsd,
+    required this.balanceAfter,
+    required this.reason,
+    required this.createdAt,
+  });
+
+  factory AdminWalletTransaction.fromJson(Map<String, dynamic> json) {
+    return AdminWalletTransaction(
+      id: json['id'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      amountUsd: (json['amountUsd'] as num?)?.toDouble() ?? 0,
+      balanceAfter: (json['balanceAfter'] as num?)?.toDouble() ?? 0,
+      reason: json['reason'] as String? ?? '',
+      createdAt: json['createdAt'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String type;
+  final double amountUsd;
+  final double balanceAfter;
+  final String reason;
+  final String createdAt;
+
+  bool get isCredit => type == 'credit';
 }
 
 class AdminUserKyc {
@@ -708,6 +769,58 @@ class WithdrawalPolicy {
   double feeFor(double amountUsd) {
     return flatFeeUsd + (amountUsd * percentageFee / 100);
   }
+}
+
+class ReferralPolicy {
+  const ReferralPolicy({
+    required this.enabled,
+    required this.commissionPercent,
+    required this.firstInvestmentOnly,
+  });
+
+  factory ReferralPolicy.defaults() {
+    return const ReferralPolicy(
+      enabled: true,
+      commissionPercent: 5,
+      firstInvestmentOnly: false,
+    );
+  }
+
+  factory ReferralPolicy.fromJson(Map<String, dynamic> json) {
+    final defaults = ReferralPolicy.defaults();
+    return ReferralPolicy(
+      enabled: json['enabled'] as bool? ?? defaults.enabled,
+      commissionPercent:
+          (json['commissionPercent'] as num?)?.toDouble() ??
+          defaults.commissionPercent,
+      firstInvestmentOnly:
+          json['firstInvestmentOnly'] as bool? ?? defaults.firstInvestmentOnly,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enabled': enabled,
+      'commissionPercent': commissionPercent,
+      'firstInvestmentOnly': firstInvestmentOnly,
+    };
+  }
+
+  ReferralPolicy copyWith({
+    bool? enabled,
+    double? commissionPercent,
+    bool? firstInvestmentOnly,
+  }) {
+    return ReferralPolicy(
+      enabled: enabled ?? this.enabled,
+      commissionPercent: commissionPercent ?? this.commissionPercent,
+      firstInvestmentOnly: firstInvestmentOnly ?? this.firstInvestmentOnly,
+    );
+  }
+
+  final bool enabled;
+  final double commissionPercent;
+  final bool firstInvestmentOnly;
 }
 
 class AdminKycProfile {

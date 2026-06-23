@@ -91,7 +91,7 @@ class HomeScreen extends StatelessWidget {
             final opportunity = opportunities.first;
             return InvestmentCard(
               compact: true,
-              category: opportunity.assetClass,
+              category: localizeAssetTerm(l10n, opportunity.assetClass),
               title: opportunity.displayTitle,
               location: opportunity.location,
               minimum: opportunity.minimumText,

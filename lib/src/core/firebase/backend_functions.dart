@@ -39,6 +39,19 @@ class BackendFunctions {
     final callable = _functions.httpsCallable('submitKycProfile');
     await callable.call<void>(data);
   }
+
+  /// Attaches the inviter for the current member from a shared referral code.
+  /// The backend enforces the one-time/no-self/pre-investment guards.
+  Future<void> claimReferralCode(String code) async {
+    final callable = _functions.httpsCallable('claimReferralCode');
+    await callable.call<void>({'code': code.trim().toUpperCase()});
+  }
+
+  Future<Map<String, dynamic>> getReferralProfile() async {
+    final callable = _functions.httpsCallable('getReferralProfile');
+    final result = await callable.call<Map<String, dynamic>>();
+    return Map<String, dynamic>.from(result.data);
+  }
 }
 
 class MemberProfileDto {

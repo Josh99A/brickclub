@@ -402,5 +402,15 @@
   "errKycStorageUnauthorized": "У вас нет прав для загрузки этого документа.",
   "errKycStorageCanceled": "Загрузка документа отменена.",
   "errKycStorageRetry": "Загрузка заняла слишком много времени. Проверьте соединение и повторите попытку.",
-  "errKycStorageQuota": "Загрузка документов временно недоступна. Повторите попытку позже."
+  "errKycStorageQuota": "Загрузка документов временно недоступна. Повторите попытку позже.",
+
+  "filterAll": "Все",
+  "enumAssetRealEstate": "Недвижимость",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "Индексный фонд",
+  "enumAssetAlternative": "Альтернативные",
+  "enumRiskConservative": "Консервативный",
+  "enumRiskBalanced": "Сбалансированный",
+  "enumRiskGrowth": "Рост"
 }

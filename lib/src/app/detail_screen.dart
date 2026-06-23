@@ -46,7 +46,7 @@ class DetailScreen extends StatelessWidget {
               Text(opportunity.displayTitle, style: AppText.detailTitle),
               Text(
                 l10n.detailAssetLine(
-                  opportunity.assetClass,
+                  localizeAssetTerm(l10n, opportunity.assetClass),
                   opportunity.location,
                 ),
                 style: AppText.body,
@@ -85,7 +85,7 @@ class DetailScreen extends StatelessWidget {
                         ),
                         Expanded(
                           child: Metric(
-                            opportunity.riskLevel,
+                            localizeAssetTerm(l10n, opportunity.riskLevel),
                             l10n.filtersRiskLevel,
                           ),
                         ),

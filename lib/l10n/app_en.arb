@@ -437,6 +437,44 @@
   "profileDefaultName": "BrickClub member",
   "profileDefaultSubtitle": "Your account and BrickShares details",
 
+  "commonRetry": "Try again",
+  "profileReferral": "Refer & earn",
+  "profileReferralSubtitle": "Invite friends and earn commission",
+  "referralScreenTitle": "Refer & earn",
+  "referralHeadline": "Invite friends, earn commission",
+  "referralHowItWorksBody": "Share your code. When someone you invited makes an investment, you earn {rate} of the amount they invest — credited straight to your wallet.",
+  "@referralHowItWorksBody": {
+    "placeholders": {
+      "rate": { "type": "String" }
+    }
+  },
+  "referralYourCodeTitle": "Your referral code",
+  "referralCopyCode": "Copy code",
+  "referralCopied": "Referral code copied",
+  "referralLinkCopied": "Invite link copied",
+  "referralShareInvite": "Share invite",
+  "referralFriendsJoined": "Friends joined",
+  "referralTotalEarned": "Total earned",
+  "referralPaidToWalletNote": "You earn {rate} of every investment your referrals make, paid to your wallet.",
+  "@referralPaidToWalletNote": {
+    "placeholders": {
+      "rate": { "type": "String" }
+    }
+  },
+  "referralDisabledNote": "Referral rewards are currently paused. Your code still works — earnings resume when rewards are switched back on.",
+  "referralRecentEarningsTitle": "Recent earnings",
+  "referralNoEarningsYet": "No referral earnings yet. Share your code to get started.",
+  "referralCommissionSubtitle": "{rate} of a {amount} investment",
+  "@referralCommissionSubtitle": {
+    "placeholders": {
+      "rate": { "type": "String" },
+      "amount": { "type": "String" }
+    }
+  },
+  "referralLoadError": "We couldn't load your referral details. Please try again.",
+  "signUpReferralCode": "Referral code (optional)",
+  "signUpReferralCodeHint": "Enter a friend's code",
+
   "themeScreenTitle": "Theme",
   "themeAppearance": "Appearance",
   "themeAppearanceDescription": "Choose how BrickClub looks on this device.",
@@ -638,5 +676,15 @@
   "errKycStorageUnauthorized": "You do not have permission to upload this document.",
   "errKycStorageCanceled": "Document upload was cancelled.",
   "errKycStorageRetry": "The upload took too long. Please check your connection and try again.",
-  "errKycStorageQuota": "Document uploads are temporarily unavailable. Please try again later."
+  "errKycStorageQuota": "Document uploads are temporarily unavailable. Please try again later.",
+
+  "filterAll": "All",
+  "enumAssetRealEstate": "Real Estate",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "Index Fund",
+  "enumAssetAlternative": "Alternative",
+  "enumRiskConservative": "Conservative",
+  "enumRiskBalanced": "Balanced",
+  "enumRiskGrowth": "Growth"
 }

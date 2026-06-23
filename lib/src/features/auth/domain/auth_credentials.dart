@@ -12,6 +12,7 @@ class SignUpCredentials {
     required this.email,
     required this.password,
     required this.confirmPassword,
+    this.referralCode = '',
   });
 
   final String firstName;
@@ -19,4 +20,8 @@ class SignUpCredentials {
   final String email;
   final String password;
   final String confirmPassword;
+
+  /// Optional referral code captured at signup (from a friend's invite link or
+  /// typed manually). Empty when the member signed up without one.
+  final String referralCode;
 }

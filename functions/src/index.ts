@@ -94,12 +94,22 @@ type AdminAsset = {
   minimumInvestment: number;
 };
 
+type PaymentAccountField = {
+  label: string;
+  value: string;
+};
+
+// Models any payment method, crypto or otherwise. `type` discriminates: "crypto"
+// uses network/walletAddress; "payoneer"/"wise"/"paytm" use accountDetails rows.
+// `assetSymbol` doubles as the member-selectable method code for every type.
 type CryptoPaymentOption = {
   id: string;
+  type: string;
   network: string;
   assetSymbol: string;
   walletAddress: string;
   qrCodeUrl: string;
+  accountDetails: PaymentAccountField[];
   enabled: boolean;
   minimumAmount: number;
 };
@@ -146,6 +156,12 @@ type WithdrawalPolicy = {
   notes: string;
 };
 
+type ReferralPolicy = {
+  enabled: boolean;
+  commissionPercent: number;
+  firstInvestmentOnly: boolean;
+};
+
 type UserPayload = {
   email: string;
   password?: string;
@@ -189,12 +205,18 @@ const paymentOptionsCollection = db.collection("cryptoPaymentOptions");
 const purchaseOrdersCollection = db.collection("purchaseOrders");
 const memberHoldingsCollection = db.collection("memberHoldings");
 const memberActivitiesCollection = db.collection("memberActivities");
+const memberWalletsCollection = db.collection("memberWallets");
+const walletTransactionsCollection = db.collection("walletTransactions");
 const kycProfilesCollection = db.collection("kycProfiles");
 const notificationTokensCollection = db.collection("notificationTokens");
 const adminNotificationsCollection = db.collection("adminNotifications");
 const withdrawalRequestsCollection = db.collection("withdrawalRequests");
 const supportTicketsCollection = db.collection("supportTickets");
+const referralAccountsCollection = db.collection("referralAccounts");
+const referralCodesCollection = db.collection("referralCodes");
+const referralCommissionsCollection = db.collection("referralCommissions");
 const withdrawalPolicyDoc = db.collection("platformSettings").doc("withdrawals");
+const referralPolicyDoc = db.collection("platformSettings").doc("referrals");
 const devMailFrom = "BrickClub Dev <no-reply@brickclub.local>";
 
 export const getMemberProfile = onCall(async (request) => {
@@ -281,7 +303,12 @@ export const listAdminDashboard = onAdminCall(async () => {
       kycProfilesCollection.get(),
     ]);
   const depositRequestsSnapshot = await purchaseOrdersCollection
-    .where("status", "in", ["proof_submitted", "deposit_verified", "deposit_rejected"])
+    .where("status", "in", [
+      "pending_payment",
+      "proof_submitted",
+      "deposit_verified",
+      "deposit_rejected",
+    ])
     .get();
   const supportTicketsSnapshot = await supportTicketsCollection
     .orderBy("updatedAt", "desc")
@@ -292,6 +319,7 @@ export const listAdminDashboard = onAdminCall(async () => {
     .limit(25)
     .get();
   const withdrawalPolicy = await loadWithdrawalPolicy();
+  const referralPolicy = await loadReferralPolicy();
 
   return {
     users: usersResult.users.map(userToJson),
@@ -301,6 +329,7 @@ export const listAdminDashboard = onAdminCall(async () => {
     supportTickets: supportTicketsSnapshot.docs.map(supportTicketFromDoc),
     notifications: notificationsSnapshot.docs.map(adminNotificationFromDoc),
     withdrawalPolicy,
+    referralPolicy,
     kycProfiles: kycSnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
@@ -360,13 +389,22 @@ export const listMemberOpportunities = onMemberCall(async (request) => {
 export const getMemberDashboard = onMemberCall(async (request) => {
   const uid = request.auth!.uid;
   const locale = readLocale(request.data);
-  const [ordersSnapshot, assetsSnapshot, paymentOptionsSnapshot, holdingsSnapshot] =
-    await Promise.all([
-      purchaseOrdersCollection.where("uid", "==", uid).get(),
-      assetsCollection.get(),
-      paymentOptionsCollection.where("enabled", "==", true).get(),
-      memberHoldingsCollection.where("userId", "==", uid).get(),
-    ]);
+  const [
+    ordersSnapshot,
+    assetsSnapshot,
+    paymentOptionsSnapshot,
+    holdingsSnapshot,
+    walletSnapshot,
+  ] = await Promise.all([
+    purchaseOrdersCollection.where("uid", "==", uid).get(),
+    assetsCollection.get(),
+    paymentOptionsCollection.where("enabled", "==", true).get(),
+    memberHoldingsCollection.where("userId", "==", uid).get(),
+    memberWalletsCollection.doc(uid).get(),
+  ]);
+  const walletBalanceUsd = roundMoney(
+    Number(walletSnapshot.data()?.balanceUsd ?? 0),
+  );
 
   const assetsById = new Map(
     assetsSnapshot.docs.map((doc) => [
@@ -405,7 +443,7 @@ export const getMemberDashboard = onMemberCall(async (request) => {
 
   return {
     portfolioValueUsd: totalCurrentValue,
-    walletBalanceUsd: 0,
+    walletBalanceUsd,
     yearReturnPercent: overallReturnPercentage,
     totalInvested,
     totalCurrentValue,
@@ -491,7 +529,9 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
   // amount. Non-stablecoin assets (e.g. BTC) need a live price feed before
   // launch; until then they are quoted 1:1 as a placeholder.
   const quoteAmount = roundMoney(amountUsd);
-  const networkFee = paymentAsset === "BTC" ? 0.0001 : 1;
+  const isCrypto = paymentOption.type === "crypto";
+  // Network fees are a crypto concept; non-crypto wire transfers carry none here.
+  const networkFee = !isCrypto ? 0 : paymentAsset === "BTC" ? 0.0001 : 1;
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
   // Pre-compute the ownership and share figures the member is shown before
   // payment. The real holding is only written after admin approval.
@@ -520,6 +560,8 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
     ownershipPercentage,
     paymentWalletAddress: paymentOption.walletAddress,
     paymentQrCodeUrl: paymentOption.qrCodeUrl,
+    paymentType: paymentOption.type,
+    paymentAccountDetails: paymentOption.accountDetails,
     status: "pending_payment",
     expiresAt: expiresAt.toISOString(),
     createdAt: FieldValue.serverTimestamp(),
@@ -604,12 +646,18 @@ export const verifyDepositProof = onAdminCall(async (data, context) => {
     if (!orderSnapshot.exists || !order) {
       throw new HttpsError("not-found", "Deposit request was not found.");
     }
-    if (order.status !== "proof_submitted") {
+    // Admins may approve a submitted proof, or manually approve a request that
+    // is still awaiting payment/proof (e.g. funds confirmed off-platform).
+    if (
+      order.status !== "proof_submitted" &&
+      order.status !== "pending_payment"
+    ) {
       throw new HttpsError(
         "failed-precondition",
-        "Only submitted deposit proofs can be verified.",
+        "Only pending or submitted deposit requests can be verified.",
       );
     }
+    const manuallyApproved = order.status === "pending_payment";
 
     const uid = String(order.uid);
     const opportunityId = String(order.opportunityId);
@@ -653,6 +701,7 @@ export const verifyDepositProof = onAdminCall(async (data, context) => {
         status: "deposit_verified",
         approvedAt: FieldValue.serverTimestamp(),
         approvedBy: context.uid,
+        manuallyApproved,
         verifiedAt: FieldValue.serverTimestamp(),
         rejectionReason: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -723,8 +772,21 @@ export const verifyDepositProof = onAdminCall(async (data, context) => {
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    return {uid};
+    return {uid, opportunityId, amountUsd};
   });
+
+  // Best-effort referral commission. A failure here must never undo the
+  // already-committed deposit verification, so it is isolated and logged.
+  try {
+    await accrueReferralCommission({
+      refereeUid: result.uid,
+      orderId,
+      opportunityId: result.opportunityId,
+      amountUsd: result.amountUsd,
+    });
+  } catch (error) {
+    logger.error("Referral commission accrual failed", {orderId, error});
+  }
 
   await notifyMember(result.uid, {
     type: "deposit_verified",
@@ -773,6 +835,51 @@ export const rejectDepositProof = onAdminCall(async (data) => {
   });
 
   return {orderId, status: "deposit_rejected", reason};
+});
+
+// Admin-initiated wallet adjustment. A `credit` is a manual deposit (e.g. funds
+// received off-platform); a `debit` is a correction. Every adjustment requires a
+// reason and is recorded in the walletTransactions ledger for audit.
+export const adjustMemberWallet = onAdminCall(async (data, context) => {
+  const value = readObject(data);
+  const uid = readString(value, "uid");
+  const amountUsd = readPositiveNumber(value, "amountUsd");
+  const direction = readString(value, "direction").toLowerCase();
+  const reason = readString(value, "reason");
+  if (direction !== "credit" && direction !== "debit") {
+    throw new HttpsError(
+      "invalid-argument",
+      "direction must be either credit or debit.",
+    );
+  }
+
+  // Ensure the target user exists before mutating their wallet.
+  await auth.getUser(uid);
+
+  const result = await applyWalletAdjustment({
+    uid,
+    amountUsd,
+    direction,
+    reason,
+    createdBy: context.uid,
+  });
+
+  await notifyMember(uid, {
+    type: direction === "credit" ? "wallet_credited" : "wallet_debited",
+    title: direction === "credit" ?
+      "Funds added to your wallet" :
+      "Wallet balance adjusted",
+    body: direction === "credit" ?
+      `${formatUsd(amountUsd)} was added to your wallet balance. ${reason}` :
+      `${formatUsd(amountUsd)} was deducted from your wallet balance. ${reason}`,
+    data: {transactionId: result.transactionId},
+  });
+
+  return {
+    uid,
+    balanceUsd: result.balanceUsd,
+    transactionId: result.transactionId,
+  };
 });
 
 export const createWithdrawalRequest = onMemberCall(async (request) => {
@@ -846,6 +953,112 @@ export const updateWithdrawalPolicy = onAdminCall(async (data) => {
   );
 
   return policy;
+});
+
+export const updateReferralPolicy = onAdminCall(async (data) => {
+  const policy = readReferralPolicy(data);
+  await referralPolicyDoc.set(
+    {
+      ...policy,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  return policy;
+});
+
+// Returns the caller's referral profile, lazily creating their account (with a
+// unique share code) on first access so existing members get a code too. Also
+// returns the referrer's lifetime earnings, referral count, current commission
+// rate, and recent commission history.
+export const getReferralProfile = onMemberCall(async (request) => {
+  const uid = request.auth!.uid;
+  const [account, policy, commissionsSnapshot] = await Promise.all([
+    ensureReferralAccount(uid),
+    loadReferralPolicy(),
+    referralCommissionsCollection
+      .where("referrerUid", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(25)
+      .get(),
+  ]);
+
+  return {
+    referralCode: account.referralCode,
+    referredBy: account.referredBy ?? "",
+    referredByCode: account.referredByCode ?? "",
+    referralCount: account.referralCount,
+    totalEarnedUsd: roundMoney(account.totalEarnedUsd),
+    commissionPercent: policy.commissionPercent,
+    referralsEnabled: policy.enabled,
+    commissions: commissionsSnapshot.docs.map(referralCommissionFromDoc),
+  };
+});
+
+// Records the inviter for the caller from a shared referral code. Idempotent and
+// guarded: a member may only ever set their referrer once, may not refer
+// themselves, and may not attach a referrer after they have already invested.
+export const claimReferralCode = onMemberCall(async (request) => {
+  const uid = request.auth!.uid;
+  const code = readString(request.data, "code").toUpperCase();
+
+  const codeSnapshot = await referralCodesCollection.doc(code).get();
+  const referrerUid = codeSnapshot.data()?.uid as string | undefined;
+  if (!codeSnapshot.exists || !referrerUid) {
+    throw new HttpsError("not-found", "That referral code was not found.");
+  }
+  if (referrerUid === uid) {
+    throw new HttpsError(
+      "failed-precondition",
+      "You cannot use your own referral code.",
+    );
+  }
+
+  // Block attaching a referrer once the member has verified investments — this
+  // stops retroactive credit grabs after the fact.
+  const verifiedOrders = await purchaseOrdersCollection
+    .where("uid", "==", uid)
+    .where("status", "==", "deposit_verified")
+    .limit(1)
+    .get();
+  if (!verifiedOrders.empty) {
+    throw new HttpsError(
+      "failed-precondition",
+      "A referrer can only be set before your first investment.",
+    );
+  }
+
+  // Ensure both accounts exist, then set referredBy once inside a transaction.
+  await ensureReferralAccount(uid);
+  const refereeRef = referralAccountsCollection.doc(uid);
+  const referrerRef = referralAccountsCollection.doc(referrerUid);
+  const applied = await db.runTransaction(async (tx) => {
+    const refereeSnap = await tx.get(refereeRef);
+    if (refereeSnap.data()?.referredBy) {
+      return false; // Already attributed — leave as-is.
+    }
+    tx.set(
+      refereeRef,
+      {
+        referredBy: referrerUid,
+        referredByCode: code,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+    tx.set(
+      referrerRef,
+      {
+        referralCount: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+    return true;
+  });
+
+  return {applied, referredBy: referrerUid};
 });
 
 export const registerMessagingToken = onMemberCall(async (request) => {
@@ -1099,13 +1312,25 @@ export const setUserAdmin = onAdminCall(async (data) => {
 export const getAdminUserDetail = onAdminCall(async (data) => {
   const uid = readString(data, "uid");
 
-  const [user, kycSnapshot, holdingsSnapshot, ordersSnapshot] =
-    await Promise.all([
-      auth.getUser(uid),
-      kycProfilesCollection.doc(uid).get(),
-      memberHoldingsCollection.where("userId", "==", uid).get(),
-      purchaseOrdersCollection.where("uid", "==", uid).get(),
-    ]);
+  const [
+    user,
+    kycSnapshot,
+    holdingsSnapshot,
+    ordersSnapshot,
+    walletSnapshot,
+    walletTxSnapshot,
+  ] = await Promise.all([
+    auth.getUser(uid),
+    kycProfilesCollection.doc(uid).get(),
+    memberHoldingsCollection.where("userId", "==", uid).get(),
+    purchaseOrdersCollection.where("uid", "==", uid).get(),
+    memberWalletsCollection.doc(uid).get(),
+    walletTransactionsCollection
+      .where("uid", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(20)
+      .get(),
+  ]);
 
   const holdings = holdingsSnapshot.docs.map((doc) => holdingFromDoc(doc));
   const totalInvested = roundMoney(
@@ -1132,6 +1357,10 @@ export const getAdminUserDetail = onAdminCall(async (data) => {
 
   return {
     user: userToJson(user),
+    wallet: {
+      balanceUsd: roundMoney(Number(walletSnapshot.data()?.balanceUsd ?? 0)),
+      transactions: walletTxSnapshot.docs.map(walletTransactionFromDoc),
+    },
     kyc: kyc ?
       {
         uid,
@@ -1692,13 +1921,28 @@ function paymentOptionFromDoc(
   const data = doc.data();
   return {
     id: doc.id,
+    type: String(data.type ?? "crypto"),
     network: String(data.network ?? ""),
     assetSymbol: String(data.assetSymbol ?? ""),
     walletAddress: String(data.walletAddress ?? ""),
     qrCodeUrl: String(data.qrCodeUrl ?? ""),
+    accountDetails: accountDetailsFromData(data.accountDetails),
     enabled: Boolean(data.enabled ?? true),
     minimumAmount: Number(data.minimumAmount ?? 0),
   };
+}
+
+function accountDetailsFromData(raw: unknown): PaymentAccountField[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => {
+      const row = (entry ?? {}) as Record<string, unknown>;
+      return {
+        label: String(row.label ?? "").trim(),
+        value: String(row.value ?? "").trim(),
+      };
+    })
+    .filter((row) => row.label !== "" || row.value !== "");
 }
 
 function depositRequestFromDoc(
@@ -1713,6 +1957,8 @@ function depositRequestFromDoc(
     paymentNetwork: String(data.paymentNetwork ?? ""),
     paymentAsset: String(data.paymentAsset ?? ""),
     paymentWalletAddress: String(data.paymentWalletAddress ?? ""),
+    paymentType: String(data.paymentType ?? "crypto"),
+    paymentAccountDetails: accountDetailsFromData(data.paymentAccountDetails),
     transactionHash: String(data.transactionHash ?? ""),
     proofUrl: String(data.proofUrl ?? ""),
     status: String(data.status ?? "pending_payment"),
@@ -2294,13 +2540,34 @@ function readPaymentOptionPayload(
 ): Omit<CryptoPaymentOption, "id"> {
   const value = readObject(data);
   return {
-    network: readString(value, "network"),
+    type: readOptionalString(value, "type") ?? "crypto",
+    // network/walletAddress are crypto-only; non-crypto methods leave them blank
+    // and describe themselves through accountDetails instead.
+    network: readOptionalString(value, "network") ?? "",
     assetSymbol: readString(value, "assetSymbol"),
-    walletAddress: readString(value, "walletAddress"),
+    walletAddress: readOptionalString(value, "walletAddress") ?? "",
     qrCodeUrl: readOptionalString(value, "qrCodeUrl") ?? "",
+    accountDetails: readAccountDetails(value),
     enabled: readBoolean(value, "enabled"),
     minimumAmount: readNumber(value, "minimumAmount"),
   };
+}
+
+function readAccountDetails(data: Record<string, unknown>): PaymentAccountField[] {
+  const raw = data.accountDetails;
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new HttpsError("invalid-argument", "accountDetails must be a list.");
+  }
+  return raw
+    .map((entry) => {
+      const row = readObject(entry);
+      return {
+        label: String(row.label ?? "").trim(),
+        value: String(row.value ?? "").trim(),
+      };
+    })
+    .filter((row) => row.label !== "" || row.value !== "");
 }
 
 async function loadWithdrawalPolicy(): Promise<WithdrawalPolicy> {
@@ -2377,6 +2644,206 @@ function readWithdrawalPolicy(data: unknown): WithdrawalPolicy {
   }
 
   return policy;
+}
+
+type ReferralAccount = {
+  referralCode: string;
+  referredBy: string | null;
+  referredByCode: string | null;
+  referralCount: number;
+  totalEarnedUsd: number;
+};
+
+async function loadReferralPolicy(): Promise<ReferralPolicy> {
+  const snapshot = await referralPolicyDoc.get();
+  return referralPolicyFromData(snapshot.data());
+}
+
+function referralPolicyFromData(
+  data: FirebaseFirestore.DocumentData | undefined,
+): ReferralPolicy {
+  const defaults = defaultReferralPolicy();
+  if (!data) return defaults;
+  return {
+    enabled: Boolean(data.enabled ?? defaults.enabled),
+    commissionPercent: Number(
+      data.commissionPercent ?? defaults.commissionPercent,
+    ),
+    firstInvestmentOnly: Boolean(
+      data.firstInvestmentOnly ?? defaults.firstInvestmentOnly,
+    ),
+  };
+}
+
+function defaultReferralPolicy(): ReferralPolicy {
+  return {enabled: true, commissionPercent: 5, firstInvestmentOnly: false};
+}
+
+function readReferralPolicy(data: unknown): ReferralPolicy {
+  const value = readObject(data);
+  const policy: ReferralPolicy = {
+    enabled: readBoolean(value, "enabled"),
+    commissionPercent: readNonNegativeNumber(value, "commissionPercent"),
+    firstInvestmentOnly: readBoolean(value, "firstInvestmentOnly"),
+  };
+  if (policy.commissionPercent > 50) {
+    throw new HttpsError(
+      "invalid-argument",
+      "commissionPercent must be 50 or lower.",
+    );
+  }
+  return policy;
+}
+
+// 7-char code from uppercased UUID hex. Ambiguity is acceptable because every
+// candidate is verified unique against referralCodes before use.
+function generateReferralCode(): string {
+  return randomUUID().replace(/-/g, "").slice(0, 7).toUpperCase();
+}
+
+// Loads (or lazily creates) the caller's referral account. New accounts get a
+// unique share code reserved in referralCodes via a transactional create so two
+// members can never collide on the same code.
+async function ensureReferralAccount(uid: string): Promise<ReferralAccount> {
+  const ref = referralAccountsCollection.doc(uid);
+  const existing = (await ref.get()).data();
+  if (existing?.referralCode) {
+    return {
+      referralCode: String(existing.referralCode),
+      referredBy: (existing.referredBy as string | undefined) ?? null,
+      referredByCode: (existing.referredByCode as string | undefined) ?? null,
+      referralCount: Number(existing.referralCount ?? 0),
+      totalEarnedUsd: Number(existing.totalEarnedUsd ?? 0),
+    };
+  }
+
+  let code = "";
+  for (let attempt = 0; attempt < 5 && !code; attempt++) {
+    const candidate = generateReferralCode();
+    const codeRef = referralCodesCollection.doc(candidate);
+    const reserved = await db.runTransaction(async (tx) => {
+      if ((await tx.get(codeRef)).exists) return false;
+      tx.set(codeRef, {uid, createdAt: FieldValue.serverTimestamp()});
+      return true;
+    });
+    if (reserved) code = candidate;
+  }
+  if (!code) {
+    throw new HttpsError("internal", "Could not allocate a referral code.");
+  }
+
+  await ref.set(
+    {
+      uid,
+      referralCode: code,
+      referredBy: existing?.referredBy ?? null,
+      referredByCode: existing?.referredByCode ?? null,
+      referralCount: Number(existing?.referralCount ?? 0),
+      totalEarnedUsd: Number(existing?.totalEarnedUsd ?? 0),
+      createdAt: existing?.createdAt ?? FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  return {
+    referralCode: code,
+    referredBy: (existing?.referredBy as string | undefined) ?? null,
+    referredByCode: (existing?.referredByCode as string | undefined) ?? null,
+    referralCount: Number(existing?.referralCount ?? 0),
+    totalEarnedUsd: Number(existing?.totalEarnedUsd ?? 0),
+  };
+}
+
+// Credits the referrer of `refereeUid` a percentage of a verified investment.
+// Idempotent per order (the commission doc id is the orderId), respects the
+// configured rate / enabled / first-investment-only policy, and pays into the
+// referrer's wallet through the shared ledger helper.
+async function accrueReferralCommission(input: {
+  refereeUid: string;
+  orderId: string;
+  opportunityId: string;
+  amountUsd: number;
+}): Promise<void> {
+  const policy = await loadReferralPolicy();
+  if (!policy.enabled || policy.commissionPercent <= 0) return;
+
+  const refereeAccount = (
+    await referralAccountsCollection.doc(input.refereeUid).get()
+  ).data();
+  const referrerUid = refereeAccount?.referredBy as string | undefined;
+  if (!referrerUid) return;
+
+  if (policy.firstInvestmentOnly) {
+    const prior = await referralCommissionsCollection
+      .where("refereeUid", "==", input.refereeUid)
+      .limit(1)
+      .get();
+    if (!prior.empty) return;
+  }
+
+  const commissionUsd = roundMoney(
+    (input.amountUsd * policy.commissionPercent) / 100,
+  );
+  if (commissionUsd <= 0) return;
+
+  const commissionRef = referralCommissionsCollection.doc(input.orderId);
+  const created = await db.runTransaction(async (tx) => {
+    if ((await tx.get(commissionRef)).exists) return false; // idempotent
+    tx.set(commissionRef, {
+      id: input.orderId,
+      referrerUid,
+      refereeUid: input.refereeUid,
+      orderId: input.orderId,
+      opportunityId: input.opportunityId,
+      investmentAmountUsd: roundMoney(input.amountUsd),
+      rate: policy.commissionPercent,
+      commissionUsd,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.set(
+      referralAccountsCollection.doc(referrerUid),
+      {
+        totalEarnedUsd: FieldValue.increment(commissionUsd),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+    return true;
+  });
+  if (!created) return;
+
+  await applyWalletAdjustment({
+    uid: referrerUid,
+    amountUsd: commissionUsd,
+    direction: "credit",
+    reason:
+      `Referral commission (${policy.commissionPercent}% of ` +
+      `${formatUsd(input.amountUsd)} investment).`,
+    createdBy: "system:referral",
+  });
+
+  await notifyMember(referrerUid, {
+    type: "referral_commission_earned",
+    title: "Referral commission earned",
+    body: `You earned ${formatUsd(commissionUsd)} from a referral's investment.`,
+    data: {orderId: input.orderId, refereeUid: input.refereeUid},
+  });
+}
+
+function referralCommissionFromDoc(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+) {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    refereeUid: String(data.refereeUid ?? ""),
+    opportunityId: String(data.opportunityId ?? ""),
+    investmentAmountUsd: Number(data.investmentAmountUsd ?? 0),
+    rate: Number(data.rate ?? 0),
+    commissionUsd: Number(data.commissionUsd ?? 0),
+    createdAt: readSerializableDate(data.createdAt),
+  };
 }
 
 async function notifyAdmins(notification: {
@@ -2769,6 +3236,91 @@ function computeHoldingFigures(input: {
 
 function formatUsd(value: number): string {
   return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+// Apply a credit or debit to a member's cash wallet inside a transaction so the
+// balance and the audit ledger row stay consistent. Debits that would push the
+// balance below zero are rejected. Returns the new balance and the ledger row
+// id; the caller notifies the member after the transaction commits.
+async function applyWalletAdjustment(input: {
+  uid: string;
+  amountUsd: number;
+  direction: "credit" | "debit";
+  reason: string;
+  createdBy: string;
+}): Promise<{balanceUsd: number; transactionId: string}> {
+  const walletRef = memberWalletsCollection.doc(input.uid);
+  const txRef = walletTransactionsCollection.doc();
+  const activityRef = memberActivitiesCollection.doc();
+  const amountUsd = roundMoney(input.amountUsd);
+
+  const balanceUsd = await db.runTransaction(async (tx) => {
+    const walletSnapshot = await tx.get(walletRef);
+    const existing = walletSnapshot.data();
+    const priorBalance = Number(existing?.balanceUsd ?? 0);
+    const delta = input.direction === "credit" ? amountUsd : -amountUsd;
+    const newBalance = roundMoney(priorBalance + delta);
+    if (newBalance < 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Adjustment would make the wallet balance negative.",
+      );
+    }
+
+    tx.set(
+      walletRef,
+      {
+        uid: input.uid,
+        balanceUsd: newBalance,
+        createdAt: existing?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    tx.set(txRef, {
+      id: txRef.id,
+      uid: input.uid,
+      type: input.direction,
+      amountUsd,
+      balanceAfter: newBalance,
+      reason: input.reason,
+      createdBy: input.createdBy,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    tx.set(activityRef, {
+      id: activityRef.id,
+      uid: input.uid,
+      type: input.direction === "credit" ? "wallet_credit" : "wallet_debit",
+      title: input.direction === "credit" ?
+        "Wallet credited" :
+        "Wallet debited",
+      subtitle: input.reason,
+      value: `${input.direction === "credit" ? "+" : "-"}${formatUsd(amountUsd)}`,
+      status: "wallet_adjusted",
+      amountUsd,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return newBalance;
+  });
+
+  return {balanceUsd, transactionId: txRef.id};
+}
+
+function walletTransactionFromDoc(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+) {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    type: String(data.type ?? ""),
+    amountUsd: Number(data.amountUsd ?? 0),
+    balanceAfter: Number(data.balanceAfter ?? 0),
+    reason: String(data.reason ?? ""),
+    createdAt: readSerializableDate(data.createdAt),
+  };
 }
 
 function isLikelyWalletAddress(value: string): boolean {

@@ -402,5 +402,15 @@
   "errKycStorageUnauthorized": "Huna ruhusa ya kupakia hati hii.",
   "errKycStorageCanceled": "Upakiaji wa hati umeghairiwa.",
   "errKycStorageRetry": "Upakiaji umechukua muda mrefu mno. Tafadhali angalia muunganisho wako na ujaribu tena.",
-  "errKycStorageQuota": "Upakiaji wa hati haupatikani kwa muda. Tafadhali jaribu tena baadaye."
+  "errKycStorageQuota": "Upakiaji wa hati haupatikani kwa muda. Tafadhali jaribu tena baadaye.",
+
+  "filterAll": "Zote",
+  "enumAssetRealEstate": "Mali isiyohamishika",
+  "enumAssetReit": "REIT",
+  "enumAssetEtf": "ETF",
+  "enumAssetIndex": "Mfuko wa fahirisi",
+  "enumAssetAlternative": "Mbadala",
+  "enumRiskConservative": "Mwangalifu",
+  "enumRiskBalanced": "Uwiano",
+  "enumRiskGrowth": "Ukuaji"
 }

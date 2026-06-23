@@ -56,8 +56,9 @@ are managed from the dashboard (`setUserAdmin`).
 
 Firestore collections in use: `adminAssets`, `cryptoPaymentOptions`, `kycProfiles`,
 `purchaseOrders`, `withdrawalRequests`, `supportTickets`, `memberHoldings`,
-`memberActivities`, `memberNotifications`, `adminNotifications`,
-`notificationTokens`, `platformSettings`.
+`memberActivities`, `memberWallets`, `walletTransactions`,
+`memberNotifications`, `adminNotifications`, `notificationTokens`,
+`platformSettings`.
 
 When you add or change a callable, mirror it in the client: typed methods in
 `lib/src/core/firebase/backend_functions.dart` or the relevant repository.

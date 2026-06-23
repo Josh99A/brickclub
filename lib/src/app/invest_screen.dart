@@ -103,11 +103,11 @@ class _InvestScreenState extends State<InvestScreen> {
                       selected: true,
                     ),
                     SizedBox(width: 8),
-                    ChoicePill(label: filters.asset),
+                    ChoicePill(label: localizeAssetTerm(l10n, filters.asset)),
                     SizedBox(width: 8),
-                    ChoicePill(label: filters.risk),
+                    ChoicePill(label: localizeAssetTerm(l10n, filters.risk)),
                     SizedBox(width: 8),
-                    ChoicePill(label: filters.payment),
+                    ChoicePill(label: localizeAssetTerm(l10n, filters.payment)),
                   ],
                 ),
               ),
@@ -181,7 +181,7 @@ class _InvestScreenState extends State<InvestScreen> {
             else
               for (final opportunity in opportunities)
                 InvestmentCard(
-                  category: opportunity.assetClass,
+                  category: localizeAssetTerm(l10n, opportunity.assetClass),
                   title: opportunity.displayTitle,
                   location: opportunity.location,
                   minimum: opportunity.minimumText,

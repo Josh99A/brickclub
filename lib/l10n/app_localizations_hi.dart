@@ -667,6 +667,78 @@ class AppLocalizationsHi extends AppLocalizations {
   String get profileDefaultSubtitle => 'आपके खाते और BrickShares का विवरण';
 
   @override
+  String get commonRetry => 'Try again';
+
+  @override
+  String get profileReferral => 'Refer & earn';
+
+  @override
+  String get profileReferralSubtitle => 'Invite friends and earn commission';
+
+  @override
+  String get referralScreenTitle => 'Refer & earn';
+
+  @override
+  String get referralHeadline => 'Invite friends, earn commission';
+
+  @override
+  String referralHowItWorksBody(String rate) {
+    return 'Share your code. When someone you invited makes an investment, you earn $rate of the amount they invest — credited straight to your wallet.';
+  }
+
+  @override
+  String get referralYourCodeTitle => 'Your referral code';
+
+  @override
+  String get referralCopyCode => 'Copy code';
+
+  @override
+  String get referralCopied => 'Referral code copied';
+
+  @override
+  String get referralLinkCopied => 'Invite link copied';
+
+  @override
+  String get referralShareInvite => 'Share invite';
+
+  @override
+  String get referralFriendsJoined => 'Friends joined';
+
+  @override
+  String get referralTotalEarned => 'Total earned';
+
+  @override
+  String referralPaidToWalletNote(String rate) {
+    return 'You earn $rate of every investment your referrals make, paid to your wallet.';
+  }
+
+  @override
+  String get referralDisabledNote =>
+      'Referral rewards are currently paused. Your code still works — earnings resume when rewards are switched back on.';
+
+  @override
+  String get referralRecentEarningsTitle => 'Recent earnings';
+
+  @override
+  String get referralNoEarningsYet =>
+      'No referral earnings yet. Share your code to get started.';
+
+  @override
+  String referralCommissionSubtitle(String rate, String amount) {
+    return '$rate of a $amount investment';
+  }
+
+  @override
+  String get referralLoadError =>
+      'We couldn\'t load your referral details. Please try again.';
+
+  @override
+  String get signUpReferralCode => 'Referral code (optional)';
+
+  @override
+  String get signUpReferralCodeHint => 'Enter a friend\'s code';
+
+  @override
   String get themeScreenTitle => 'थीम';
 
   @override
@@ -1222,4 +1294,31 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get errKycStorageQuota =>
       'दस्तावेज़ अपलोड अस्थायी रूप से अनुपलब्ध हैं। कृपया बाद में फिर से प्रयास करें।';
+
+  @override
+  String get filterAll => 'सभी';
+
+  @override
+  String get enumAssetRealEstate => 'रियल एस्टेट';
+
+  @override
+  String get enumAssetReit => 'REIT';
+
+  @override
+  String get enumAssetEtf => 'ETF';
+
+  @override
+  String get enumAssetIndex => 'इंडेक्स फंड';
+
+  @override
+  String get enumAssetAlternative => 'वैकल्पिक';
+
+  @override
+  String get enumRiskConservative => 'रूढ़िवादी';
+
+  @override
+  String get enumRiskBalanced => 'संतुलित';
+
+  @override
+  String get enumRiskGrowth => 'विकास';
 }

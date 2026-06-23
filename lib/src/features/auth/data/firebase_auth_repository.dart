@@ -188,7 +188,22 @@ class FirebaseAuthRepository implements AuthRepository {
     );
 
     await userCredential.user?.updateDisplayName('$firstName $lastName'.trim());
+    _claimReferralCodeInBackground(credentials.referralCode);
     _registerMessagingTokenInBackground();
+  }
+
+  /// Records the inviter from a referral code without blocking signup. Like push
+  /// registration, attribution is best-effort: a bad/duplicate code or a slow
+  /// backend must never fail an otherwise successful account creation.
+  void _claimReferralCodeInBackground(String referralCode) {
+    final code = referralCode.trim();
+    if (code.isEmpty) return;
+    unawaited(
+      _backendFunctions
+          .claimReferralCode(code)
+          .timeout(_messagingTimeout, onTimeout: () {})
+          .catchError((_) {}),
+    );
   }
 
   @override

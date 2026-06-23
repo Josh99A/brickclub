@@ -6,6 +6,7 @@ import 'src/features/admin/data/firebase_admin_repository.dart';
 import 'src/features/auth/data/firebase_auth_repository.dart';
 import 'src/features/investment/data/firebase_investment_repository.dart';
 import 'src/features/kyc/data/firebase_kyc_repository.dart';
+import 'src/features/referral/data/firebase_referral_repository.dart';
 import 'src/features/support/data/firebase_support_repository.dart';
 
 Future<void> main() async {
@@ -18,6 +19,7 @@ Future<void> main() async {
       adminRepository: FirebaseAdminRepository(),
       investmentRepository: FirebaseInvestmentRepository(),
       kycRepository: FirebaseKycRepository(),
+      referralRepository: FirebaseReferralRepository(),
       supportRepository: FirebaseSupportRepository(),
     ),
   );

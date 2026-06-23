@@ -59,6 +59,13 @@ abstract interface class AdminRepository {
 
   Future<void> verifyDepositRequest(String id);
 
+  Future<void> adjustMemberWallet({
+    required String uid,
+    required double amountUsd,
+    required String direction,
+    required String reason,
+  });
+
   Future<void> rejectDepositRequest({
     required String id,
     required String reason,
@@ -72,6 +79,8 @@ abstract interface class AdminRepository {
   Future<void> closeSupportTicket(String id);
 
   Future<void> updateWithdrawalPolicy(WithdrawalPolicy policy);
+
+  Future<void> updateReferralPolicy(ReferralPolicy policy);
 
   Future<void> markNotificationsRead();
 

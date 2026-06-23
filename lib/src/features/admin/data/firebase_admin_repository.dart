@@ -173,6 +173,21 @@ class FirebaseAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<void> adjustMemberWallet({
+    required String uid,
+    required double amountUsd,
+    required String direction,
+    required String reason,
+  }) {
+    return _callVoid('adjustMemberWallet', {
+      'uid': uid,
+      'amountUsd': amountUsd,
+      'direction': direction,
+      'reason': reason,
+    });
+  }
+
+  @override
   Future<void> rejectDepositRequest({
     required String id,
     required String reason,
@@ -199,6 +214,11 @@ class FirebaseAdminRepository implements AdminRepository {
   @override
   Future<void> updateWithdrawalPolicy(WithdrawalPolicy policy) {
     return _callVoid('updateWithdrawalPolicy', policy.toJson());
+  }
+
+  @override
+  Future<void> updateReferralPolicy(ReferralPolicy policy) {
+    return _callVoid('updateReferralPolicy', policy.toJson());
   }
 
   @override
