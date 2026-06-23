@@ -3,7 +3,7 @@ import 'investment_models.dart';
 abstract interface class InvestmentRepository {
   Future<MemberDashboardData> loadMemberDashboard();
 
-  Future<List<InvestmentOpportunity>> listOpportunities();
+  Future<List<InvestmentOpportunity>> listOpportunities({String? localeCode});
 
   Future<PurchaseOrder> createPurchaseOrder(PurchaseRequest request);
 

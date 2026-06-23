@@ -49,7 +49,9 @@ class HomeScreen extends StatelessWidget {
           onAction: onInvest,
         ),
         FutureBuilder<List<InvestmentOpportunity>>(
-          future: investmentRepository.listOpportunities(),
+          future: investmentRepository.listOpportunities(
+            localeCode: Localizations.localeOf(context).languageCode,
+          ),
           builder: (context, snapshot) {
             final opportunities = snapshot.data ?? const [];
             if (snapshot.connectionState != ConnectionState.done) {

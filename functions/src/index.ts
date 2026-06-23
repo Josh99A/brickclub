@@ -1,5 +1,6 @@
-import {randomUUID} from "crypto";
+import {createHash, randomUUID} from "crypto";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
+import {onDocumentWritten} from "firebase-functions/v2/firestore";
 import {logger} from "firebase-functions";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {defineSecret, defineString} from "firebase-functions/params";
@@ -9,6 +10,7 @@ import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {getMessaging} from "firebase-admin/messaging";
 import {getStorage} from "firebase-admin/storage";
 import {ImageAnnotatorClient} from "@google-cloud/vision";
+import {v2 as translateV2} from "@google-cloud/translate";
 import * as nodemailer from "nodemailer";
 
 // Production SMTP configuration. These are bound at deploy time so operational
@@ -39,6 +41,26 @@ const auth = getAuth();
 const messaging = getMessaging();
 const storage = getStorage();
 const vision = new ImageAnnotatorClient();
+const translate = new translateV2.Translate();
+
+// Locales we auto-translate admin content into (source content is English).
+// Mirrors the client's supported locales minus `en`.
+const TRANSLATION_LOCALES = ["zh", "es", "it", "ru", "ar", "sw", "hi"];
+
+// Free-text asset fields worth translating. Enum-like fields (assetClass,
+// riskLevel, category, paymentMethods) are intentionally excluded: members
+// filter on their raw values, so translating them would break matching — those
+// are localized client-side via ARB value maps instead.
+const TRANSLATABLE_ASSET_FIELDS = [
+  "title",
+  "location",
+  "description",
+  "assetType",
+  "strategy",
+];
+
+// Brand/technical terms that must survive translation verbatim.
+const TRANSLATION_PROTECTED_TERMS = ["BrickShares", "BrickClub", "USDT", "KYC"];
 
 type AdminAsset = {
   id: string;
@@ -314,7 +336,8 @@ export const markAdminNotificationsRead = onAdminCall(async () => {
   return {updated: snapshot.size};
 });
 
-export const listMemberOpportunities = onMemberCall(async () => {
+export const listMemberOpportunities = onMemberCall(async (request) => {
+  const locale = readLocale(request.data);
   const [assetsSnapshot, paymentOptionsSnapshot] = await Promise.all([
     assetsCollection
       .where("reviewStatus", "==", "Verified")
@@ -329,13 +352,14 @@ export const listMemberOpportunities = onMemberCall(async () => {
 
   return {
     opportunities: assetsSnapshot.docs.map((doc) =>
-      opportunityFromDoc(doc, paymentMethods),
+      opportunityFromDoc(doc, paymentMethods, locale),
     ),
   };
 });
 
 export const getMemberDashboard = onMemberCall(async (request) => {
   const uid = request.auth!.uid;
+  const locale = readLocale(request.data);
   const [ordersSnapshot, assetsSnapshot, paymentOptionsSnapshot, holdingsSnapshot] =
     await Promise.all([
       purchaseOrdersCollection.where("uid", "==", uid).get(),
@@ -345,7 +369,10 @@ export const getMemberDashboard = onMemberCall(async (request) => {
     ]);
 
   const assetsById = new Map(
-    assetsSnapshot.docs.map((doc) => [doc.id, opportunityFromDoc(doc, [])]),
+    assetsSnapshot.docs.map((doc) => [
+      doc.id,
+      opportunityFromDoc(doc, [], locale),
+    ]),
   );
   const orders = ordersSnapshot.docs
     .map((doc) => memberOrderFromDoc(doc))
@@ -416,9 +443,12 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
     throw new HttpsError("not-found", "Opportunity was not found.");
   }
 
+  // Canonical English here so denormalized order/notification copy stays
+  // language-neutral; members see localized opportunity text via the list call.
   const asset = opportunityFromDoc(
     assetSnapshot,
     [paymentAsset],
+    "en",
   );
   if (
     assetSnapshot.data()?.reviewStatus !== "Verified" ||
@@ -1499,9 +1529,115 @@ function assetFromData(
   };
 }
 
+// Normalize a client-sent locale to a supported language code, defaulting to
+// English when missing/unsupported.
+function readLocale(data: unknown): string {
+  if (data && typeof data === "object") {
+    const value = (data as Record<string, unknown>).locale;
+    if (typeof value === "string") {
+      const code = value.trim().toLowerCase().split(/[-_]/)[0];
+      if (code === "en" || TRANSLATION_LOCALES.includes(code)) return code;
+    }
+  }
+  return "en";
+}
+
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, "\"")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+// Wrap protected terms so the Translation API (in HTML mode) leaves them
+// verbatim, then strip the wrappers from the result.
+function protectTerms(text: string): string {
+  let out = text;
+  for (const term of TRANSLATION_PROTECTED_TERMS) {
+    out = out.split(term).join(`<span translate="no">${term}</span>`);
+  }
+  return out;
+}
+
+function unprotectTerms(text: string): string {
+  return decodeHtmlEntities(
+    text.replace(/<span translate="no">(.*?)<\/span>/g, "$1"),
+  );
+}
+
+function assetTranslationHash(source: Record<string, string>): string {
+  const canonical = TRANSLATABLE_ASSET_FIELDS
+    .map((field) => `${field}=${source[field] ?? ""}`)
+    .join(" ");
+  return createHash("sha1").update(canonical).digest("hex");
+}
+
+// Auto-translates an asset's free-text fields into every supported locale when
+// its source text changes, storing the result on the doc under `i18n`. Members
+// read these via listMemberOpportunities/getMemberDashboard. Best-effort: any
+// locale that fails to translate simply falls back to the English source.
+export const translateAdminAsset = onDocumentWritten(
+  "adminAssets/{id}",
+  async (event) => {
+    const afterSnap = event.data?.after;
+    const after = afterSnap?.data();
+    if (!afterSnap || !after) return; // Deleted — nothing to translate.
+
+    const source: Record<string, string> = {};
+    for (const field of TRANSLATABLE_ASSET_FIELDS) {
+      source[field] = String(after[field] ?? "").trim();
+    }
+
+    const hash = assetTranslationHash(source);
+    // Unchanged source → skip. This caps Translation API cost and stops the
+    // write-back below from re-triggering this function endlessly.
+    if (after.i18nHash === hash) return;
+
+    const fields = TRANSLATABLE_ASSET_FIELDS.filter((f) => source[f] !== "");
+    if (fields.length === 0) {
+      await afterSnap.ref.set({i18nHash: hash}, {merge: true});
+      return;
+    }
+
+    const i18n: Record<string, Record<string, string>> = {};
+    for (const field of fields) i18n[field] = {};
+
+    for (const locale of TRANSLATION_LOCALES) {
+      try {
+        const inputs = fields.map((field) => protectTerms(source[field]));
+        const [translated] = await translate.translate(inputs, {
+          from: "en",
+          to: locale,
+          format: "html",
+        });
+        const values = Array.isArray(translated) ? translated : [translated];
+        fields.forEach((field, index) => {
+          const value = unprotectTerms(String(values[index] ?? "")).trim();
+          if (value) i18n[field][locale] = value;
+        });
+      } catch (error) {
+        logger.warn("Asset translation failed", {
+          assetId: event.params.id,
+          locale,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    await afterSnap.ref.set(
+      {i18n, i18nHash: hash, i18nUpdatedAt: FieldValue.serverTimestamp()},
+      {merge: true},
+    );
+  },
+);
+
 function opportunityFromDoc(
   doc: FirebaseFirestore.DocumentSnapshot,
   enabledPaymentMethods: string[],
+  locale: string,
 ): MemberOpportunity {
   const data = doc.data();
   if (!data) {
@@ -1509,6 +1645,13 @@ function opportunityFromDoc(
   }
 
   const asset = assetFromData(doc.id, data);
+  // Pick the member-locale translation when present, else the source text.
+  const i18n = (data.i18n ?? {}) as Record<string, Record<string, string>>;
+  const tr = (field: string, fallback: string): string => {
+    if (!locale || locale === "en") return fallback;
+    const value = i18n[field]?.[locale];
+    return typeof value === "string" && value.trim() !== "" ? value : fallback;
+  };
   return {
     id: doc.id,
     assetClass: String(data.assetClass ?? data.category ?? data.type ?? "Real Estate"),
@@ -1517,14 +1660,14 @@ function opportunityFromDoc(
       data.paymentMethods,
       enabledPaymentMethods.length === 0 ? ["USDT"] : enabledPaymentMethods,
     ),
-    title: asset.title,
-    location: asset.location,
+    title: tr("title", asset.title),
+    location: tr("location", asset.location),
     minimumInvestment: asset.minimumInvestment,
     targetReturn: Number(data.targetReturn ?? asset.expectedAnnualYield ?? 11.8),
     fundedPercent: asset.fundedPercent,
-    description: asset.description,
+    description: tr("description", asset.description),
     category: asset.category,
-    assetType: asset.assetType,
+    assetType: tr("assetType", asset.assetType),
     images: asset.images,
     purchasePrice: asset.purchasePrice,
     fundingTarget: asset.fundingTarget,
@@ -1534,7 +1677,7 @@ function opportunityFromDoc(
     availableShares: asset.availableShares,
     expectedAnnualYield: asset.expectedAnnualYield,
     projectedNetYield: asset.projectedNetYield,
-    strategy: asset.strategy,
+    strategy: tr("strategy", asset.strategy),
     exitPeriod: asset.exitPeriod,
     documents: asset.documents,
     status: asset.status,
