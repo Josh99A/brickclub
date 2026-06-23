@@ -1016,7 +1016,9 @@ class FakeInvestmentRepository implements InvestmentRepository {
   }
 
   @override
-  Future<List<InvestmentOpportunity>> listOpportunities() async =>
+  Future<List<InvestmentOpportunity>> listOpportunities({
+    String? localeCode,
+  }) async =>
       opportunities;
 
   @override

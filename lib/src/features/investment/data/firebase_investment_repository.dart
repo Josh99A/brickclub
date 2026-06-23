@@ -26,9 +26,13 @@ class FirebaseInvestmentRepository implements InvestmentRepository {
   }
 
   @override
-  Future<List<InvestmentOpportunity>> listOpportunities() async {
+  Future<List<InvestmentOpportunity>> listOpportunities({
+    String? localeCode,
+  }) async {
     final callable = _functions.httpsCallable('listMemberOpportunities');
-    final result = await callable.call<Object?>();
+    final result = await callable.call<Object?>(
+      localeCode == null ? null : {'locale': localeCode},
+    );
     final data = Map<String, dynamic>.from(result.data! as Map);
     final opportunities = data['opportunities'];
     if (opportunities is! List) return const [];

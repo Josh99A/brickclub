@@ -64,7 +64,9 @@ class _InvestScreenState extends State<InvestScreen> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<InvestmentOpportunity>>(
-      future: widget.investmentRepository.listOpportunities(),
+      future: widget.investmentRepository.listOpportunities(
+        localeCode: Localizations.localeOf(context).languageCode,
+      ),
       builder: (context, snapshot) {
         final l10n = AppLocalizations.of(context);
         final allOpportunities = snapshot.data ?? const [];
