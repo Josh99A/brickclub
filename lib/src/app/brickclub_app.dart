@@ -55,6 +55,32 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 const _themeModePreferenceKey = 'brickclub.themeMode';
 const _localePreferenceKey = 'brickclub.locale';
 
+/// Exposes the active locale and a setter to the whole widget tree so any
+/// screen (signed in or not) can offer a language switcher without threading
+/// the controller through constructors.
+class LocaleControllerScope extends InheritedWidget {
+  const LocaleControllerScope({
+    super.key,
+    required this.locale,
+    required this.onLocaleChanged,
+    required super.child,
+  });
+
+  final Locale? locale;
+  final ValueChanged<Locale?> onLocaleChanged;
+
+  static LocaleControllerScope of(BuildContext context) {
+    final scope =
+        context.dependOnInheritedWidgetOfExactType<LocaleControllerScope>();
+    assert(scope != null, 'LocaleControllerScope was not found in the tree.');
+    return scope!;
+  }
+
+  @override
+  bool updateShouldNotify(LocaleControllerScope oldWidget) =>
+      locale != oldWidget.locale;
+}
+
 class BrickClubApp extends StatefulWidget {
   const BrickClubApp({
     super.key,
@@ -163,7 +189,14 @@ class _BrickClubAppState extends State<BrickClubApp> {
       builder: (context, child) {
         final palette = AppPalette.forBrightness(Theme.of(context).brightness);
         AppColors._sync(palette);
-        return AppColors(palette: palette, child: child ?? const SizedBox.shrink());
+        return LocaleControllerScope(
+          locale: _localeNotifier.value,
+          onLocaleChanged: _setLocale,
+          child: AppColors(
+            palette: palette,
+            child: child ?? const SizedBox.shrink(),
+          ),
+        );
       },
     );
   }
