@@ -72,14 +72,7 @@ class AppHeader extends StatelessWidget {
           Expanded(child: Text(title, style: AppText.topTitle)),
           const LanguageSwitcher(compact: true),
           SizedBox(width: 9),
-          HeaderCircle(
-            onTap: () => showMessage(context, l10n.notificationsNone),
-            child: Icon(
-              Icons.notifications_none_rounded,
-              color: AppColors.secondary,
-              size: 18,
-            ),
-          ),
+          const _MemberNotificationBell(),
           SizedBox(width: 9),
           HeaderCircle(
             key: const ValueKey('profile-header-button'),
@@ -95,6 +88,240 @@ class AppHeader extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Header bell that surfaces the signed-in member's in-app notifications
+/// (deposit, wallet, support, referral). Shows an unread badge, opens a sheet
+/// listing them, and routes to the relevant tab when one is tapped.
+class _MemberNotificationBell extends StatefulWidget {
+  const _MemberNotificationBell();
+
+  @override
+  State<_MemberNotificationBell> createState() =>
+      _MemberNotificationBellState();
+}
+
+class _MemberNotificationBellState extends State<_MemberNotificationBell> {
+  List<MemberNotification> _notifications = const [];
+  bool _loaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_loaded) {
+      _loaded = true;
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    final repository = MemberScope.maybeOf(context)?.investmentRepository;
+    if (repository == null) return;
+    try {
+      final notifications = await repository.listNotifications();
+      if (mounted) setState(() => _notifications = notifications);
+    } catch (_) {
+      // The bell is ancillary chrome; never surface a backend hiccup here.
+    }
+  }
+
+  int get _unread => _notifications.where((n) => n.isUnread).length;
+
+  /// Maps a notification type to the member tab it should open.
+  /// Tabs: 0 home, 1 invest, 2 wallet, 3 portfolio, 4 more.
+  int _branchForType(String type) {
+    if (type.startsWith('deposit_')) return 3;
+    if (type.startsWith('wallet_')) return 2;
+    if (type.startsWith('support_')) return 4;
+    if (type.startsWith('referral_')) return 4;
+    return 0;
+  }
+
+  Future<void> _openSheet() async {
+    final scope = MemberScope.maybeOf(context);
+    if (scope == null) return;
+    // Opening the inbox clears the unread badge.
+    final hadUnread = _unread > 0;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.panel,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _MemberNotificationsSheet(
+        notifications: _notifications,
+        onTap: (notification) {
+          Navigator.pop(context);
+          scope.goBranch(_branchForType(notification.type));
+        },
+      ),
+    );
+    if (hadUnread) {
+      try {
+        await scope.investmentRepository.markNotificationsRead();
+      } catch (_) {
+        // Best-effort; the next load will reconcile read state.
+      }
+      await _load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = _unread;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        HeaderCircle(
+          key: const ValueKey('member-notifications'),
+          onTap: _openSheet,
+          child: Icon(
+            unread > 0
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_none_rounded,
+            color: AppColors.secondary,
+            size: 18,
+          ),
+        ),
+        if (unread > 0)
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 16),
+              decoration: BoxDecoration(
+                color: AppColors.gold,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                unread > 9 ? '9+' : '$unread',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFF0B0D0F),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _MemberNotificationsSheet extends StatelessWidget {
+  const _MemberNotificationsSheet({
+    required this.notifications,
+    required this.onTap,
+  });
+
+  final List<MemberNotification> notifications;
+  final ValueChanged<MemberNotification> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Notifications', style: AppText.h2),
+            const SizedBox(height: 6),
+            if (notifications.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 28),
+                child: Center(
+                  child: Text(l10n.notificationsNone, style: AppText.body),
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: notifications.length,
+                  separatorBuilder: (_, _) =>
+                      Divider(height: 1, color: AppColors.border),
+                  itemBuilder: (_, index) => _MemberNotificationTile(
+                    notification: notifications[index],
+                    onTap: () => onTap(notifications[index]),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberNotificationTile extends StatelessWidget {
+  const _MemberNotificationTile({required this.notification, required this.onTap});
+
+  final MemberNotification notification;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 6, right: 12),
+              decoration: BoxDecoration(
+                color: notification.isUnread
+                    ? AppColors.gold
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(notification.title, style: AppText.fieldLabel),
+                  if (notification.body.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(notification.body, style: AppText.small),
+                  ],
+                  if (_relativeTime(notification.createdAt) case final time?) ...[
+                    const SizedBox(height: 4),
+                    Text(time, style: AppText.tiny),
+                  ],
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.muted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _relativeTime(String iso) {
+    if (iso.isEmpty) return null;
+    final timestamp = DateTime.tryParse(iso);
+    if (timestamp == null) return null;
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }
 

@@ -18,4 +18,11 @@ abstract interface class InvestmentRepository {
     required String transactionHash,
     required DepositProofFile proof,
   });
+
+  /// The signed-in member's most recent in-app notifications (deposit, wallet,
+  /// support, referral), newest first.
+  Future<List<MemberNotification>> listNotifications();
+
+  /// Marks all of the member's unread notifications as read.
+  Future<void> markNotificationsRead();
 }

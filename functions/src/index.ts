@@ -376,6 +376,42 @@ export const markAdminNotificationsRead = onAdminCall(async () => {
   return {updated: snapshot.size};
 });
 
+export const listMemberNotifications = onMemberCall(async (request) => {
+  const uid = request.auth!.uid;
+  const snapshot = await db
+    .collection("memberNotifications")
+    .where("uid", "==", uid)
+    .orderBy("createdAt", "desc")
+    .limit(25)
+    .get();
+  return {
+    notifications: snapshot.docs.map(memberNotificationFromDoc),
+  };
+});
+
+export const markMemberNotificationsRead = onMemberCall(async (request) => {
+  const uid = request.auth!.uid;
+  const snapshot = await db
+    .collection("memberNotifications")
+    .where("uid", "==", uid)
+    .where("read", "==", false)
+    .get();
+  if (snapshot.empty) {
+    return {updated: 0};
+  }
+
+  const batch = db.batch();
+  for (const doc of snapshot.docs) {
+    batch.update(doc.ref, {
+      read: true,
+      readAt: FieldValue.serverTimestamp(),
+    });
+  }
+  await batch.commit();
+
+  return {updated: snapshot.size};
+});
+
 export const listMemberOpportunities = onMemberCall(async (request) => {
   const locale = readLocale(request.data);
   const [assetsSnapshot, paymentOptionsSnapshot] = await Promise.all([
@@ -2245,6 +2281,28 @@ function adminNotificationFromDoc(
     body: String(data.body ?? ""),
     read: Boolean(data.read ?? false),
     createdAt: readSerializableDate(data.createdAt),
+  };
+}
+
+function memberNotificationFromDoc(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+) {
+  const data = doc.data();
+  // Stringify each entry of the routing payload so the client always receives a
+  // Map<String, String> (orderId / ticketId / refereeUid) it can route on.
+  const rawData = (data.data ?? {}) as Record<string, unknown>;
+  const routeData: Record<string, string> = {};
+  for (const [key, value] of Object.entries(rawData)) {
+    routeData[key] = String(value ?? "");
+  }
+  return {
+    id: doc.id,
+    type: String(data.type ?? ""),
+    title: String(data.title ?? ""),
+    body: String(data.body ?? ""),
+    read: Boolean(data.read ?? false),
+    createdAt: readSerializableDate(data.createdAt),
+    data: routeData,
   };
 }
 

@@ -1147,6 +1147,12 @@ class FakeInvestmentRepository implements InvestmentRepository {
       proofUrl: 'https://example.com/proof.png',
     );
   }
+
+  @override
+  Future<List<MemberNotification>> listNotifications() async => const [];
+
+  @override
+  Future<void> markNotificationsRead() async {}
 }
 
 class FakeKycRepository implements KycRepository {

@@ -331,6 +331,47 @@ class MemberActivity {
   final String status;
 }
 
+class MemberNotification {
+  const MemberNotification({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.body,
+    required this.read,
+    required this.createdAt,
+    this.data = const {},
+  });
+
+  factory MemberNotification.fromJson(Map<String, dynamic> json) {
+    final rawData = json['data'];
+    final data = <String, String>{};
+    if (rawData is Map) {
+      rawData.forEach((key, value) {
+        data['$key'] = '${value ?? ''}';
+      });
+    }
+    return MemberNotification(
+      id: json['id'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      body: json['body'] as String? ?? '',
+      read: json['read'] as bool? ?? false,
+      createdAt: json['createdAt'] as String? ?? '',
+      data: data,
+    );
+  }
+
+  final String id;
+  final String type;
+  final String title;
+  final String body;
+  final bool read;
+  final String createdAt;
+  final Map<String, String> data;
+
+  bool get isUnread => !read;
+}
+
 class MemberAllocation {
   const MemberAllocation({required this.label, required this.percent});
 

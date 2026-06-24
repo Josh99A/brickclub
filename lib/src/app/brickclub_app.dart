@@ -258,6 +258,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
           builder: (context, state, navigationShell) => MemberShell(
             navigationShell: navigationShell,
             kycRepository: widget.kycRepository,
+            investmentRepository: widget.investmentRepository,
           ),
           branches: [
             StatefulShellBranch(

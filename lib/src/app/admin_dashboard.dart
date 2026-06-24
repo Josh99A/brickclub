@@ -26,6 +26,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ('KYC', Icons.verified_user_outlined),
     ('Assets', Icons.apartment_outlined),
     ('Payments', Icons.account_balance_wallet_rounded),
+    ('Deposits', Icons.receipt_long_outlined),
     ('Support', Icons.support_agent_rounded),
     ('Reports', Icons.bar_chart_rounded),
     ('Settings', Icons.settings_outlined),
@@ -73,6 +74,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         notifications:
                             data?.notifications ?? const <AdminNotification>[],
                         onMarkNotificationsRead: _markNotificationsRead,
+                        onOpenSection: (index) =>
+                            setState(() => selectedIndex = index),
                       ),
                       Expanded(
                         child: Builder(
@@ -248,6 +251,7 @@ class _AdminTopBar extends StatelessWidget {
     required this.user,
     required this.notifications,
     required this.onMarkNotificationsRead,
+    required this.onOpenSection,
   });
 
   final String title;
@@ -255,6 +259,7 @@ class _AdminTopBar extends StatelessWidget {
   final SignedInUserDetails? user;
   final List<AdminNotification> notifications;
   final Future<void> Function() onMarkNotificationsRead;
+  final ValueChanged<int> onOpenSection;
 
   @override
   Widget build(BuildContext context) {
@@ -322,6 +327,7 @@ class _AdminTopBar extends StatelessWidget {
           _NotificationsBell(
             notifications: notifications,
             onMarkRead: onMarkNotificationsRead,
+            onOpenSection: onOpenSection,
           ),
           if (MediaQuery.sizeOf(context).width >= 900) ...[
             SizedBox(width: 8),
@@ -354,10 +360,12 @@ class _NotificationsBell extends StatelessWidget {
   const _NotificationsBell({
     required this.notifications,
     required this.onMarkRead,
+    required this.onOpenSection,
   });
 
   final List<AdminNotification> notifications;
   final Future<void> Function() onMarkRead;
+  final ValueChanged<int> onOpenSection;
 
   int get _unread =>
       notifications.where((notification) => notification.isUnread).length;
@@ -414,6 +422,7 @@ class _NotificationsBell extends StatelessWidget {
       builder: (_) => _NotificationsSheet(
         notifications: notifications,
         onMarkRead: onMarkRead,
+        onOpenSection: onOpenSection,
       ),
     );
   }
@@ -423,10 +432,23 @@ class _NotificationsSheet extends StatelessWidget {
   const _NotificationsSheet({
     required this.notifications,
     required this.onMarkRead,
+    required this.onOpenSection,
   });
 
   final List<AdminNotification> notifications;
   final Future<void> Function() onMarkRead;
+  final ValueChanged<int> onOpenSection;
+
+  /// Maps an admin notification type to the dashboard section it should open.
+  /// Sections: 0 Overview, 1 Users, 2 KYC, 3 Assets, 4 Payments, 5 Deposits,
+  /// 6 Support, 7 Reports, 8 Settings.
+  static int sectionForType(String type) {
+    if (type.startsWith('deposit_')) return 5;
+    if (type.startsWith('support_')) return 6;
+    if (type.startsWith('kyc_')) return 2;
+    if (type.startsWith('withdrawal_')) return 8;
+    return 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -468,8 +490,15 @@ class _NotificationsSheet extends StatelessWidget {
                   itemCount: notifications.length,
                   separatorBuilder: (_, _) =>
                       Divider(height: 1, color: AppColors.border),
-                  itemBuilder: (_, index) =>
-                      _NotificationTile(notification: notifications[index]),
+                  itemBuilder: (_, index) => _NotificationTile(
+                    notification: notifications[index],
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenSection(
+                        sectionForType(notifications[index].type),
+                      );
+                    },
+                  ),
                 ),
               ),
           ],
@@ -480,45 +509,55 @@ class _NotificationsSheet extends StatelessWidget {
 }
 
 class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({required this.notification});
+  const _NotificationTile({required this.notification, required this.onTap});
 
   final AdminNotification notification;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(top: 6, right: 12),
-            decoration: BoxDecoration(
-              color: notification.isUnread
-                  ? AppColors.gold
-                  : Colors.transparent,
-              shape: BoxShape.circle,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 6, right: 12),
+              decoration: BoxDecoration(
+                color: notification.isUnread
+                    ? AppColors.gold
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
             ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(notification.title, style: AppText.fieldLabel),
-                if (notification.body.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(notification.body, style: AppText.small),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(notification.title, style: AppText.fieldLabel),
+                  if (notification.body.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(notification.body, style: AppText.small),
+                  ],
+                  if (_relativeTime(notification.createdAt)
+                      case final time?) ...[
+                    const SizedBox(height: 4),
+                    Text(time, style: AppText.tiny),
+                  ],
                 ],
-                if (_relativeTime(notification.createdAt) case final time?) ...[
-                  const SizedBox(height: 4),
-                  Text(time, style: AppText.tiny),
-                ],
-              ],
+              ),
             ),
-          ),
-        ],
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.muted,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -570,16 +609,20 @@ class _AdminSection extends StatelessWidget {
       ),
       4 => _PaymentsPanel(
         options: data.paymentOptions,
+        repository: repository,
+        onChanged: onChanged,
+      ),
+      5 => _DepositsPanel(
         depositRequests: data.depositRequests,
         repository: repository,
         onChanged: onChanged,
       ),
-      5 => _SupportPanel(
+      6 => _SupportPanel(
         tickets: data.supportTickets,
         repository: repository,
         onChanged: onChanged,
       ),
-      6 => _ReportsPanel(data: data),
+      7 => _ReportsPanel(data: data),
       _ => _SettingsPanel(
         policy: data.withdrawalPolicy,
         referralPolicy: data.referralPolicy,
@@ -1415,13 +1458,11 @@ class _AssetsPanel extends StatelessWidget {
 class _PaymentsPanel extends StatelessWidget {
   const _PaymentsPanel({
     required this.options,
-    required this.depositRequests,
     required this.repository,
     required this.onChanged,
   });
 
   final List<PaymentOption> options;
-  final List<AdminDepositRequest> depositRequests;
   final AdminRepository repository;
   final VoidCallback onChanged;
 
@@ -1468,24 +1509,55 @@ class _PaymentsPanel extends StatelessWidget {
                 );
               },
             ),
-            SizedBox(height: 24),
-            Text('Deposit requests', style: AppText.cardHeadingSmall),
-            SizedBox(height: 12),
-            _DepositRequestTable(
-              requests: depositRequests,
-              onVerify: (request) => _runAdminAction(
-                context,
-                action: () => repository.verifyDepositRequest(request.id),
-                onChanged: onChanged,
-              ),
-              onReject: (request) => _showRejectDepositDialog(
-                context,
-                repository: repository,
-                request: request,
-                onChanged: onChanged,
-              ),
-            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DepositsPanel extends StatelessWidget {
+  const _DepositsPanel({
+    required this.depositRequests,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<AdminDepositRequest> depositRequests;
+  final AdminRepository repository;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = depositRequests
+        .where(
+          (request) =>
+              request.status == 'proof_submitted' ||
+              request.status == 'pending_payment',
+        )
+        .length;
+    return _SectionPage(
+      description:
+          'Review member deposit requests. Verify a submitted proof to credit '
+          'the holding, approve a request whose funds you confirmed off-platform, '
+          'or reject a proof that does not check out. The member is notified of '
+          'the outcome.',
+      child: _AdminPanel(
+        title: pending > 0 ? 'Deposit requests ($pending awaiting review)'
+            : 'Deposit requests',
+        child: _DepositRequestTable(
+          requests: depositRequests,
+          onVerify: (request) => _runAdminAction(
+            context,
+            action: () => repository.verifyDepositRequest(request.id),
+            onChanged: onChanged,
+          ),
+          onReject: (request) => _showRejectDepositDialog(
+            context,
+            repository: repository,
+            request: request,
+            onChanged: onChanged,
+          ),
         ),
       ),
     );

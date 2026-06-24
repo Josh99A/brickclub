@@ -12,10 +12,12 @@ class MemberShell extends StatelessWidget {
     super.key,
     required this.navigationShell,
     required this.kycRepository,
+    required this.investmentRepository,
   });
 
   final StatefulNavigationShell navigationShell;
   final KycRepository kycRepository;
+  final InvestmentRepository investmentRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,7 @@ class MemberShell extends StatelessWidget {
         return MemberScope(
           kyc: kyc,
           navigationShell: navigationShell,
+          investmentRepository: investmentRepository,
           child: PhoneFrame(
             child: Scaffold(
               backgroundColor: AppColors.background,
@@ -59,11 +62,13 @@ class MemberScope extends InheritedWidget {
     super.key,
     required this.kyc,
     required this.navigationShell,
+    required this.investmentRepository,
     required super.child,
   });
 
   final KycProfile kyc;
   final StatefulNavigationShell navigationShell;
+  final InvestmentRepository investmentRepository;
 
   void goBranch(int index) => navigationShell.goBranch(
     index,
@@ -76,9 +81,14 @@ class MemberScope extends InheritedWidget {
     return scope!;
   }
 
+  static MemberScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<MemberScope>();
+
   @override
   bool updateShouldNotify(MemberScope oldWidget) =>
-      kyc != oldWidget.kyc || navigationShell != oldWidget.navigationShell;
+      kyc != oldWidget.kyc ||
+      navigationShell != oldWidget.navigationShell ||
+      investmentRepository != oldWidget.investmentRepository;
 }
 
 void requireApprovedKyc(

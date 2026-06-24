@@ -93,6 +93,29 @@ class FirebaseInvestmentRepository implements InvestmentRepository {
     );
   }
 
+  @override
+  Future<List<MemberNotification>> listNotifications() async {
+    final callable = _functions.httpsCallable('listMemberNotifications');
+    final result = await callable.call<Object?>();
+    final data = Map<String, dynamic>.from(result.data! as Map);
+    final notifications = data['notifications'];
+    if (notifications is! List) return const [];
+
+    return notifications
+        .whereType<Map>()
+        .map(
+          (item) =>
+              MemberNotification.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> markNotificationsRead() async {
+    final callable = _functions.httpsCallable('markMemberNotificationsRead');
+    await callable.call<Object?>();
+  }
+
   Future<String> _uploadProof(String orderId, DepositProofFile proof) async {
     final safeName = proof.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '-');
     final reference = _storage.ref(
