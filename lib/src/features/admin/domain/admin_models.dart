@@ -7,6 +7,7 @@ class AdminDashboardData {
     required this.supportTickets,
     required this.withdrawalPolicy,
     required this.referralPolicy,
+    required this.landingContent,
     this.notifications = const [],
     this.kycProfiles = const [],
   });
@@ -34,6 +35,9 @@ class AdminDashboardData {
       referralPolicy: ReferralPolicy.fromJson(
         Map<String, dynamic>.from(json['referralPolicy'] as Map? ?? {}),
       ),
+      landingContent: LandingContent.fromJson(
+        Map<String, dynamic>.from(json['landingContent'] as Map? ?? {}),
+      ),
       kycProfiles: _list(json['kycProfiles'], AdminKycProfile.fromJson),
     );
   }
@@ -46,6 +50,7 @@ class AdminDashboardData {
   final List<AdminNotification> notifications;
   final WithdrawalPolicy withdrawalPolicy;
   final ReferralPolicy referralPolicy;
+  final LandingContent landingContent;
   final List<AdminKycProfile> kycProfiles;
 
   int get unreadNotificationCount =>
@@ -893,6 +898,64 @@ class ReferralPolicy {
   final bool enabled;
   final double commissionPercent;
   final bool firstInvestmentOnly;
+}
+
+/// Marketing figures shown on the pre-auth landing page. Stored in
+/// `platformSettings/landing` and editable from the admin Settings panel.
+class LandingContent {
+  const LandingContent({
+    required this.targetReturnPercent,
+    required this.minimumInvestmentUsd,
+    required this.settlementPercent,
+    required this.showcasePortfolioValueUsd,
+    required this.showcaseAssetName,
+  });
+
+  factory LandingContent.defaults() {
+    return const LandingContent(
+      targetReturnPercent: 12.4,
+      minimumInvestmentUsd: 50,
+      settlementPercent: 100,
+      showcasePortfolioValueUsd: 5000,
+      showcaseAssetName: 'Skyline Heights Income Fund',
+    );
+  }
+
+  factory LandingContent.fromJson(Map<String, dynamic> json) {
+    final defaults = LandingContent.defaults();
+    return LandingContent(
+      targetReturnPercent:
+          (json['targetReturnPercent'] as num?)?.toDouble() ??
+          defaults.targetReturnPercent,
+      minimumInvestmentUsd:
+          (json['minimumInvestmentUsd'] as num?)?.toDouble() ??
+          defaults.minimumInvestmentUsd,
+      settlementPercent:
+          (json['settlementPercent'] as num?)?.toDouble() ??
+          defaults.settlementPercent,
+      showcasePortfolioValueUsd:
+          (json['showcasePortfolioValueUsd'] as num?)?.toDouble() ??
+          defaults.showcasePortfolioValueUsd,
+      showcaseAssetName:
+          json['showcaseAssetName'] as String? ?? defaults.showcaseAssetName,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'targetReturnPercent': targetReturnPercent,
+      'minimumInvestmentUsd': minimumInvestmentUsd,
+      'settlementPercent': settlementPercent,
+      'showcasePortfolioValueUsd': showcasePortfolioValueUsd,
+      'showcaseAssetName': showcaseAssetName,
+    };
+  }
+
+  final double targetReturnPercent;
+  final double minimumInvestmentUsd;
+  final double settlementPercent;
+  final double showcasePortfolioValueUsd;
+  final String showcaseAssetName;
 }
 
 class AdminKycProfile {

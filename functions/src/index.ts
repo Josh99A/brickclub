@@ -162,6 +162,14 @@ type ReferralPolicy = {
   firstInvestmentOnly: boolean;
 };
 
+type LandingContent = {
+  targetReturnPercent: number;
+  minimumInvestmentUsd: number;
+  settlementPercent: number;
+  showcasePortfolioValueUsd: number;
+  showcaseAssetName: string;
+};
+
 type UserPayload = {
   email: string;
   password?: string;
@@ -217,6 +225,7 @@ const referralCodesCollection = db.collection("referralCodes");
 const referralCommissionsCollection = db.collection("referralCommissions");
 const withdrawalPolicyDoc = db.collection("platformSettings").doc("withdrawals");
 const referralPolicyDoc = db.collection("platformSettings").doc("referrals");
+const landingContentDoc = db.collection("platformSettings").doc("landing");
 const devMailFrom = "BrickClub Dev <no-reply@brickclub.local>";
 
 export const getMemberProfile = onCall(async (request) => {
@@ -320,6 +329,7 @@ export const listAdminDashboard = onAdminCall(async () => {
     .get();
   const withdrawalPolicy = await loadWithdrawalPolicy();
   const referralPolicy = await loadReferralPolicy();
+  const landingContent = await loadLandingContent();
 
   return {
     users: usersResult.users.map(userToJson),
@@ -330,6 +340,7 @@ export const listAdminDashboard = onAdminCall(async () => {
     notifications: notificationsSnapshot.docs.map(adminNotificationFromDoc),
     withdrawalPolicy,
     referralPolicy,
+    landingContent,
     kycProfiles: kycSnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
@@ -966,6 +977,26 @@ export const updateReferralPolicy = onAdminCall(async (data) => {
   );
 
   return policy;
+});
+
+export const updateLandingContent = onAdminCall(async (data) => {
+  const content = readLandingContent(data);
+  await landingContentDoc.set(
+    {
+      ...content,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    {merge: true},
+  );
+
+  return content;
+});
+
+// Public marketing figures shown on the pre-auth landing page. Callable without
+// authentication so unauthenticated visitors can render live values; falls back
+// to defaults when the document is missing.
+export const getLandingContent = onCall(async () => {
+  return loadLandingContent();
 });
 
 // Returns the caller's referral profile, lazily creating their account (with a
@@ -2693,6 +2724,72 @@ function readReferralPolicy(data: unknown): ReferralPolicy {
     );
   }
   return policy;
+}
+
+async function loadLandingContent(): Promise<LandingContent> {
+  const snapshot = await landingContentDoc.get();
+  return landingContentFromData(snapshot.data());
+}
+
+function landingContentFromData(
+  data: FirebaseFirestore.DocumentData | undefined,
+): LandingContent {
+  const defaults = defaultLandingContent();
+  if (!data) return defaults;
+  return {
+    targetReturnPercent: Number(
+      data.targetReturnPercent ?? defaults.targetReturnPercent,
+    ),
+    minimumInvestmentUsd: Number(
+      data.minimumInvestmentUsd ?? defaults.minimumInvestmentUsd,
+    ),
+    settlementPercent: Number(
+      data.settlementPercent ?? defaults.settlementPercent,
+    ),
+    showcasePortfolioValueUsd: Number(
+      data.showcasePortfolioValueUsd ?? defaults.showcasePortfolioValueUsd,
+    ),
+    showcaseAssetName: String(
+      data.showcaseAssetName ?? defaults.showcaseAssetName,
+    ),
+  };
+}
+
+function defaultLandingContent(): LandingContent {
+  return {
+    targetReturnPercent: 12.4,
+    minimumInvestmentUsd: 50,
+    settlementPercent: 100,
+    showcasePortfolioValueUsd: 5000,
+    showcaseAssetName: "Skyline Heights Income Fund",
+  };
+}
+
+function readLandingContent(data: unknown): LandingContent {
+  const value = readObject(data);
+  const content: LandingContent = {
+    targetReturnPercent: readNonNegativeNumber(value, "targetReturnPercent"),
+    minimumInvestmentUsd: readNonNegativeNumber(value, "minimumInvestmentUsd"),
+    settlementPercent: readNonNegativeNumber(value, "settlementPercent"),
+    showcasePortfolioValueUsd: readNonNegativeNumber(
+      value,
+      "showcasePortfolioValueUsd",
+    ),
+    showcaseAssetName: readString(value, "showcaseAssetName"),
+  };
+  if (content.targetReturnPercent > 100) {
+    throw new HttpsError(
+      "invalid-argument",
+      "targetReturnPercent must be 100 or lower.",
+    );
+  }
+  if (content.settlementPercent > 100) {
+    throw new HttpsError(
+      "invalid-argument",
+      "settlementPercent must be 100 or lower.",
+    );
+  }
+  return content;
 }
 
 // 7-char code from uppercased UUID hex. Ambiguity is acceptable because every

@@ -768,6 +768,13 @@ class FakeAdminRepository implements AdminRepository {
       commissionPercent: 5,
       firstInvestmentOnly: false,
     ),
+    landingContent: LandingContent(
+      targetReturnPercent: 12.4,
+      minimumInvestmentUsd: 50,
+      settlementPercent: 100,
+      showcasePortfolioValueUsd: 5000,
+      showcaseAssetName: 'Skyline Heights Income Fund',
+    ),
     notifications: [
       AdminNotification(
         id: 'notification-1',
@@ -912,6 +919,9 @@ class FakeAdminRepository implements AdminRepository {
   @override
   Future<void> updateReferralPolicy(ReferralPolicy policy) async {}
 
+  @override
+  Future<void> updateLandingContent(LandingContent content) async {}
+
   bool markedNotificationsRead = false;
 
   @override
@@ -1039,6 +1049,11 @@ class FakeInvestmentRepository implements InvestmentRepository {
       fundedPercent: 29,
     ),
   ];
+
+  @override
+  Future<LandingContent> getLandingContent() async {
+    return LandingContent.defaults();
+  }
 
   @override
   Future<MemberDashboardData> loadMemberDashboard() async {

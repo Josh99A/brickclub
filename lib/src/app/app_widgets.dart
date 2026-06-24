@@ -387,12 +387,12 @@ class InvestmentCard extends StatelessWidget {
   const InvestmentCard({
     super.key,
     required this.onTap,
+    required this.category,
+    required this.title,
+    required this.location,
+    required this.minimum,
+    required this.returnText,
     this.compact = false,
-    this.category = 'Real Estate',
-    this.title = 'Skyline Heights\nIncome Fund',
-    this.location = 'Central Business District',
-    this.minimum = '\$50',
-    this.returnText = '11.8%',
     this.fundedPercent = 0,
     this.imageUrl,
   });

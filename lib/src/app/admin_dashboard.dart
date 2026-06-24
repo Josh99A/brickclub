@@ -583,6 +583,7 @@ class _AdminSection extends StatelessWidget {
       _ => _SettingsPanel(
         policy: data.withdrawalPolicy,
         referralPolicy: data.referralPolicy,
+        landingContent: data.landingContent,
         repository: repository,
         onChanged: onChanged,
       ),
@@ -1719,12 +1720,14 @@ class _SettingsPanel extends StatelessWidget {
   const _SettingsPanel({
     required this.policy,
     required this.referralPolicy,
+    required this.landingContent,
     required this.repository,
     required this.onChanged,
   });
 
   final WithdrawalPolicy policy;
   final ReferralPolicy referralPolicy;
+  final LandingContent landingContent;
   final AdminRepository repository;
   final VoidCallback onChanged;
 
@@ -1812,10 +1815,57 @@ class _SettingsPanel extends StatelessWidget {
               ],
             ),
           ),
+          SizedBox(height: 24),
+          _AdminPanel(
+            title: 'Landing page content',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SettingRow(
+                  'Target return',
+                  '${_trimNumber(landingContent.targetReturnPercent)}%',
+                ),
+                _SettingRow(
+                  'Minimum investment',
+                  '\$${_trimNumber(landingContent.minimumInvestmentUsd)}',
+                ),
+                _SettingRow(
+                  'Settlement',
+                  '${_trimNumber(landingContent.settlementPercent)}%',
+                ),
+                _SettingRow(
+                  'Showcase portfolio value',
+                  '\$${_trimNumber(landingContent.showcasePortfolioValueUsd)}',
+                ),
+                _SettingRow(
+                  'Showcase asset name',
+                  landingContent.showcaseAssetName,
+                ),
+                SizedBox(height: 12),
+                _SectionActionButton(
+                  label: 'Edit landing content',
+                  icon: Icons.edit_outlined,
+                  onPressed: () => _showLandingContentDialog(
+                    context,
+                    repository: repository,
+                    content: landingContent,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+/// Formats a marketing figure without a trailing `.0` for whole numbers.
+String _trimNumber(double value) {
+  return value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toString();
 }
 
 class _SectionPage extends StatelessWidget {
@@ -3991,6 +4041,120 @@ Future<void> _showReferralPolicyDialog(
   );
 
   commissionPercent.dispose();
+}
+
+Future<void> _showLandingContentDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required LandingContent content,
+  required VoidCallback onChanged,
+}) async {
+  final targetReturn = TextEditingController(
+    text: _trimNumber(content.targetReturnPercent),
+  );
+  final minimum = TextEditingController(
+    text: _trimNumber(content.minimumInvestmentUsd),
+  );
+  final settlement = TextEditingController(
+    text: _trimNumber(content.settlementPercent),
+  );
+  final portfolioValue = TextEditingController(
+    text: _trimNumber(content.showcasePortfolioValueUsd),
+  );
+  final assetName = TextEditingController(text: content.showcaseAssetName);
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: Text('Landing page content'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppTextField(
+                controller: targetReturn,
+                label: 'Target return (%)',
+                hintText: '12.4',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: minimum,
+                label: 'Minimum investment (USD)',
+                hintText: '50',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: settlement,
+                label: 'Settlement (%)',
+                hintText: '100',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: portfolioValue,
+                label: 'Showcase portfolio value (USD)',
+                hintText: '5000',
+                keyboardType: TextInputType.number,
+              ),
+              SizedBox(height: 10),
+              AppTextField(
+                controller: assetName,
+                label: 'Showcase asset name',
+                hintText: 'Skyline Heights Income Fund',
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final payload = LandingContent(
+              targetReturnPercent:
+                  double.tryParse(targetReturn.text) ??
+                  content.targetReturnPercent,
+              minimumInvestmentUsd:
+                  double.tryParse(minimum.text) ??
+                  content.minimumInvestmentUsd,
+              settlementPercent:
+                  double.tryParse(settlement.text) ??
+                  content.settlementPercent,
+              showcasePortfolioValueUsd:
+                  double.tryParse(portfolioValue.text) ??
+                  content.showcasePortfolioValueUsd,
+              showcaseAssetName: assetName.text.trim().isEmpty
+                  ? content.showcaseAssetName
+                  : assetName.text.trim(),
+            );
+
+            await _runAdminAction(
+              context,
+              action: () => repository.updateLandingContent(payload),
+              onChanged: onChanged,
+              successMessage: 'Landing content updated',
+            );
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+          },
+          child: Text('Save'),
+        ),
+      ],
+    ),
+  );
+
+  targetReturn.dispose();
+  minimum.dispose();
+  settlement.dispose();
+  portfolioValue.dispose();
+  assetName.dispose();
 }
 
 Future<void> _showSupportReplyDialog(

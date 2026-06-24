@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
+import '../../admin/domain/admin_models.dart' show LandingContent;
 import '../domain/investment_models.dart';
 import '../domain/investment_repository.dart';
 
@@ -23,6 +24,21 @@ class FirebaseInvestmentRepository implements InvestmentRepository {
     return MemberDashboardData.fromJson(
       Map<String, dynamic>.from(result.data! as Map),
     );
+  }
+
+  @override
+  Future<LandingContent> getLandingContent() async {
+    try {
+      final callable = _functions.httpsCallable('getLandingContent');
+      final result = await callable.call<Object?>();
+      return LandingContent.fromJson(
+        Map<String, dynamic>.from(result.data! as Map),
+      );
+    } catch (_) {
+      // The landing page is pre-auth marketing; never block it on a backend
+      // hiccup or cold start. Fall back to the built-in defaults.
+      return LandingContent.defaults();
+    }
   }
 
   @override
