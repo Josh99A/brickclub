@@ -219,6 +219,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
         GoRoute(
           path: '/landing',
           builder: (context, state) => LandingPage(
+            investmentRepository: widget.investmentRepository,
             onSignIn: () => context.go('/signin'),
             onSignUp: () => context.go('/signup'),
           ),
@@ -271,6 +272,7 @@ class _BrickClubAppState extends State<BrickClubApp> {
                         kyc: scope.kyc,
                         investmentRepository: widget.investmentRepository,
                         onInvest: () => scope.goBranch(1),
+                        onOpenPortfolio: () => scope.goBranch(3),
                         onStartKyc: () => _openKyc(context),
                         onOpenProfile: () => scope.goBranch(4),
                       );

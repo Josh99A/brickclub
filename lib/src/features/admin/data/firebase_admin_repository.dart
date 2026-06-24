@@ -223,6 +223,11 @@ class FirebaseAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<void> updateLandingContent(LandingContent content) {
+    return _callVoid('updateLandingContent', content.toJson());
+  }
+
+  @override
   Future<void> markNotificationsRead() {
     return _callVoid('markAdminNotificationsRead');
   }

@@ -3,15 +3,36 @@ part of 'brickclub_app.dart';
 class LandingPage extends StatefulWidget {
   const LandingPage({
     super.key,
+    required this.investmentRepository,
     required this.onSignIn,
     required this.onSignUp,
   });
 
+  final InvestmentRepository investmentRepository;
   final VoidCallback onSignIn;
   final VoidCallback onSignUp;
 
   @override
   State<LandingPage> createState() => _LandingPageState();
+}
+
+/// Provides admin-managed [LandingContent] to the landing page subtree. Starts
+/// with [LandingContent.defaults] so the page renders instantly, then updates
+/// once the live values load.
+class _LandingContentScope extends InheritedWidget {
+  const _LandingContentScope({required this.content, required super.child});
+
+  final LandingContent content;
+
+  static LandingContent of(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_LandingContentScope>();
+    return scope?.content ?? LandingContent.defaults();
+  }
+
+  @override
+  bool updateShouldNotify(_LandingContentScope oldWidget) =>
+      content != oldWidget.content;
 }
 
 class _LandingPageState extends State<LandingPage> {
@@ -21,6 +42,19 @@ class _LandingPageState extends State<LandingPage> {
   final _featuresKey = GlobalKey();
   final _testimonialsKey = GlobalKey();
 
+  LandingContent _content = LandingContent.defaults();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContent();
+  }
+
+  Future<void> _loadContent() async {
+    final content = await widget.investmentRepository.getLandingContent();
+    if (mounted) setState(() => _content = content);
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -29,9 +63,11 @@ class _LandingPageState extends State<LandingPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SelectionArea(
+    return _LandingContentScope(
+      content: _content,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SelectionArea(
         child: _ScrollScope(
           controller: _scrollController,
           child: SingleChildScrollView(
@@ -82,6 +118,7 @@ class _LandingPageState extends State<LandingPage> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -739,7 +776,7 @@ class _HeroVisualState extends State<_HeroVisual>
                     SizedBox(height: 6),
                     _CountUp(
                       progress: _metric,
-                      value: 12.4,
+                      value: _LandingContentScope.of(context).targetReturnPercent,
                       decimals: 1,
                       suffix: '%',
                       style: AppText.goldMetric,
@@ -767,6 +804,7 @@ class _PhonePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final content = _LandingContentScope.of(context);
     return ColoredBox(
       color: AppColors.background,
       child: Padding(
@@ -808,7 +846,7 @@ class _PhonePreview extends StatelessWidget {
             Text(l10n.previewPortfolioValue, style: AppText.small),
             SizedBox(height: 4),
             Text(
-              '\$5,000',
+              '\$${NumberFormat('#,###').format(content.showcasePortfolioValueUsd)}',
               style: TextStyle(
                 color: AppColors.primary,
                 fontSize: 27,
@@ -827,7 +865,7 @@ class _PhonePreview extends StatelessWidget {
             ),
             SizedBox(height: 12),
             Text(
-              'Skyline Heights\nIncome Fund',
+              content.showcaseAssetName,
               style: TextStyle(
                 color: AppColors.primary,
                 fontSize: 17,
@@ -847,8 +885,14 @@ class _PhonePreview extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('\$50', style: AppText.goldBody),
-                Text('12.4%', style: AppText.cardHeadingSmall),
+                Text(
+                  '\$${content.minimumInvestmentUsd.toStringAsFixed(0)}',
+                  style: AppText.goldBody,
+                ),
+                Text(
+                  '${content.targetReturnPercent.toStringAsFixed(1)}%',
+                  style: AppText.cardHeadingSmall,
+                ),
               ],
             ),
           ],
@@ -1102,6 +1146,7 @@ class _AssetReviewPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final content = _LandingContentScope.of(context);
     return _HoverLift(
       child: Container(
         padding: const EdgeInsets.all(24),
@@ -1161,7 +1206,7 @@ class _AssetReviewPanel extends StatelessWidget {
               ],
             ),
             SizedBox(height: 22),
-            Text('Skyline Heights', style: AppText.cardHeading),
+            Text(content.showcaseAssetName, style: AppText.cardHeading),
             SizedBox(height: 8),
             Text(
               l10n.assetSampleDescription,
@@ -1175,9 +1220,16 @@ class _AssetReviewPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Metric('12.4%', l10n.previewTargetReturn, gold: true),
+                      Metric(
+                        '${content.targetReturnPercent.toStringAsFixed(1)}%',
+                        l10n.previewTargetReturn,
+                        gold: true,
+                      ),
                       const SizedBox(height: 18),
-                      Metric('\$50', l10n.previewMinimum),
+                      Metric(
+                        '\$${content.minimumInvestmentUsd.toStringAsFixed(0)}',
+                        l10n.previewMinimum,
+                      ),
                     ],
                   ),
                 ),
@@ -1861,10 +1913,11 @@ class _StatsBandState extends State<_StatsBand>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final content = _LandingContentScope.of(context);
     final tiles = <Widget>[
       _StatTile(
         progress: _progress,
-        value: 12.4,
+        value: content.targetReturnPercent,
         decimals: 1,
         suffix: '%',
         label: l10n.statTargetReturn,
@@ -1872,14 +1925,14 @@ class _StatsBandState extends State<_StatsBand>
       ),
       _StatTile(
         progress: _progress,
-        value: 50,
+        value: content.minimumInvestmentUsd,
         prefix: '\$',
         label: l10n.statMinimum,
         icon: Icons.savings_outlined,
       ),
       _StatTile(
         progress: _progress,
-        value: 100,
+        value: content.settlementPercent,
         suffix: '%',
         label: l10n.statSettlement,
         icon: Icons.shield_moon_outlined,

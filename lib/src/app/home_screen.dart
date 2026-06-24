@@ -6,6 +6,7 @@ class HomeScreen extends StatelessWidget {
     required this.kyc,
     required this.investmentRepository,
     required this.onInvest,
+    required this.onOpenPortfolio,
     required this.onStartKyc,
     required this.onOpenProfile,
   });
@@ -13,6 +14,7 @@ class HomeScreen extends StatelessWidget {
   final KycProfile kyc;
   final InvestmentRepository investmentRepository;
   final VoidCallback onInvest;
+  final VoidCallback onOpenPortfolio;
   final VoidCallback onStartKyc;
   final VoidCallback onOpenProfile;
 
@@ -109,7 +111,11 @@ class HomeScreen extends StatelessWidget {
             );
           },
         ),
-        SectionHeading(title: l10n.homeYourHoldings, action: l10n.commonViewAll),
+        SectionHeading(
+          title: l10n.homeYourHoldings,
+          action: l10n.commonViewAll,
+          onAction: onOpenPortfolio,
+        ),
         FutureBuilder<MemberDashboardData>(
           future: dashboardFuture,
           builder: (context, snapshot) {
@@ -124,7 +130,11 @@ class HomeScreen extends StatelessWidget {
             );
           },
         ),
-        SectionHeading(title: l10n.homeRecentActivity, action: l10n.commonViewAll),
+        SectionHeading(
+          title: l10n.homeRecentActivity,
+          action: l10n.commonViewAll,
+          onAction: onOpenPortfolio,
+        ),
         FutureBuilder<MemberDashboardData>(
           future: dashboardFuture,
           builder: (context, snapshot) {

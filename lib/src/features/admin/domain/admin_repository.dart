@@ -82,6 +82,8 @@ abstract interface class AdminRepository {
 
   Future<void> updateReferralPolicy(ReferralPolicy policy);
 
+  Future<void> updateLandingContent(LandingContent content);
+
   Future<void> markNotificationsRead();
 
   Future<void> approveKycProfile(String uid);
