@@ -887,6 +887,18 @@ class FakeAdminRepository implements AdminRepository {
   }) async {}
 
   @override
+  Future<RentalIncomeDistribution> distributeRentalIncome({
+    required String assetId,
+    required double totalAmountUsd,
+    String note = '',
+  }) async => const RentalIncomeDistribution(
+    totalAmountUsd: 0,
+    distributedUsd: 0,
+    recipientCount: 0,
+    failedCount: 0,
+  );
+
+  @override
   Future<void> approveKycProfile(String uid) async {}
 
   @override

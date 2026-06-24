@@ -1807,6 +1807,110 @@ export const updateAssetValuation = onAdminCall(async (data) => {
   return {id, currentAssetValue, holdingsUpdated: holdingsSnapshot.size};
 });
 
+// Distribute a one-off rental income pool across every funded holder of a single
+// asset, proportional to each holder's invested capital. Each member's payout
+// (wallet balance, ledger row, activity entry, and holding dividend total) is
+// written in one transaction so an individual credit is always internally
+// consistent; a failure on one member never rolls back members already paid.
+export const distributeRentalIncome = onAdminCall(async (data, context) => {
+  const value = readObject(data);
+  const assetId = readString(value, "assetId");
+  const totalAmountUsd = roundMoney(readPositiveNumber(value, "totalAmountUsd"));
+  const note = (readOptionalString(value, "note") ?? "").trim();
+
+  const assetSnapshot = await assetsCollection.doc(assetId).get();
+  if (!assetSnapshot.exists) {
+    throw new HttpsError("not-found", "Asset was not found.");
+  }
+  const asset = assetFromData(assetSnapshot.id, assetSnapshot.data()!);
+
+  const holdingsSnapshot = await memberHoldingsCollection
+    .where("assetId", "==", assetId)
+    .get();
+  const eligible = holdingsSnapshot.docs
+    .map((doc) => ({
+      holdingId: doc.id,
+      uid: String(doc.data().userId ?? ""),
+      invested: Number(doc.data().amountInvested ?? 0),
+    }))
+    .filter((holding) => holding.uid && holding.invested > 0);
+
+  if (eligible.length === 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "This asset has no funded holdings to distribute income to.",
+    );
+  }
+
+  const totalInvested = eligible.reduce(
+    (sum, holding) => sum + holding.invested,
+    0,
+  );
+
+  // Split proportionally by invested capital, rounding each cut to cents. Any
+  // rounding remainder is assigned to the largest holder so the payouts sum
+  // exactly to the requested pool.
+  const payouts = eligible.map((holding) => ({
+    ...holding,
+    amountUsd: roundMoney(totalAmountUsd * (holding.invested / totalInvested)),
+  }));
+  const allocated = roundMoney(
+    payouts.reduce((sum, payout) => sum + payout.amountUsd, 0),
+  );
+  const remainder = roundMoney(totalAmountUsd - allocated);
+  if (remainder !== 0) {
+    const largest = payouts.reduce((a, b) => (b.invested > a.invested ? b : a));
+    largest.amountUsd = roundMoney(largest.amountUsd + remainder);
+  }
+
+  const reason = note.length > 0 ?
+    `Rental income — ${asset.title}. ${note}` :
+    `Rental income — ${asset.title}`;
+
+  let recipientCount = 0;
+  let distributedUsd = 0;
+  const failedUids: string[] = [];
+  for (const payout of payouts) {
+    if (payout.amountUsd <= 0) {
+      continue;
+    }
+    try {
+      await creditRentalIncome({
+        uid: payout.uid,
+        holdingId: payout.holdingId,
+        assetId,
+        amountUsd: payout.amountUsd,
+        reason,
+        createdBy: context.uid,
+      });
+      recipientCount += 1;
+      distributedUsd = roundMoney(distributedUsd + payout.amountUsd);
+      await notifyMember(payout.uid, {
+        type: "rental_income",
+        title: "Rental income received",
+        body: `${formatUsd(payout.amountUsd)} in rental income from ` +
+          `${asset.title} was added to your wallet balance.`,
+        data: {assetId, holdingId: payout.holdingId},
+      });
+    } catch (error) {
+      logger.error("Rental income payout failed", {
+        assetId,
+        uid: payout.uid,
+        error,
+      });
+      failedUids.push(payout.uid);
+    }
+  }
+
+  return {
+    assetId,
+    totalAmountUsd,
+    distributedUsd,
+    recipientCount,
+    failedCount: failedUids.length,
+  };
+});
+
 export const createCryptoPaymentOption = onAdminCall(async (data) => {
   const payload = readPaymentOptionPayload(data);
   const id = randomUUID();
@@ -3592,6 +3696,98 @@ async function applyWalletAdjustment(input: {
   });
 
   return {balanceUsd, transactionId: txRef.id};
+}
+
+// Credit a single member's wallet with their share of a rental income pool and
+// roll the payout into their holding's accumulated dividends. The wallet
+// balance, ledger row, activity entry, and holding are all written in one
+// transaction so the member's cash and portfolio stay consistent.
+async function creditRentalIncome(input: {
+  uid: string;
+  holdingId: string;
+  assetId: string;
+  amountUsd: number;
+  reason: string;
+  createdBy: string;
+}): Promise<void> {
+  const walletRef = memberWalletsCollection.doc(input.uid);
+  const holdingRef = memberHoldingsCollection.doc(input.holdingId);
+  const txRef = walletTransactionsCollection.doc();
+  const activityRef = memberActivitiesCollection.doc();
+  const amountUsd = roundMoney(input.amountUsd);
+
+  await db.runTransaction(async (tx) => {
+    const [walletSnapshot, holdingSnapshot] = await Promise.all([
+      tx.get(walletRef),
+      tx.get(holdingRef),
+    ]);
+    const wallet = walletSnapshot.data();
+    const priorBalance = Number(wallet?.balanceUsd ?? 0);
+    const newBalance = roundMoney(priorBalance + amountUsd);
+
+    tx.set(
+      walletRef,
+      {
+        uid: input.uid,
+        balanceUsd: newBalance,
+        createdAt: wallet?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    tx.set(txRef, {
+      id: txRef.id,
+      uid: input.uid,
+      type: "dividend",
+      amountUsd,
+      balanceAfter: newBalance,
+      reason: input.reason,
+      createdBy: input.createdBy,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    tx.set(activityRef, {
+      id: activityRef.id,
+      uid: input.uid,
+      type: "rental_income",
+      title: "Rental income received",
+      subtitle: input.reason,
+      value: `+${formatUsd(amountUsd)}`,
+      status: "income_distributed",
+      assetId: input.assetId,
+      amountUsd,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    // Accumulate the payout onto the holding and recompute profit/loss so the
+    // member portfolio reflects the distribution. Current value is unchanged;
+    // only dividends and the derived return figures move.
+    const holding = holdingSnapshot.data();
+    if (holding) {
+      const amountInvested = Number(holding.amountInvested ?? 0);
+      const currentValue = Number(holding.currentValue ?? amountInvested);
+      const dividendsReceived = roundMoney(
+        Number(holding.dividendsReceived ?? 0) + amountUsd,
+      );
+      const profitLoss = roundMoney(
+        currentValue + dividendsReceived - amountInvested,
+      );
+      const returnPercentage = amountInvested > 0 ?
+        roundMoney((profitLoss / amountInvested) * 100) :
+        0;
+      tx.set(
+        holdingRef,
+        {
+          dividendsReceived,
+          profitLoss,
+          returnPercentage,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        {merge: true},
+      );
+    }
+  });
 }
 
 function walletTransactionFromDoc(

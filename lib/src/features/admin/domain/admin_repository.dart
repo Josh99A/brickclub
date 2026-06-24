@@ -47,6 +47,14 @@ abstract interface class AdminRepository {
     double occupancyRate,
   });
 
+  /// Splits [totalAmountUsd] of rental income across every funded holder of the
+  /// asset, proportional to invested capital, crediting each member's wallet.
+  Future<RentalIncomeDistribution> distributeRentalIncome({
+    required String assetId,
+    required double totalAmountUsd,
+    String note,
+  });
+
   Future<void> createPaymentOption(PaymentOption option);
 
   Future<void> updatePaymentOption(PaymentOption option);

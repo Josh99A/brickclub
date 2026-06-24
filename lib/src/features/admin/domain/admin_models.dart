@@ -215,7 +215,31 @@ class AdminWalletTransaction {
   final String reason;
   final String createdAt;
 
-  bool get isCredit => type == 'credit';
+  bool get isCredit => type == 'credit' || type == 'dividend';
+}
+
+/// Result of a rental income distribution run for a single asset.
+class RentalIncomeDistribution {
+  const RentalIncomeDistribution({
+    required this.totalAmountUsd,
+    required this.distributedUsd,
+    required this.recipientCount,
+    required this.failedCount,
+  });
+
+  factory RentalIncomeDistribution.fromJson(Map<String, dynamic> json) {
+    return RentalIncomeDistribution(
+      totalAmountUsd: (json['totalAmountUsd'] as num?)?.toDouble() ?? 0,
+      distributedUsd: (json['distributedUsd'] as num?)?.toDouble() ?? 0,
+      recipientCount: (json['recipientCount'] as num?)?.toInt() ?? 0,
+      failedCount: (json['failedCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final double totalAmountUsd;
+  final double distributedUsd;
+  final int recipientCount;
+  final int failedCount;
 }
 
 class AdminUserKyc {

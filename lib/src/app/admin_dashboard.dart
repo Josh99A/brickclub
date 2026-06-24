@@ -1455,6 +1455,12 @@ class _AssetsPanel extends StatelessWidget {
             asset: asset,
             onChanged: onChanged,
           ),
+          onDistribute: (asset) => _showDistributeIncomeDialog(
+            context,
+            repository: repository,
+            asset: asset,
+            onChanged: onChanged,
+          ),
         ),
       ),
     );
@@ -2255,12 +2261,14 @@ class _AssetTable extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onValuation,
+    this.onDistribute,
   });
 
   final List<AdminAsset> assets;
   final ValueChanged<AdminAsset>? onEdit;
   final ValueChanged<AdminAsset>? onDelete;
   final ValueChanged<AdminAsset>? onValuation;
+  final ValueChanged<AdminAsset>? onDistribute;
 
   @override
   Widget build(BuildContext context) {
@@ -2286,12 +2294,24 @@ class _AssetTable extends StatelessWidget {
       onDelete: onDelete == null
           ? null
           : (row) => onDelete!(row.source as AdminAsset),
-      trailingBuilder: onValuation == null
+      trailingBuilder: (onValuation == null && onDistribute == null)
           ? null
-          : (row) => IconButton(
-              tooltip: 'Update valuation',
-              onPressed: () => onValuation!(row.source as AdminAsset),
-              icon: Icon(Icons.trending_up_rounded, size: 18),
+          : (row) => Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onValuation != null)
+                  IconButton(
+                    tooltip: 'Update valuation',
+                    onPressed: () => onValuation!(row.source as AdminAsset),
+                    icon: Icon(Icons.trending_up_rounded, size: 18),
+                  ),
+                if (onDistribute != null)
+                  IconButton(
+                    tooltip: 'Distribute rental income',
+                    onPressed: () => onDistribute!(row.source as AdminAsset),
+                    icon: Icon(Icons.savings_rounded, size: 18),
+                  ),
+              ],
             ),
     );
   }
@@ -3641,6 +3661,105 @@ Future<void> _showAssetValuationDialog(
   expenses.dispose();
   occupancyRate.dispose();
   notes.dispose();
+}
+
+Future<void> _showDistributeIncomeDialog(
+  BuildContext context, {
+  required AdminRepository repository,
+  required AdminAsset asset,
+  required VoidCallback onChanged,
+}) async {
+  final amount = TextEditingController();
+  final note = TextEditingController();
+  var submitting = false;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setState) => AlertDialog(
+        backgroundColor: AppColors.panel,
+        title: Text('Distribute rental income'),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(asset.title, style: AppText.fieldLabel),
+                SizedBox(height: 8),
+                Text(
+                  'The total is split across every funded holder of this '
+                  'asset, in proportion to the capital each has invested, and '
+                  'credited straight to their wallet.',
+                  style: AppText.disclosure,
+                ),
+                SizedBox(height: 12),
+                AppTextField(
+                  controller: amount,
+                  label: 'Total income to distribute (USD)',
+                  hintText: '0',
+                  keyboardType: TextInputType.number,
+                ),
+                SizedBox(height: 10),
+                AppTextField(
+                  controller: note,
+                  label: 'Note (optional)',
+                  hintText: 'e.g. Q2 2026 rental distribution',
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: submitting ? null : () => Navigator.pop(dialogContext),
+            child: Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: submitting
+                ? null
+                : () async {
+                    final total = double.tryParse(amount.text.trim()) ?? 0;
+                    if (total <= 0) {
+                      showMessage(context, 'Enter an amount to distribute');
+                      return;
+                    }
+                    setState(() => submitting = true);
+                    try {
+                      final result = await repository.distributeRentalIncome(
+                        assetId: asset.id,
+                        totalAmountUsd: total,
+                        note: note.text.trim(),
+                      );
+                      onChanged();
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                      if (context.mounted) {
+                        final failed = result.failedCount > 0
+                            ? ' (${result.failedCount} failed)'
+                            : '';
+                        showMessage(
+                          context,
+                          'Distributed to ${result.recipientCount} '
+                          'holder(s)$failed',
+                        );
+                      }
+                    } catch (error) {
+                      setState(() => submitting = false);
+                      if (context.mounted) {
+                        showMessage(context, _adminErrorMessage(error));
+                      }
+                    }
+                  },
+            child: Text(submitting ? 'Distributing…' : 'Distribute'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  amount.dispose();
+  note.dispose();
 }
 
 /// Two controllers backing one editable account-detail row in the dialog.
