@@ -393,6 +393,7 @@ class InvestmentCard extends StatelessWidget {
     this.location = 'Central Business District',
     this.minimum = '\$50',
     this.returnText = '11.8%',
+    this.fundedPercent = 0,
     this.imageUrl,
   });
 
@@ -403,6 +404,10 @@ class InvestmentCard extends StatelessWidget {
   final String location;
   final String minimum;
   final String returnText;
+
+  /// Funding progress as a 0–100 percentage, used for the progress bar and its
+  /// trailing label on non-compact cards.
+  final double fundedPercent;
   final String? imageUrl;
 
   @override
@@ -471,7 +476,10 @@ class InvestmentCard extends StatelessWidget {
                       ),
                       if (!compact) ...[
                         SizedBox(height: 16),
-                        const ProgressLine(value: .62, height: 6),
+                        ProgressLine(
+                          value: (fundedPercent / 100).clamp(0.0, 1.0),
+                          height: 6,
+                        ),
                         SizedBox(height: 7),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -481,7 +489,10 @@ class InvestmentCard extends StatelessWidget {
                                   .investmentCardCryptoFunding,
                               style: AppText.tiny,
                             ),
-                            Text('62%', style: AppText.tinyLight),
+                            Text(
+                              '${fundedPercent.round()}%',
+                              style: AppText.tinyLight,
+                            ),
                           ],
                         ),
                       ],

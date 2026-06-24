@@ -79,7 +79,7 @@ class DetailScreen extends StatelessWidget {
                           child: Metric(
                             opportunity.exitPeriod.isNotEmpty
                                 ? opportunity.exitPeriod
-                                : '36 mo',
+                                : '—',
                             l10n.detailLiquidity,
                           ),
                         ),
