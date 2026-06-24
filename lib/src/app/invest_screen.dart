@@ -201,6 +201,7 @@ class _InvestScreenState extends State<InvestScreen> {
                   location: opportunity.location,
                   minimum: opportunity.minimumText,
                   returnText: opportunity.returnText,
+                  fundedPercent: opportunity.fundedPercentage,
                   imageUrl: opportunity.images.isEmpty
                       ? null
                       : opportunity.images.first,
