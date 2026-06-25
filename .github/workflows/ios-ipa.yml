@@ -1,0 +1,76 @@
+name: Build iOS IPA (unsigned)
+
+# Builds an UNSIGNED .ipa of the Flutter app on a macOS runner and uploads it as
+# a workflow artifact. Unsigned means no Apple Developer account / certificates are
+# required, but the .ipa can only be installed via sideloading tools (AltStore,
+# Sideloadly, ESign) or a jailbroken device — it cannot go to TestFlight/App Store.
+#
+# Triggers:
+#   - Manual run from the Actions tab (workflow_dispatch).
+#   - Pushing a version tag like v1.0.0 (matches v*).
+#
+# macOS runner minutes are billed at 10x the Linux rate, so this is intentionally
+# NOT wired to every push.
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show toolchain versions
+        run: |
+          flutter --version
+          xcodebuild -version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS (release, no code signing)
+        # --no-codesign produces Runner.app without signing it. CocoaPods is
+        # resolved automatically by `flutter build ios`.
+        run: flutter build ios --release --no-codesign
+
+      - name: Package Runner.app into an unsigned .ipa
+        # An .ipa is just a zip with the .app inside a top-level Payload/ folder.
+        run: |
+          set -euo pipefail
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Expected $APP_PATH but it was not produced by the build."
+            exit 1
+          fi
+          mkdir -p build/ipa/Payload
+          cp -R "$APP_PATH" build/ipa/Payload/
+          cd build/ipa
+          zip -qry brickclub-unsigned.ipa Payload
+          rm -rf Payload
+          echo "Built IPA:"
+          ls -lh brickclub-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: brickclub-unsigned-ipa
+          path: build/ipa/brickclub-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
