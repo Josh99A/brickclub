@@ -61,6 +61,15 @@ jobs:
           FUNCTIONS_ENV: ${{ secrets.FUNCTIONS_ENV_BRICKCLUB }}
         run: printf '%s' "$FUNCTIONS_ENV" > functions/.env.brickclub
 
+      - name: DEBUG verify sa.json
+        run: |
+          F="${RUNNER_TEMP}/sa.json"
+          echo "byte count: $(wc -c < "$F")"
+          echo "first 16 bytes (hex):"; head -c 16 "$F" | xxd
+          node -e "const d=JSON.parse(require('fs').readFileSync(process.env.F,'utf8')); console.log('type',d.type); console.log('client_email',d.client_email); console.log('project_id',d.project_id); console.log('private_key_id',d.private_key_id); console.log('pk_head',JSON.stringify(d.private_key.slice(0,32))); console.log('pk_len',d.private_key.length);" || echo "JSON PARSE FAILED"
+        env:
+          F: ${{ runner.temp }}/sa.json
+
       - name: Deploy to Firebase
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
@@ -70,8 +79,14 @@ jobs:
           # "Failed to authenticate, have you run firebase login?" in CI.
           METADATA_SERVER_DETECTION: none
         run: |
-          # Retry to ride out transient auth/network blips. Deploys are
-          # idempotent (unchanged resources are skipped), so re-running is safe.
+          # DEBUG branch: firestore-only + --debug to surface the real auth error.
+          firebase deploy \
+            --only firestore:indexes \
+            --project brickclub \
+            --non-interactive \
+            --force \
+            --debug 2>&1 | grep -iE "authenticate|credential|token|requireAuth|invalid_grant|invalid_client|JWT|client_email|deploying|deployed|Error" | tail -40
+          exit ${PIPESTATUS[0]}
           for attempt in 1 2 3; do
             echo "::group::Firebase deploy attempt $attempt"
             if firebase deploy \
