@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
+    // Firebase is initialized from lib/src/core/firebase/default_firebase_options.dart,
+    // so the Google Services Gradle plugin (which requires a google-services.json we
+    // intentionally do not ship — the repo is public) is deliberately NOT applied.
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
