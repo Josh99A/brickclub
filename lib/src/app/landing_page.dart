@@ -1,5 +1,13 @@
 part of 'brickclub_app.dart';
 
+/// Public download URLs for the native app builds. These resolve to the assets
+/// attached to the latest GitHub Release, which is published automatically by
+/// `.github/workflows/release-apps.yml` whenever a `v*` tag is pushed.
+const String _androidApkUrl =
+    'https://github.com/brickclub23-ux/brickclub/releases/latest/download/brickclub.apk';
+const String _iosIpaUrl =
+    'https://github.com/brickclub23-ux/brickclub/releases/latest/download/brickclub.ipa';
+
 class LandingPage extends StatefulWidget {
   const LandingPage({
     super.key,
@@ -614,6 +622,25 @@ class _HeroCopy extends StatelessWidget {
             ),
           ],
         ),
+        SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          children: [
+            _DownloadLink(
+              key: const ValueKey('download-android'),
+              label: l10n.heroDownloadAndroid,
+              icon: Icons.android,
+              url: _androidApkUrl,
+            ),
+            _DownloadLink(
+              key: const ValueKey('download-ios'),
+              label: l10n.heroDownloadIos,
+              icon: Icons.apple,
+              url: _iosIpaUrl,
+            ),
+          ],
+        ),
         SizedBox(height: 34),
         Wrap(
           spacing: 28,
@@ -651,6 +678,76 @@ class _ProofPoint extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A subtle outlined link that opens a native app build download in a new tab.
+class _DownloadLink extends StatefulWidget {
+  const _DownloadLink({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.url,
+  });
+
+  final String label;
+  final IconData icon;
+  final String url;
+
+  @override
+  State<_DownloadLink> createState() => _DownloadLinkState();
+}
+
+class _DownloadLinkState extends State<_DownloadLink> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: () => launchUrl(
+          Uri.parse(widget.url),
+          mode: LaunchMode.externalApplication,
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? AppColors.gold.withValues(alpha: 0.10)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _hovered ? AppColors.gold : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(widget.icon, size: 16, color: AppColors.gold),
+              const SizedBox(width: 8),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.download_rounded,
+                size: 14,
+                color: AppColors.secondary,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

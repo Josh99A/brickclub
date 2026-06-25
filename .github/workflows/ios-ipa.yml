@@ -5,17 +5,19 @@ name: Build iOS IPA (unsigned)
 # required, but the .ipa can only be installed via sideloading tools (AltStore,
 # Sideloadly, ESign) or a jailbroken device — it cannot go to TestFlight/App Store.
 #
+# This is the quick, manual-only path for producing a throwaway IPA artifact for
+# testing. Version tags (v*) are handled by release-apps.yml, which builds both
+# the APK and IPA and publishes them as GitHub Release assets — so tags are NOT
+# wired here, to avoid building the IPA twice per tag.
+#
 # Triggers:
 #   - Manual run from the Actions tab (workflow_dispatch).
-#   - Pushing a version tag like v1.0.0 (matches v*).
 #
 # macOS runner minutes are billed at 10x the Linux rate, so this is intentionally
-# NOT wired to every push.
+# manual only.
 
 on:
   workflow_dispatch: {}
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: read
