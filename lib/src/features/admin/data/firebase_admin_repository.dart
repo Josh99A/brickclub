@@ -121,6 +121,20 @@ class FirebaseAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<RentalIncomeDistribution> distributeRentalIncome({
+    required String assetId,
+    required double totalAmountUsd,
+    String note = '',
+  }) async {
+    final result = await _callMap('distributeRentalIncome', {
+      'assetId': assetId,
+      'totalAmountUsd': totalAmountUsd,
+      if (note.isNotEmpty) 'note': note,
+    });
+    return RentalIncomeDistribution.fromJson(result);
+  }
+
+  @override
   Future<void> createPaymentOption(PaymentOption option) {
     // Callable name is kept for backend-contract stability.
     return _callVoid('createCryptoPaymentOption', option.toJson());
@@ -171,6 +185,11 @@ class FirebaseAdminRepository implements AdminRepository {
   @override
   Future<void> verifyDepositRequest(String id) {
     return _callVoid('verifyDepositProof', {'orderId': id});
+  }
+
+  @override
+  Future<void> settleInvestment(String investmentId) {
+    return _callVoid('adminSettleInvestment', {'investmentId': investmentId});
   }
 
   @override

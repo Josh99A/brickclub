@@ -76,17 +76,30 @@ class PortfolioScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (data.expectedProfitUsd > 0) ...[
+                  SizedBox(height: 8),
+                  Text(
+                    l10n.portfolioExpectedProfit(data.expectedProfitText),
+                    style: AppText.small,
+                  ),
+                ],
                 SizedBox(height: 14),
-                Text(l10n.portfolioHoldings, style: AppText.h2),
-                if (data.holdings.isEmpty)
+                Text(l10n.portfolioPlansTitle, style: AppText.h2),
+                if (data.activeInvestments.isEmpty)
                   _EmptyFinancePanel(
                     icon: Icons.account_balance_wallet_outlined,
                     title: l10n.holdingsEmptyTitle,
                     message: l10n.portfolioHoldingsEmptyBody,
                   )
                 else
+                  for (final plan in data.activeInvestments)
+                    _PortfolioPlanRow(plan: plan),
+                if (data.holdings.isNotEmpty) ...[
+                  SizedBox(height: 14),
+                  Text(l10n.portfolioHoldings, style: AppText.h2),
                   for (final holding in data.holdings)
                     _PortfolioHoldingRow(holding: holding),
+                ],
                 SizedBox(height: 8),
                 Text(l10n.portfolioAllocation, style: AppText.h2),
                 if (data.allocation.isEmpty)
@@ -122,6 +135,66 @@ class PortfolioScreen extends StatelessWidget {
       Color(0xFFA78BFA),
     ];
     return colors[index % colors.length];
+  }
+}
+
+class _PortfolioPlanRow extends StatelessWidget {
+  const _PortfolioPlanRow({required this.plan});
+
+  final MemberInvestment plan;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final maturity = plan.maturityDate;
+    final maturityText = maturity == null
+        ? '—'
+        : '${maturity.year}-'
+              '${maturity.month.toString().padLeft(2, '0')}-'
+              '${maturity.day.toString().padLeft(2, '0')}';
+    return Panel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  plan.assetTitle,
+                  style: AppText.cardHeadingSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(plan.payoutText, style: AppText.cardHeadingSmall),
+            ],
+          ),
+          SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.portfolioPlanSummary(
+                    plan.rateText,
+                    plan.durationLabel,
+                    maturityText,
+                  ),
+                  style: AppText.small,
+                ),
+              ),
+              Text(
+                plan.profitText,
+                style: TextStyle(
+                  color: AppColors.success,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -139,6 +139,7 @@ class AdminUserDetail {
     required this.portfolio,
     required this.orders,
     required this.wallet,
+    required this.investments,
   });
 
   factory AdminUserDetail.fromJson(Map<String, dynamic> json) {
@@ -157,6 +158,7 @@ class AdminUserDetail {
       wallet: AdminUserWallet.fromJson(
         Map<String, dynamic>.from(json['wallet'] as Map? ?? {}),
       ),
+      investments: _list(json['investments'], AdminMemberInvestment.fromJson),
     );
   }
 
@@ -165,6 +167,54 @@ class AdminUserDetail {
   final AdminUserPortfolio portfolio;
   final List<AdminUserOrder> orders;
   final AdminUserWallet wallet;
+  final List<AdminMemberInvestment> investments;
+
+  List<AdminMemberInvestment> get activeInvestments =>
+      investments.where((investment) => investment.status == 'active').toList();
+}
+
+/// A member's fixed-return investment plan, as seen by an admin.
+class AdminMemberInvestment {
+  const AdminMemberInvestment({
+    required this.id,
+    required this.assetTitle,
+    required this.principalUsd,
+    required this.durationKey,
+    required this.ratePercent,
+    required this.profitUsd,
+    required this.payoutUsd,
+    required this.status,
+    required this.maturityAt,
+  });
+
+  factory AdminMemberInvestment.fromJson(Map<String, dynamic> json) {
+    final principal = (json['principalUsd'] as num?)?.toDouble() ?? 0;
+    final profit = (json['profitUsd'] as num?)?.toDouble() ?? 0;
+    return AdminMemberInvestment(
+      id: json['id'] as String? ?? '',
+      assetTitle: json['assetTitle'] as String? ?? '',
+      principalUsd: principal,
+      durationKey: json['durationKey'] as String? ?? '',
+      ratePercent: (json['ratePercent'] as num?)?.toDouble() ?? 0,
+      profitUsd: profit,
+      payoutUsd: (json['payoutUsd'] as num?)?.toDouble() ?? principal + profit,
+      status: json['status'] as String? ?? 'active',
+      maturityAt: json['maturityAt'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String assetTitle;
+  final double principalUsd;
+  final String durationKey;
+  final double ratePercent;
+  final double profitUsd;
+  final double payoutUsd;
+  final String status;
+  final String maturityAt;
+
+  bool get isActive => status == 'active';
+  DateTime? get maturityDate => DateTime.tryParse(maturityAt)?.toLocal();
 }
 
 class AdminUserWallet {
@@ -215,7 +265,31 @@ class AdminWalletTransaction {
   final String reason;
   final String createdAt;
 
-  bool get isCredit => type == 'credit';
+  bool get isCredit => type == 'credit' || type == 'dividend';
+}
+
+/// Result of a rental income distribution run for a single asset.
+class RentalIncomeDistribution {
+  const RentalIncomeDistribution({
+    required this.totalAmountUsd,
+    required this.distributedUsd,
+    required this.recipientCount,
+    required this.failedCount,
+  });
+
+  factory RentalIncomeDistribution.fromJson(Map<String, dynamic> json) {
+    return RentalIncomeDistribution(
+      totalAmountUsd: (json['totalAmountUsd'] as num?)?.toDouble() ?? 0,
+      distributedUsd: (json['distributedUsd'] as num?)?.toDouble() ?? 0,
+      recipientCount: (json['recipientCount'] as num?)?.toInt() ?? 0,
+      failedCount: (json['failedCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final double totalAmountUsd;
+  final double distributedUsd;
+  final int recipientCount;
+  final int failedCount;
 }
 
 class AdminUserKyc {
@@ -356,6 +430,64 @@ class AdminUserOrder {
   final String updatedAt;
 }
 
+/// An admin-configured investment tier on an asset. A member's principal must
+/// fall within [minAmountUsd, maxAmountUsd]; the rate that applies is chosen by
+/// the lock duration (week/month/year). Edited in the asset form.
+class AdminInvestmentBand {
+  const AdminInvestmentBand({
+    this.id = '',
+    this.minAmountUsd = 0,
+    this.maxAmountUsd = 0,
+    this.weeklyRatePercent = 0,
+    this.monthlyRatePercent = 0,
+    this.yearlyRatePercent = 0,
+  });
+
+  factory AdminInvestmentBand.fromJson(Map<String, dynamic> json) {
+    return AdminInvestmentBand(
+      id: json['id'] as String? ?? '',
+      minAmountUsd: (json['minAmountUsd'] as num?)?.toDouble() ?? 0,
+      maxAmountUsd: (json['maxAmountUsd'] as num?)?.toDouble() ?? 0,
+      weeklyRatePercent: (json['weeklyRatePercent'] as num?)?.toDouble() ?? 0,
+      monthlyRatePercent: (json['monthlyRatePercent'] as num?)?.toDouble() ?? 0,
+      yearlyRatePercent: (json['yearlyRatePercent'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    if (id.isNotEmpty) 'id': id,
+    'minAmountUsd': minAmountUsd,
+    'maxAmountUsd': maxAmountUsd,
+    'weeklyRatePercent': weeklyRatePercent,
+    'monthlyRatePercent': monthlyRatePercent,
+    'yearlyRatePercent': yearlyRatePercent,
+  };
+
+  AdminInvestmentBand copyWith({
+    double? minAmountUsd,
+    double? maxAmountUsd,
+    double? weeklyRatePercent,
+    double? monthlyRatePercent,
+    double? yearlyRatePercent,
+  }) {
+    return AdminInvestmentBand(
+      id: id,
+      minAmountUsd: minAmountUsd ?? this.minAmountUsd,
+      maxAmountUsd: maxAmountUsd ?? this.maxAmountUsd,
+      weeklyRatePercent: weeklyRatePercent ?? this.weeklyRatePercent,
+      monthlyRatePercent: monthlyRatePercent ?? this.monthlyRatePercent,
+      yearlyRatePercent: yearlyRatePercent ?? this.yearlyRatePercent,
+    );
+  }
+
+  final String id;
+  final double minAmountUsd;
+  final double maxAmountUsd;
+  final double weeklyRatePercent;
+  final double monthlyRatePercent;
+  final double yearlyRatePercent;
+}
+
 class AdminAsset {
   const AdminAsset({
     required this.id,
@@ -383,6 +515,7 @@ class AdminAsset {
     this.regulationNote = '',
     this.currentAssetValue = 0,
     this.minimumInvestment = 50,
+    this.investmentBands = const [],
   });
 
   factory AdminAsset.empty() {
@@ -427,6 +560,10 @@ class AdminAsset {
       currentAssetValue:
           (json['currentAssetValue'] as num?)?.toDouble() ?? purchasePrice,
       minimumInvestment: (json['minimumInvestment'] as num?)?.toDouble() ?? 50,
+      investmentBands: _list(
+        json['investmentBands'],
+        AdminInvestmentBand.fromJson,
+      ),
     );
   }
 
@@ -458,6 +595,7 @@ class AdminAsset {
       'regulationNote': regulationNote,
       'currentAssetValue': currentAssetValue,
       'minimumInvestment': minimumInvestment,
+      'investmentBands': investmentBands.map((band) => band.toJson()).toList(),
     };
   }
 
@@ -486,6 +624,7 @@ class AdminAsset {
     String? regulationNote,
     double? currentAssetValue,
     double? minimumInvestment,
+    List<AdminInvestmentBand>? investmentBands,
   }) {
     return AdminAsset(
       id: id,
@@ -513,6 +652,7 @@ class AdminAsset {
       regulationNote: regulationNote ?? this.regulationNote,
       currentAssetValue: currentAssetValue ?? this.currentAssetValue,
       minimumInvestment: minimumInvestment ?? this.minimumInvestment,
+      investmentBands: investmentBands ?? this.investmentBands,
     );
   }
 
@@ -541,6 +681,7 @@ class AdminAsset {
   final String regulationNote;
   final double currentAssetValue;
   final double minimumInvestment;
+  final List<AdminInvestmentBand> investmentBands;
 }
 
 /// A single label/value line of account details for a non-crypto payment

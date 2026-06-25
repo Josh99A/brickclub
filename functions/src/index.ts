@@ -1,6 +1,7 @@
 import {createHash, randomUUID} from "crypto";
 import {CallableRequest, HttpsError, onCall} from "firebase-functions/v2/https";
 import {onDocumentWritten} from "firebase-functions/v2/firestore";
+import {onSchedule} from "firebase-functions/v2/scheduler";
 import {logger} from "firebase-functions";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {defineSecret, defineString} from "firebase-functions/params";
@@ -62,6 +63,19 @@ const TRANSLATABLE_ASSET_FIELDS = [
 // Brand/technical terms that must survive translation verbatim.
 const TRANSLATION_PROTECTED_TERMS = ["BrickShares", "BrickClub", "USDT", "KYC"];
 
+// A single admin-configured investment tier on an asset. A member's principal
+// must fall within [minAmountUsd, maxAmountUsd]; the rate that applies is then
+// chosen by the lock duration the member picks (week/month/year). Returns are a
+// fixed percentage of principal, paid as a lump sum at maturity.
+type InvestmentBand = {
+  id: string;
+  minAmountUsd: number;
+  maxAmountUsd: number;
+  weeklyRatePercent: number;
+  monthlyRatePercent: number;
+  yearlyRatePercent: number;
+};
+
 type AdminAsset = {
   id: string;
   title: string;
@@ -92,6 +106,7 @@ type AdminAsset = {
   regulationNote: string;
   currentAssetValue: number;
   minimumInvestment: number;
+  investmentBands: InvestmentBand[];
 };
 
 type PaymentAccountField = {
@@ -143,6 +158,7 @@ type MemberOpportunity = {
   status: string;
   regulationNote: string;
   currentAssetValue: number;
+  investmentBands: InvestmentBand[];
 };
 
 type WithdrawalPolicy = {
@@ -212,6 +228,7 @@ const assetsCollection = db.collection("adminAssets");
 const paymentOptionsCollection = db.collection("cryptoPaymentOptions");
 const purchaseOrdersCollection = db.collection("purchaseOrders");
 const memberHoldingsCollection = db.collection("memberHoldings");
+const memberInvestmentsCollection = db.collection("memberInvestments");
 const memberActivitiesCollection = db.collection("memberActivities");
 const memberWalletsCollection = db.collection("memberWallets");
 const walletTransactionsCollection = db.collection("walletTransactions");
@@ -449,52 +466,61 @@ export const listMemberOpportunities = onMemberCall(async (request) => {
 
 export const getMemberDashboard = onMemberCall(async (request) => {
   const uid = request.auth!.uid;
-  const locale = readLocale(request.data);
+
+  // Pay out any plans that matured since the last visit before reading state,
+  // so the wallet and portfolio reflect matured cash immediately.
+  await settleMaturedInvestmentsForUser(uid);
+
   const [
-    ordersSnapshot,
-    assetsSnapshot,
     paymentOptionsSnapshot,
     holdingsSnapshot,
+    investmentsSnapshot,
     walletSnapshot,
+    activitiesSnapshot,
   ] = await Promise.all([
-    purchaseOrdersCollection.where("uid", "==", uid).get(),
-    assetsCollection.get(),
     paymentOptionsCollection.where("enabled", "==", true).get(),
     memberHoldingsCollection.where("userId", "==", uid).get(),
+    memberInvestmentsCollection.where("uid", "==", uid).get(),
     memberWalletsCollection.doc(uid).get(),
+    memberActivitiesCollection
+      .where("uid", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(10)
+      .get(),
   ]);
   const walletBalanceUsd = roundMoney(
     Number(walletSnapshot.data()?.balanceUsd ?? 0),
   );
 
-  const assetsById = new Map(
-    assetsSnapshot.docs.map((doc) => [
-      doc.id,
-      opportunityFromDoc(doc, [], locale),
-    ]),
-  );
-  const orders = ordersSnapshot.docs
-    .map((doc) => memberOrderFromDoc(doc))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const verifiedOrders = orders.filter(
-    (order) => order.status === "deposit_verified",
+  // Persisted legacy holdings (older share-based accounts) still display.
+  const holdings = holdingsSnapshot.docs.map((doc) => holdingFromDoc(doc));
+  const investments = investmentsSnapshot.docs.map(memberInvestmentFromDoc);
+  const activeInvestments = investments.filter(
+    (investment) => investment.status === "active",
   );
 
-  // Prefer persisted holdings created at approval time. Fall back to deriving
-  // them from verified orders for accounts created before holdings were stored.
-  const holdings = holdingsSnapshot.empty ?
-    buildMemberHoldings(verifiedOrders, assetsById) :
-    holdingsSnapshot.docs.map((doc) => holdingFromDoc(doc));
-
-  const totalInvested = roundMoney(
-    holdings.reduce((total, holding) => total + holding.amountInvested, 0),
+  // Active plans hold their principal at face value until they mature; the
+  // profit lands as wallet cash at maturity, so it is shown as expected return.
+  const activePrincipal = roundMoney(
+    activeInvestments.reduce((total, plan) => total + plan.principalUsd, 0),
   );
-  const totalCurrentValue = roundMoney(
-    holdings.reduce((total, holding) => total + holding.currentValue, 0),
+  const expectedProfitUsd = roundMoney(
+    activeInvestments.reduce((total, plan) => total + plan.profitUsd, 0),
+  );
+  const legacyInvested = holdings.reduce(
+    (total, holding) => total + holding.amountInvested,
+    0,
+  );
+  const legacyCurrentValue = holdings.reduce(
+    (total, holding) => total + holding.currentValue,
+    0,
   );
   const totalDividends = roundMoney(
     holdings.reduce((total, holding) => total + holding.dividendsReceived, 0),
   );
+
+  const totalInvested = roundMoney(legacyInvested + activePrincipal);
+  const totalCurrentValue = roundMoney(legacyCurrentValue + activePrincipal);
   const totalProfitLoss = roundMoney(
     totalCurrentValue + totalDividends - totalInvested,
   );
@@ -511,20 +537,27 @@ export const getMemberDashboard = onMemberCall(async (request) => {
     totalDividends,
     totalProfitLoss,
     overallReturnPercentage,
+    expectedProfitUsd,
     cryptoRails: paymentOptionsSnapshot.docs
       .map((doc) => paymentOptionFromDoc(doc))
       .map((option) => `${option.assetSymbol} on ${option.network}`),
     holdings,
-    activity: orders.slice(0, 6).map(memberActivityFromOrder),
+    investments,
+    activity: activitiesSnapshot.docs.map(memberActivityFromDoc),
     allocation: buildMemberAllocation(holdings),
-    chartValues: buildMemberChartValues(verifiedOrders),
+    chartValues: [],
     chartLabels: buildMemberChartLabels(),
   };
 });
 
+// Create a deposit request. A deposit funds the member's cash wallet: once an
+// admin verifies the payment, the amount is credited as spendable balance the
+// member can then lock into an asset's investment plan. `opportunityId` is
+// optional and informational only (which asset the member intends to fund); the
+// money no longer flows straight into a holding.
 export const createPurchaseOrder = onMemberCall(async (request) => {
   const data = readObject(request.data);
-  const opportunityId = readString(data, "opportunityId");
+  const opportunityId = readOptionalString(data, "opportunityId") ?? "";
   const amountUsd = readPositiveNumber(data, "amountUsd");
   const paymentAsset = readString(data, "paymentAsset").toUpperCase();
 
@@ -533,36 +566,18 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
   if (kycSnapshot.data()?.status !== "approved") {
     throw new HttpsError(
       "failed-precondition",
-      "KYC approval is required before investing.",
+      "KYC approval is required before depositing.",
     );
   }
 
-  const assetSnapshot = await assetsCollection.doc(opportunityId).get();
-  if (!assetSnapshot.exists) {
-    throw new HttpsError("not-found", "Opportunity was not found.");
-  }
-
-  // Canonical English here so denormalized order/notification copy stays
-  // language-neutral; members see localized opportunity text via the list call.
-  const asset = opportunityFromDoc(
-    assetSnapshot,
-    [paymentAsset],
-    "en",
-  );
-  if (
-    assetSnapshot.data()?.reviewStatus !== "Verified" ||
-    assetSnapshot.data()?.publishedStatus !== "Live"
-  ) {
-    throw new HttpsError(
-      "failed-precondition",
-      "Opportunity is not available for investment.",
-    );
-  }
-  if (amountUsd < asset.minimumInvestment) {
-    throw new HttpsError(
-      "invalid-argument",
-      "Amount is below the opportunity minimum.",
-    );
+  // Resolve the intended opportunity title for display when one was supplied,
+  // but a deposit is never blocked on an asset being live — it tops up cash.
+  let opportunityTitle = "Wallet deposit";
+  if (opportunityId) {
+    const assetSnapshot = await assetsCollection.doc(opportunityId).get();
+    if (assetSnapshot.exists) {
+      opportunityTitle = String(assetSnapshot.data()?.title ?? opportunityTitle);
+    }
   }
 
   const paymentOptionSnapshot = await paymentOptionsCollection
@@ -594,20 +609,12 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
   // Network fees are a crypto concept; non-crypto wire transfers carry none here.
   const networkFee = !isCrypto ? 0 : paymentAsset === "BTC" ? 0.0001 : 1;
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-  // Pre-compute the ownership and share figures the member is shown before
-  // payment. The real holding is only written after admin approval.
-  const sharesExpected = asset.pricePerShare > 0 ?
-    roundShares(amountUsd / asset.pricePerShare) :
-    0;
-  const ownershipPercentage = asset.purchasePrice > 0 ?
-    roundMoney((amountUsd / asset.purchasePrice) * 100) :
-    0;
 
   const order = {
     id,
     uid,
     opportunityId,
-    opportunityTitle: asset.title,
+    opportunityTitle,
     amountUsd,
     paymentNetwork: paymentOption.network,
     paymentAsset,
@@ -617,8 +624,8 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
     cryptoAmountExpected: quoteAmount,
     quoteAmount,
     networkFee,
-    sharesExpected,
-    ownershipPercentage,
+    sharesExpected: 0,
+    ownershipPercentage: 0,
     paymentWalletAddress: paymentOption.walletAddress,
     paymentQrCodeUrl: paymentOption.qrCodeUrl,
     paymentType: paymentOption.type,
@@ -634,7 +641,7 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
   await notifyAdmins({
     type: "deposit_request_created",
     title: "New deposit request",
-    body: `${asset.title} deposit request created for ${formatUsd(amountUsd)}.`,
+    body: `Wallet deposit request created for ${formatUsd(amountUsd)}.`,
     data: {orderId: id, uid, opportunityId},
   });
 
@@ -694,13 +701,15 @@ export const submitDepositProof = onMemberCall(async (request) => {
   };
 });
 
+// Verify a deposit and credit the member's cash wallet. The funds become
+// spendable balance the member can later lock into an asset's investment plan
+// (see createInvestmentPlan) — verification no longer creates a holding. The
+// order status flip is guarded inside a transaction so a deposit can never be
+// credited twice, even on concurrent approvals.
 export const verifyDepositProof = onAdminCall(async (data, context) => {
   const orderId = readString(data, "orderId");
   const orderRef = purchaseOrdersCollection.doc(orderId);
 
-  // Run approval as a single transaction so the order status, member holding,
-  // asset funding totals, and activity log stay consistent. The MemberHolding
-  // is created here and only here — never when proof is first submitted.
   const result = await db.runTransaction(async (tx) => {
     const orderSnapshot = await tx.get(orderRef);
     const order = orderSnapshot.data();
@@ -720,42 +729,6 @@ export const verifyDepositProof = onAdminCall(async (data, context) => {
     }
     const manuallyApproved = order.status === "pending_payment";
 
-    const uid = String(order.uid);
-    const opportunityId = String(order.opportunityId);
-    const amountUsd = Number(order.amountUsd ?? 0);
-
-    const assetRef = assetsCollection.doc(opportunityId);
-    const assetSnapshot = await tx.get(assetRef);
-    const asset = assetSnapshot.exists ?
-      assetFromData(assetSnapshot.id, assetSnapshot.data()!) :
-      null;
-
-    const holdingRef = memberHoldingsCollection.doc(`${uid}_${opportunityId}`);
-    const holdingSnapshot = await tx.get(holdingRef);
-    const existingHolding = holdingSnapshot.data();
-
-    // Accumulate onto any prior holding for the same asset.
-    const priorInvested = Number(existingHolding?.amountInvested ?? 0);
-    const priorShares = Number(existingHolding?.sharesOwned ?? 0);
-    const priorDividends = Number(existingHolding?.dividendsReceived ?? 0);
-
-    const pricePerShare = asset?.pricePerShare ?? 0;
-    const purchasePrice = asset?.purchasePrice ?? 0;
-    const currentAssetValue = asset?.currentAssetValue ?? purchasePrice;
-
-    const sharesPurchased = pricePerShare > 0 ?
-      roundShares(amountUsd / pricePerShare) :
-      0;
-    const amountInvested = roundMoney(priorInvested + amountUsd);
-    const sharesOwned = roundShares(priorShares + sharesPurchased);
-    const figures = computeHoldingFigures({
-      amountInvested,
-      purchasePrice,
-      currentAssetValue,
-      dividendsReceived: priorDividends,
-    });
-
-    // Write order approval state.
     tx.set(
       orderRef,
       {
@@ -770,93 +743,35 @@ export const verifyDepositProof = onAdminCall(async (data, context) => {
       {merge: true},
     );
 
-    // Create or update the member holding.
-    tx.set(
-      holdingRef,
-      {
-        holdingId: holdingRef.id,
-        userId: uid,
-        assetId: opportunityId,
-        assetTitle: asset?.title ?? String(order.opportunityTitle ?? ""),
-        assetImageUrl: asset?.images?.[0] ?? "",
-        assetCategory: asset?.category ?? "",
-        assetStrategy: asset?.strategy ?? "",
-        assetStatus: asset?.status ?? "available",
-        amountInvested,
-        sharesOwned,
-        ownershipPercentage: figures.ownershipPercentage,
-        currentValue: figures.currentValue,
-        dividendsReceived: priorDividends,
-        profitLoss: figures.profitLoss,
-        returnPercentage: figures.returnPercentage,
-        createdAt: existingHolding?.createdAt ?? FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      {merge: true},
-    );
-
-    // Update asset funding totals when the asset still exists.
-    if (asset) {
-      const fundingTarget = asset.fundingTarget;
-      const newAmountFunded = roundMoney(asset.amountFunded + amountUsd);
-      const newAvailableShares = asset.totalShares > 0 ?
-        Math.max(0, roundShares(asset.availableShares - sharesPurchased)) :
-        asset.availableShares;
-      const newFundedPercent = fundingTarget > 0 ?
-        roundMoney((newAmountFunded / fundingTarget) * 100) :
-        asset.fundedPercent;
-      tx.set(
-        assetRef,
-        {
-          amountFunded: newAmountFunded,
-          availableShares: newAvailableShares,
-          fundedPercent: newFundedPercent,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        {merge: true},
-      );
-    }
-
-    // Record the member activity entry.
-    const activityRef = memberActivitiesCollection.doc();
-    tx.set(activityRef, {
-      id: activityRef.id,
-      uid,
-      type: "investment_approved",
-      title: "Investment approved",
-      subtitle: asset?.title ?? String(order.opportunityTitle ?? ""),
-      value: formatUsd(amountUsd),
-      status: "deposit_verified",
-      opportunityId,
-      orderId,
-      amountUsd,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-
-    return {uid, opportunityId, amountUsd};
+    return {
+      uid: String(order.uid),
+      amountUsd: roundMoney(Number(order.amountUsd ?? 0)),
+    };
   });
 
-  // Best-effort referral commission. A failure here must never undo the
-  // already-committed deposit verification, so it is isolated and logged.
-  try {
-    await accrueReferralCommission({
-      refereeUid: result.uid,
-      orderId,
-      opportunityId: result.opportunityId,
-      amountUsd: result.amountUsd,
-    });
-  } catch (error) {
-    logger.error("Referral commission accrual failed", {orderId, error});
-  }
+  // Credit the wallet after the status flip commits, so a failed credit can be
+  // retried without re-flipping (the guard above prevents a double credit).
+  const wallet = await applyWalletAdjustment({
+    uid: result.uid,
+    amountUsd: result.amountUsd,
+    direction: "credit",
+    reason: "Deposit approved",
+    createdBy: context.uid,
+  });
 
   await notifyMember(result.uid, {
     type: "deposit_verified",
     title: "Deposit verified",
-    body: "Your crypto deposit proof has been verified and added to your portfolio.",
+    body: `${formatUsd(result.amountUsd)} has been added to your wallet ` +
+      "balance and is ready to invest.",
     data: {orderId},
   });
 
-  return {orderId, status: "deposit_verified"};
+  return {
+    orderId,
+    status: "deposit_verified",
+    balanceUsd: wallet.balanceUsd,
+  };
 });
 
 export const rejectDepositProof = onAdminCall(async (data) => {
@@ -896,6 +811,348 @@ export const rejectDepositProof = onAdminCall(async (data) => {
   });
 
   return {orderId, status: "deposit_rejected", reason};
+});
+
+// Lock duration → elapsed days + which band rate applies. Returns are a fixed
+// percentage of principal for the chosen term, paid as a lump sum at maturity.
+const INVESTMENT_DURATIONS: Record<
+  string,
+  {days: number; rateField: keyof InvestmentBand; label: string}
+> = {
+  week: {days: 7, rateField: "weeklyRatePercent", label: "1 week"},
+  month: {days: 30, rateField: "monthlyRatePercent", label: "1 month"},
+  year: {days: 365, rateField: "yearlyRatePercent", label: "1 year"},
+};
+
+// Lock spendable wallet cash into a fixed-return investment plan on an asset.
+// The principal must fall inside one of the asset's admin-defined bands; the
+// rate is read from that band for the chosen lock duration and snapshotted onto
+// the position so later edits to the asset never change an active plan. The
+// wallet debit and the position write happen in one transaction so cash can
+// never leave the wallet without a matching plan.
+export const createInvestmentPlan = onMemberCall(async (request) => {
+  const data = readObject(request.data);
+  const assetId = readString(data, "assetId");
+  const principalUsd = roundMoney(readPositiveNumber(data, "amountUsd"));
+  const durationKey = readString(data, "durationKey").toLowerCase();
+  const uid = request.auth!.uid;
+
+  const duration = INVESTMENT_DURATIONS[durationKey];
+  if (!duration) {
+    throw new HttpsError(
+      "invalid-argument",
+      "durationKey must be one of: week, month, year.",
+    );
+  }
+
+  const kycSnapshot = await kycProfilesCollection.doc(uid).get();
+  if (kycSnapshot.data()?.status !== "approved") {
+    throw new HttpsError(
+      "failed-precondition",
+      "KYC approval is required before investing.",
+    );
+  }
+
+  const assetSnapshot = await assetsCollection.doc(assetId).get();
+  if (!assetSnapshot.exists) {
+    throw new HttpsError("not-found", "Asset was not found.");
+  }
+  const assetData = assetSnapshot.data()!;
+  if (
+    assetData.reviewStatus !== "Verified" ||
+    assetData.publishedStatus !== "Live"
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "This asset is not currently open for investment.",
+    );
+  }
+  const asset = assetFromData(assetSnapshot.id, assetData);
+  if (asset.investmentBands.length === 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "This asset has no investment plans configured.",
+    );
+  }
+
+  const band = asset.investmentBands.find(
+    (entry) =>
+      principalUsd >= entry.minAmountUsd && principalUsd <= entry.maxAmountUsd,
+  );
+  if (!band) {
+    const lowest = bandsMinimum(asset.investmentBands);
+    const highest = Math.max(
+      ...asset.investmentBands.map((entry) => entry.maxAmountUsd),
+    );
+    throw new HttpsError(
+      "invalid-argument",
+      `Amount must be between ${formatUsd(lowest)} and ${formatUsd(highest)} ` +
+        "for this asset.",
+    );
+  }
+
+  const ratePercent = Number(band[duration.rateField] ?? 0);
+  const profitUsd = roundMoney((principalUsd * ratePercent) / 100);
+  const payoutUsd = roundMoney(principalUsd + profitUsd);
+  const now = Date.now();
+  const maturityAt = new Date(now + duration.days * 24 * 60 * 60 * 1000);
+
+  const investmentId = randomUUID();
+  const investmentRef = memberInvestmentsCollection.doc(investmentId);
+  const walletRef = memberWalletsCollection.doc(uid);
+  const txRef = walletTransactionsCollection.doc();
+  const activityRef = memberActivitiesCollection.doc();
+
+  await db.runTransaction(async (tx) => {
+    const walletSnapshot = await tx.get(walletRef);
+    const priorBalance = Number(walletSnapshot.data()?.balanceUsd ?? 0);
+    const newBalance = roundMoney(priorBalance - principalUsd);
+    if (newBalance < 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Your wallet balance is too low for this investment. " +
+          "Add funds first.",
+      );
+    }
+
+    tx.set(
+      walletRef,
+      {
+        uid,
+        balanceUsd: newBalance,
+        createdAt: walletSnapshot.data()?.createdAt ??
+          FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    tx.set(investmentRef, {
+      id: investmentId,
+      uid,
+      assetId,
+      assetTitle: asset.title,
+      assetImageUrl: asset.images[0] ?? "",
+      assetCategory: asset.category,
+      bandId: band.id,
+      principalUsd,
+      durationKey,
+      durationDays: duration.days,
+      ratePercent,
+      profitUsd,
+      payoutUsd,
+      status: "active",
+      startAt: FieldValue.serverTimestamp(),
+      maturityAt,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    tx.set(txRef, {
+      id: txRef.id,
+      uid,
+      type: "investment",
+      amountUsd: principalUsd,
+      balanceAfter: newBalance,
+      reason: `Locked into ${asset.title} (${duration.label}, ${ratePercent}%)`,
+      createdBy: uid,
+      investmentId,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    tx.set(activityRef, {
+      id: activityRef.id,
+      uid,
+      type: "investment_started",
+      title: "Investment started",
+      subtitle: `${asset.title} · ${duration.label}`,
+      value: `-${formatUsd(principalUsd)}`,
+      status: "investment_active",
+      assetId,
+      investmentId,
+      amountUsd: principalUsd,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  // Best-effort referral commission, keyed by the investment id for
+  // idempotency. A failure must never undo the committed investment.
+  try {
+    await accrueReferralCommission({
+      refereeUid: uid,
+      orderId: investmentId,
+      opportunityId: assetId,
+      amountUsd: principalUsd,
+    });
+  } catch (error) {
+    logger.error("Referral commission accrual failed", {investmentId, error});
+  }
+
+  return {
+    id: investmentId,
+    assetId,
+    assetTitle: asset.title,
+    principalUsd,
+    durationKey,
+    ratePercent,
+    profitUsd,
+    payoutUsd,
+    maturityAt: maturityAt.toISOString(),
+    status: "active",
+  };
+});
+
+// Pay out a single matured plan: credit principal + profit to the wallet, mark
+// the plan completed, and log the ledger row + activity entry. Guarded inside a
+// transaction so a plan can only ever be settled once. Returns the payout (and
+// member) for post-commit notification, or null when nothing was settled.
+async function settleInvestment(
+  investmentId: string,
+  settledBy: string,
+): Promise<{uid: string; payoutUsd: number; assetTitle: string} | null> {
+  const investmentRef = memberInvestmentsCollection.doc(investmentId);
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(investmentRef);
+    const investment = snapshot.data();
+    if (!snapshot.exists || !investment) return null;
+    if (investment.status !== "active") return null;
+
+    const uid = String(investment.uid);
+    const payoutUsd = roundMoney(Number(investment.payoutUsd ?? 0));
+    const assetTitle = String(investment.assetTitle ?? "your investment");
+
+    const walletRef = memberWalletsCollection.doc(uid);
+    const walletSnapshot = await tx.get(walletRef);
+    const priorBalance = Number(walletSnapshot.data()?.balanceUsd ?? 0);
+    const newBalance = roundMoney(priorBalance + payoutUsd);
+
+    tx.set(
+      walletRef,
+      {
+        uid,
+        balanceUsd: newBalance,
+        createdAt: walletSnapshot.data()?.createdAt ??
+          FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    tx.set(investmentRef, {
+      status: "completed",
+      settledAt: FieldValue.serverTimestamp(),
+      settledBy,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+
+    const txRef = walletTransactionsCollection.doc();
+    tx.set(txRef, {
+      id: txRef.id,
+      uid,
+      type: "investment_payout",
+      amountUsd: payoutUsd,
+      balanceAfter: newBalance,
+      reason: `Matured: ${assetTitle} (principal + profit)`,
+      createdBy: settledBy,
+      investmentId,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    const activityRef = memberActivitiesCollection.doc();
+    tx.set(activityRef, {
+      id: activityRef.id,
+      uid,
+      type: "investment_matured",
+      title: "Investment matured",
+      subtitle: assetTitle,
+      value: `+${formatUsd(payoutUsd)}`,
+      status: "investment_completed",
+      investmentId,
+      amountUsd: payoutUsd,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return {uid, payoutUsd, assetTitle};
+  });
+}
+
+// Settle every matured-but-active plan belonging to one member. Called when the
+// member loads their dashboard so payouts appear promptly even if the scheduled
+// settler has not yet run. Returns the number of plans paid out.
+async function settleMaturedInvestmentsForUser(uid: string): Promise<number> {
+  const snapshot = await memberInvestmentsCollection
+    .where("uid", "==", uid)
+    .where("status", "==", "active")
+    .where("maturityAt", "<=", new Date())
+    .get();
+  let settled = 0;
+  for (const doc of snapshot.docs) {
+    const result = await settleInvestment(doc.id, "system:dashboard");
+    if (result) {
+      settled++;
+      await notifyMember(result.uid, {
+        type: "investment_matured",
+        title: "Investment matured",
+        body: `${formatUsd(result.payoutUsd)} from ${result.assetTitle} ` +
+          "has been credited to your wallet.",
+        data: {investmentId: doc.id},
+      });
+    }
+  }
+  return settled;
+}
+
+// Scheduled sweep that pays out every matured plan across all members. Runs
+// hourly; settlement is idempotent so overlap with on-dashboard settling is
+// safe. Requires Cloud Scheduler (enabled automatically on deploy).
+export const settleMaturedInvestments = onSchedule(
+  "every 1 hours",
+  async () => {
+    const snapshot = await memberInvestmentsCollection
+      .where("status", "==", "active")
+      .where("maturityAt", "<=", new Date())
+      .limit(400)
+      .get();
+    let settled = 0;
+    for (const doc of snapshot.docs) {
+      const result = await settleInvestment(doc.id, "system:scheduler");
+      if (result) {
+        settled++;
+        await notifyMember(result.uid, {
+          type: "investment_matured",
+          title: "Investment matured",
+          body: `${formatUsd(result.payoutUsd)} from ${result.assetTitle} ` +
+            "has been credited to your wallet.",
+          data: {investmentId: doc.id},
+        });
+      }
+    }
+    logger.info("Settled matured investments", {
+      scanned: snapshot.size,
+      settled,
+    });
+  },
+);
+
+// Admin override: pay out a plan immediately regardless of maturity (e.g. early
+// settlement or correcting a stuck position). Idempotent via settleInvestment.
+export const adminSettleInvestment = onAdminCall(async (data, context) => {
+  const investmentId = readString(data, "investmentId");
+  const result = await settleInvestment(investmentId, context.uid);
+  if (!result) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Investment was not found or is already settled.",
+    );
+  }
+  await notifyMember(result.uid, {
+    type: "investment_matured",
+    title: "Investment settled",
+    body: `${formatUsd(result.payoutUsd)} from ${result.assetTitle} ` +
+      "has been credited to your wallet.",
+    data: {investmentId},
+  });
+  return {investmentId, status: "completed", payoutUsd: result.payoutUsd};
 });
 
 // Admin-initiated wallet adjustment. A `credit` is a manual deposit (e.g. funds
@@ -1492,6 +1749,7 @@ export const getAdminUserDetail = onAdminCall(async (data) => {
     user,
     kycSnapshot,
     holdingsSnapshot,
+    investmentsSnapshot,
     ordersSnapshot,
     walletSnapshot,
     walletTxSnapshot,
@@ -1499,6 +1757,7 @@ export const getAdminUserDetail = onAdminCall(async (data) => {
     auth.getUser(uid),
     kycProfilesCollection.doc(uid).get(),
     memberHoldingsCollection.where("userId", "==", uid).get(),
+    memberInvestmentsCollection.where("uid", "==", uid).get(),
     purchaseOrdersCollection.where("uid", "==", uid).get(),
     memberWalletsCollection.doc(uid).get(),
     walletTransactionsCollection
@@ -1509,6 +1768,7 @@ export const getAdminUserDetail = onAdminCall(async (data) => {
   ]);
 
   const holdings = holdingsSnapshot.docs.map((doc) => holdingFromDoc(doc));
+  const investments = investmentsSnapshot.docs.map(memberInvestmentFromDoc);
   const totalInvested = roundMoney(
     holdings.reduce((total, holding) => total + holding.amountInvested, 0),
   );
@@ -1568,6 +1828,7 @@ export const getAdminUserDetail = onAdminCall(async (data) => {
         returnPercentage: holding.returnPercentage,
       })),
     },
+    investments,
     orders: orders.map((order) => ({
       id: order.id,
       opportunityTitle: order.opportunityTitle,
@@ -1807,6 +2068,110 @@ export const updateAssetValuation = onAdminCall(async (data) => {
   return {id, currentAssetValue, holdingsUpdated: holdingsSnapshot.size};
 });
 
+// Distribute a one-off rental income pool across every funded holder of a single
+// asset, proportional to each holder's invested capital. Each member's payout
+// (wallet balance, ledger row, activity entry, and holding dividend total) is
+// written in one transaction so an individual credit is always internally
+// consistent; a failure on one member never rolls back members already paid.
+export const distributeRentalIncome = onAdminCall(async (data, context) => {
+  const value = readObject(data);
+  const assetId = readString(value, "assetId");
+  const totalAmountUsd = roundMoney(readPositiveNumber(value, "totalAmountUsd"));
+  const note = (readOptionalString(value, "note") ?? "").trim();
+
+  const assetSnapshot = await assetsCollection.doc(assetId).get();
+  if (!assetSnapshot.exists) {
+    throw new HttpsError("not-found", "Asset was not found.");
+  }
+  const asset = assetFromData(assetSnapshot.id, assetSnapshot.data()!);
+
+  const holdingsSnapshot = await memberHoldingsCollection
+    .where("assetId", "==", assetId)
+    .get();
+  const eligible = holdingsSnapshot.docs
+    .map((doc) => ({
+      holdingId: doc.id,
+      uid: String(doc.data().userId ?? ""),
+      invested: Number(doc.data().amountInvested ?? 0),
+    }))
+    .filter((holding) => holding.uid && holding.invested > 0);
+
+  if (eligible.length === 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "This asset has no funded holdings to distribute income to.",
+    );
+  }
+
+  const totalInvested = eligible.reduce(
+    (sum, holding) => sum + holding.invested,
+    0,
+  );
+
+  // Split proportionally by invested capital, rounding each cut to cents. Any
+  // rounding remainder is assigned to the largest holder so the payouts sum
+  // exactly to the requested pool.
+  const payouts = eligible.map((holding) => ({
+    ...holding,
+    amountUsd: roundMoney(totalAmountUsd * (holding.invested / totalInvested)),
+  }));
+  const allocated = roundMoney(
+    payouts.reduce((sum, payout) => sum + payout.amountUsd, 0),
+  );
+  const remainder = roundMoney(totalAmountUsd - allocated);
+  if (remainder !== 0) {
+    const largest = payouts.reduce((a, b) => (b.invested > a.invested ? b : a));
+    largest.amountUsd = roundMoney(largest.amountUsd + remainder);
+  }
+
+  const reason = note.length > 0 ?
+    `Rental income — ${asset.title}. ${note}` :
+    `Rental income — ${asset.title}`;
+
+  let recipientCount = 0;
+  let distributedUsd = 0;
+  const failedUids: string[] = [];
+  for (const payout of payouts) {
+    if (payout.amountUsd <= 0) {
+      continue;
+    }
+    try {
+      await creditRentalIncome({
+        uid: payout.uid,
+        holdingId: payout.holdingId,
+        assetId,
+        amountUsd: payout.amountUsd,
+        reason,
+        createdBy: context.uid,
+      });
+      recipientCount += 1;
+      distributedUsd = roundMoney(distributedUsd + payout.amountUsd);
+      await notifyMember(payout.uid, {
+        type: "rental_income",
+        title: "Rental income received",
+        body: `${formatUsd(payout.amountUsd)} in rental income from ` +
+          `${asset.title} was added to your wallet balance.`,
+        data: {assetId, holdingId: payout.holdingId},
+      });
+    } catch (error) {
+      logger.error("Rental income payout failed", {
+        assetId,
+        uid: payout.uid,
+        error,
+      });
+      failedUids.push(payout.uid);
+    }
+  }
+
+  return {
+    assetId,
+    totalAmountUsd,
+    distributedUsd,
+    recipientCount,
+    failedCount: failedUids.length,
+  };
+});
+
 export const createCryptoPaymentOption = onAdminCall(async (data) => {
   const payload = readPaymentOptionPayload(data);
   const id = randomUUID();
@@ -1931,7 +2296,37 @@ function assetFromData(
     regulationNote: String(data.regulationNote ?? ""),
     currentAssetValue: Number(data.currentAssetValue ?? purchasePrice),
     minimumInvestment: Number(data.minimumInvestment ?? 50),
+    investmentBands: readInvestmentBands(data.investmentBands),
   };
+}
+
+// Parse and normalize the admin-defined investment bands stored on an asset.
+// Tolerant of older documents (returns []) and sorts ascending by minimum so
+// band matching and the displayed minimum are deterministic.
+function readInvestmentBands(value: unknown): InvestmentBand[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is Record<string, unknown> =>
+      entry !== null && typeof entry === "object")
+    .map((entry, index) => ({
+      id: typeof entry.id === "string" && entry.id.trim() !== "" ?
+        entry.id :
+        `band_${index}`,
+      minAmountUsd: Number(entry.minAmountUsd ?? 0),
+      maxAmountUsd: Number(entry.maxAmountUsd ?? 0),
+      weeklyRatePercent: Number(entry.weeklyRatePercent ?? 0),
+      monthlyRatePercent: Number(entry.monthlyRatePercent ?? 0),
+      yearlyRatePercent: Number(entry.yearlyRatePercent ?? 0),
+    }))
+    .filter((band) => band.maxAmountUsd >= band.minAmountUsd)
+    .sort((a, b) => a.minAmountUsd - b.minAmountUsd);
+}
+
+// The lowest principal any band on this asset accepts. This is the figure shown
+// on the asset card as the minimum investment when bands are configured.
+function bandsMinimum(bands: InvestmentBand[]): number {
+  if (bands.length === 0) return 0;
+  return Math.min(...bands.map((band) => band.minAmountUsd));
 }
 
 // Normalize a client-sent locale to a supported language code, defaulting to
@@ -2067,7 +2462,11 @@ function opportunityFromDoc(
     ),
     title: tr("title", asset.title),
     location: tr("location", asset.location),
-    minimumInvestment: asset.minimumInvestment,
+    // When bands are configured the displayed minimum is the lowest band floor;
+    // otherwise fall back to the legacy per-asset minimumInvestment.
+    minimumInvestment: asset.investmentBands.length > 0 ?
+      bandsMinimum(asset.investmentBands) :
+      asset.minimumInvestment,
     targetReturn: Number(data.targetReturn ?? asset.expectedAnnualYield ?? 11.8),
     fundedPercent: asset.fundedPercent,
     description: tr("description", asset.description),
@@ -2088,6 +2487,7 @@ function opportunityFromDoc(
     status: asset.status,
     regulationNote: asset.regulationNote,
     currentAssetValue: asset.currentAssetValue,
+    investmentBands: asset.investmentBands,
   };
 }
 
@@ -2309,28 +2709,6 @@ function buildMemberAllocation(
   }));
 }
 
-function buildMemberChartValues(
-  orders: ReturnType<typeof memberOrderFromDoc>[],
-) {
-  const labels = buildMemberChartLabels();
-  const totals = labels.map(() => 0);
-  for (const order of orders) {
-    const date = order.createdAt ? new Date(order.createdAt) : null;
-    if (!date || Number.isNaN(date.getTime())) continue;
-    const label = date.toLocaleString("en-US", {month: "short"});
-    const index = labels.indexOf(label);
-    if (index >= 0) {
-      totals[index] += order.amountUsd;
-    }
-  }
-
-  let runningTotal = 0;
-  return totals.map((value) => {
-    runningTotal += value;
-    return roundMoney(runningTotal);
-  });
-}
-
 function buildMemberChartLabels() {
   const labels: string[] = [];
   const now = new Date();
@@ -2343,41 +2721,39 @@ function buildMemberChartLabels() {
   return labels;
 }
 
-function memberActivityFromOrder(order: ReturnType<typeof memberOrderFromDoc>) {
+// Serialize a member activity ledger entry for the dashboard/wallet feed. These
+// docs are written by the wallet, investment, and payout flows and already carry
+// display-ready title/subtitle/value/status fields.
+function memberActivityFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  const data = doc.data();
   return {
-    title: memberOrderStatusTitle(order.status),
-    subtitle: order.opportunityTitle,
-    value: order.status === "deposit_verified" ?
-      formatUsd(order.amountUsd) :
-      memberOrderStatusLabel(order.status),
-    status: order.status,
+    title: String(data.title ?? ""),
+    subtitle: String(data.subtitle ?? ""),
+    value: String(data.value ?? ""),
+    status: String(data.status ?? ""),
   };
 }
 
-function memberOrderStatusTitle(status: string): string {
-  switch (status) {
-  case "deposit_verified":
-    return "Deposit verified";
-  case "proof_submitted":
-    return "Proof submitted";
-  case "deposit_rejected":
-    return "Proof needs attention";
-  default:
-    return "Deposit request created";
-  }
-}
-
-function memberOrderStatusLabel(status: string): string {
-  switch (status) {
-  case "proof_submitted":
-    return "Under review";
-  case "deposit_rejected":
-    return "Rejected";
-  case "pending_payment":
-    return "Awaiting proof";
-  default:
-    return status.replace(/_/g, " ");
-  }
+// Serialize a fixed-return investment plan for member + admin views.
+function memberInvestmentFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  const data = doc.data();
+  const principalUsd = roundMoney(Number(data.principalUsd ?? 0));
+  const profitUsd = roundMoney(Number(data.profitUsd ?? 0));
+  return {
+    id: doc.id,
+    assetId: String(data.assetId ?? ""),
+    assetTitle: String(data.assetTitle ?? ""),
+    assetImageUrl: String(data.assetImageUrl ?? ""),
+    principalUsd,
+    durationKey: String(data.durationKey ?? ""),
+    ratePercent: Number(data.ratePercent ?? 0),
+    profitUsd,
+    payoutUsd: roundMoney(Number(data.payoutUsd ?? principalUsd + profitUsd)),
+    status: String(data.status ?? "active"),
+    startAt: readSerializableDate(data.startAt),
+    maturityAt: readSerializableDate(data.maturityAt),
+    settledAt: readSerializableDate(data.settledAt),
+  };
 }
 
 function supportTicketFromDoc(
@@ -2751,7 +3127,40 @@ function readAssetPayload(data: unknown): Omit<AdminAsset, "id"> {
       purchasePrice,
     ),
     minimumInvestment: readNumberOrDefault(value, "minimumInvestment", 50),
+    investmentBands: readInvestmentBandsPayload(value.investmentBands),
   };
+}
+
+// Validate admin-submitted investment bands before persisting. Each band needs a
+// sane amount range and non-negative rates; ids are generated when absent so the
+// client can omit them on create.
+function readInvestmentBandsPayload(value: unknown): InvestmentBand[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "investmentBands must be a list.",
+    );
+  }
+  return value.map((entry, index) => {
+    const band = readObject(entry);
+    const minAmountUsd = readNonNegativeNumber(band, "minAmountUsd");
+    const maxAmountUsd = readNonNegativeNumber(band, "maxAmountUsd");
+    if (maxAmountUsd < minAmountUsd) {
+      throw new HttpsError(
+        "invalid-argument",
+        "A band's maxAmountUsd must be greater than or equal to minAmountUsd.",
+      );
+    }
+    return {
+      id: readOptionalString(band, "id") || `band_${randomUUID()}`,
+      minAmountUsd,
+      maxAmountUsd,
+      weeklyRatePercent: readNonNegativeNumber(band, "weeklyRatePercent"),
+      monthlyRatePercent: readNonNegativeNumber(band, "monthlyRatePercent"),
+      yearlyRatePercent: readNonNegativeNumber(band, "yearlyRatePercent"),
+    };
+  });
 }
 
 function readPaymentOptionPayload(
@@ -3592,6 +4001,98 @@ async function applyWalletAdjustment(input: {
   });
 
   return {balanceUsd, transactionId: txRef.id};
+}
+
+// Credit a single member's wallet with their share of a rental income pool and
+// roll the payout into their holding's accumulated dividends. The wallet
+// balance, ledger row, activity entry, and holding are all written in one
+// transaction so the member's cash and portfolio stay consistent.
+async function creditRentalIncome(input: {
+  uid: string;
+  holdingId: string;
+  assetId: string;
+  amountUsd: number;
+  reason: string;
+  createdBy: string;
+}): Promise<void> {
+  const walletRef = memberWalletsCollection.doc(input.uid);
+  const holdingRef = memberHoldingsCollection.doc(input.holdingId);
+  const txRef = walletTransactionsCollection.doc();
+  const activityRef = memberActivitiesCollection.doc();
+  const amountUsd = roundMoney(input.amountUsd);
+
+  await db.runTransaction(async (tx) => {
+    const [walletSnapshot, holdingSnapshot] = await Promise.all([
+      tx.get(walletRef),
+      tx.get(holdingRef),
+    ]);
+    const wallet = walletSnapshot.data();
+    const priorBalance = Number(wallet?.balanceUsd ?? 0);
+    const newBalance = roundMoney(priorBalance + amountUsd);
+
+    tx.set(
+      walletRef,
+      {
+        uid: input.uid,
+        balanceUsd: newBalance,
+        createdAt: wallet?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    tx.set(txRef, {
+      id: txRef.id,
+      uid: input.uid,
+      type: "dividend",
+      amountUsd,
+      balanceAfter: newBalance,
+      reason: input.reason,
+      createdBy: input.createdBy,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    tx.set(activityRef, {
+      id: activityRef.id,
+      uid: input.uid,
+      type: "rental_income",
+      title: "Rental income received",
+      subtitle: input.reason,
+      value: `+${formatUsd(amountUsd)}`,
+      status: "income_distributed",
+      assetId: input.assetId,
+      amountUsd,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    // Accumulate the payout onto the holding and recompute profit/loss so the
+    // member portfolio reflects the distribution. Current value is unchanged;
+    // only dividends and the derived return figures move.
+    const holding = holdingSnapshot.data();
+    if (holding) {
+      const amountInvested = Number(holding.amountInvested ?? 0);
+      const currentValue = Number(holding.currentValue ?? amountInvested);
+      const dividendsReceived = roundMoney(
+        Number(holding.dividendsReceived ?? 0) + amountUsd,
+      );
+      const profitLoss = roundMoney(
+        currentValue + dividendsReceived - amountInvested,
+      );
+      const returnPercentage = amountInvested > 0 ?
+        roundMoney((profitLoss / amountInvested) * 100) :
+        0;
+      tx.set(
+        holdingRef,
+        {
+          dividendsReceived,
+          profitLoss,
+          returnPercentage,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        {merge: true},
+      );
+    }
+  });
 }
 
 function walletTransactionFromDoc(

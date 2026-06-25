@@ -4,13 +4,20 @@ class PaymentScreen extends StatefulWidget {
   const PaymentScreen({
     super.key,
     required this.kyc,
-    required this.opportunity,
     required this.investmentRepository,
+    this.opportunity,
+    this.availablePaymentMethods = const [],
   });
 
+  /// The asset being funded, or null when this is a plain wallet top-up
+  /// ("Add funds"). A deposit always credits the wallet either way.
+  final InvestmentOpportunity? opportunity;
   final KycProfile kyc;
-  final InvestmentOpportunity opportunity;
   final InvestmentRepository investmentRepository;
+
+  /// Payment rails to offer when there is no opportunity to read them from
+  /// (i.e. a wallet top-up). Ignored when [opportunity] is set.
+  final List<String> availablePaymentMethods;
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -24,14 +31,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
   late final TextEditingController amountController;
   late final TextEditingController transactionHashController;
 
+  bool get _isTopUp => widget.opportunity == null;
+
   @override
   void initState() {
     super.initState();
     selectedPaymentAsset = _cryptoPaymentMethods.contains('USDT')
         ? 'USDT'
         : _cryptoPaymentMethods.firstOrNull ?? 'USDT';
+    // A top-up has no opportunity minimum, so start the field empty.
     amountController = TextEditingController(
-      text: widget.opportunity.minimumInvestment.toStringAsFixed(0),
+      text: _isTopUp
+          ? ''
+          : widget.opportunity!.minimumInvestment.toStringAsFixed(0),
     );
     transactionHashController = TextEditingController();
   }
@@ -44,8 +56,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   List<String> get _cryptoPaymentMethods {
+    final source = widget.opportunity?.paymentMethods ??
+        widget.availablePaymentMethods;
     final methods =
-        widget.opportunity.paymentMethods
+        source
             .where((method) => method.toUpperCase() != 'USD WALLET')
             .map((method) => method.trim().toUpperCase())
             .where((method) => method.isNotEmpty)
@@ -64,20 +78,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget build(BuildContext context) {
     final paymentMethods = _cryptoPaymentMethods;
     final amount = order?.amountUsd ?? _enteredAmount;
-    final belowMinimum =
-        order == null && amount < widget.opportunity.minimumInvestment;
     final l10n = AppLocalizations.of(context);
+    final minimum = widget.opportunity?.minimumInvestment ?? 0;
+    final belowMinimum = order == null && amount < minimum;
     return PhoneFrame(
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: detailAppBar(context, l10n.paymentConfirmFunding),
+        appBar: detailAppBar(
+          context,
+          _isTopUp ? l10n.walletAddFundsTitle : l10n.paymentConfirmFunding,
+        ),
         body: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           child: Column(
             children: [
               _FundingHero(
-                title: widget.opportunity.displayTitle,
-                location: widget.opportunity.location,
+                title: widget.opportunity?.displayTitle ??
+                    l10n.walletAddFundsTitle,
+                location: widget.opportunity?.location ??
+                    l10n.walletAddFundsSubtitle,
                 amountText: _formatUsdCompact(amount),
                 rail: selectedPaymentAsset,
               ),
@@ -127,7 +146,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     Text(
                       belowMinimum
                           ? l10n.paymentBelowMinimum(
-                              widget.opportunity.minimumText,
+                              widget.opportunity?.minimumText ?? '',
                             )
                           : l10n.paymentDemoAmount,
                       style: belowMinimum ? AppText.warning : AppText.small,
@@ -226,7 +245,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     double amountUsd,
   ) async {
     final l10n = AppLocalizations.of(context);
-    if (amountUsd < widget.opportunity.minimumInvestment) {
+    final minimum = widget.opportunity?.minimumInvestment ?? 0;
+    if (amountUsd < minimum || amountUsd <= 0) {
       showMessage(context, l10n.paymentIncreaseAmount);
       return;
     }
@@ -235,7 +255,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       final createdOrder = await widget.investmentRepository
           .createPurchaseOrder(
             PurchaseRequest(
-              opportunityId: widget.opportunity.id,
+              opportunityId: widget.opportunity?.id,
               amountUsd: amountUsd,
               paymentAsset: paymentAsset,
             ),

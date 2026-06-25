@@ -66,11 +66,29 @@ class FirebaseInvestmentRepository implements InvestmentRepository {
   Future<PurchaseOrder> createPurchaseOrder(PurchaseRequest request) async {
     final callable = _functions.httpsCallable('createPurchaseOrder');
     final result = await callable.call<Object?>({
-      'opportunityId': request.opportunityId,
+      if (request.opportunityId != null)
+        'opportunityId': request.opportunityId,
       'amountUsd': request.amountUsd,
       'paymentAsset': request.paymentAsset,
     });
     return PurchaseOrder.fromJson(
+      Map<String, dynamic>.from(result.data! as Map),
+    );
+  }
+
+  @override
+  Future<InvestmentPlanResult> createInvestmentPlan({
+    required String assetId,
+    required double amountUsd,
+    required String durationKey,
+  }) async {
+    final callable = _functions.httpsCallable('createInvestmentPlan');
+    final result = await callable.call<Object?>({
+      'assetId': assetId,
+      'amountUsd': amountUsd,
+      'durationKey': durationKey,
+    });
+    return InvestmentPlanResult.fromJson(
       Map<String, dynamic>.from(result.data! as Map),
     );
   }

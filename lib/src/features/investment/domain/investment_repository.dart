@@ -13,6 +13,15 @@ abstract interface class InvestmentRepository {
 
   Future<PurchaseOrder> createPurchaseOrder(PurchaseRequest request);
 
+  /// Lock spendable wallet cash into an asset's fixed-return plan. [durationKey]
+  /// is one of 'week', 'month', 'year'. Throws if the amount falls outside the
+  /// asset's bands or exceeds the wallet balance.
+  Future<InvestmentPlanResult> createInvestmentPlan({
+    required String assetId,
+    required double amountUsd,
+    required String durationKey,
+  });
+
   Future<PurchaseOrder> submitDepositProof({
     required String orderId,
     required String transactionHash,

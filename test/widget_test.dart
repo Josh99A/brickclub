@@ -255,7 +255,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('nav-wallet')));
     await tester.pumpAndSettle();
-    expect(find.text('\$0'), findsOneWidget);
+    expect(find.text('\$12K'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-portfolio')));
     await tester.pumpAndSettle();
@@ -490,33 +490,23 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('invest-with-crypto')));
     await tester.pumpAndSettle();
-    expect(find.text('Confirm funding'), findsOneWidget);
+    // The invest CTA now opens the fixed-return plan flow, funded from the
+    // member's wallet balance rather than a fresh crypto deposit.
+    expect(find.byType(InvestPlanScreen), findsOneWidget);
+    expect(find.text('Start an investment'), findsOneWidget);
 
-    await tester.drag(
-      find.descendant(
-        of: find.byType(PaymentScreen),
-        matching: find.byType(SingleChildScrollView),
-      ),
-      const Offset(0, -300),
+    // Amount is pre-filled with the lowest band minimum (100), which the fake
+    // wallet balance (12,000) covers, so the plan can be confirmed.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('confirm-investment')),
     );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('confirm-purchase')));
-    await tester.tap(find.byKey(const ValueKey('confirm-purchase')));
-    await tester.pumpAndSettle();
-    expect(find.text('Deposit instructions'), findsOneWidget);
-
-    await tester.enterText(
-      find.byKey(const ValueKey('transaction-hash')),
-      '0x1234567890abcdef',
-    );
-    await tester.ensureVisible(find.byKey(const ValueKey('payment-proof')));
-    await tester.tap(find.byKey(const ValueKey('payment-proof')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('confirm-purchase')));
-    await tester.tap(find.byKey(const ValueKey('confirm-purchase')));
+    await tester.tap(find.byKey(const ValueKey('confirm-investment')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Proof submitted'), findsOneWidget);
+    // On success the screen pops back to the asset detail and a confirmation
+    // is shown.
+    expect(find.byType(InvestPlanScreen), findsNothing);
+    expect(find.textContaining('Investment started'), findsOneWidget);
   });
 
   testWidgets('unapproved members are gated before investing', (tester) async {
@@ -871,6 +861,7 @@ class FakeAdminRepository implements AdminRepository {
       ),
       orders: const [],
       wallet: const AdminUserWallet(balanceUsd: 0, transactions: []),
+      investments: const [],
     );
   }
 
@@ -885,6 +876,18 @@ class FakeAdminRepository implements AdminRepository {
     double netIncome = 0,
     double occupancyRate = 0,
   }) async {}
+
+  @override
+  Future<RentalIncomeDistribution> distributeRentalIncome({
+    required String assetId,
+    required double totalAmountUsd,
+    String note = '',
+  }) async => const RentalIncomeDistribution(
+    totalAmountUsd: 0,
+    distributedUsd: 0,
+    recipientCount: 0,
+    failedCount: 0,
+  );
 
   @override
   Future<void> approveKycProfile(String uid) async {}
@@ -905,6 +908,9 @@ class FakeAdminRepository implements AdminRepository {
 
   @override
   Future<void> verifyDepositRequest(String id) async {}
+
+  @override
+  Future<void> settleInvestment(String investmentId) async {}
 
   @override
   Future<void> adjustMemberWallet({
@@ -1028,6 +1034,16 @@ class FakeInvestmentRepository implements InvestmentRepository {
       minimumInvestment: 100,
       targetReturn: 11.8,
       fundedPercent: 62,
+      investmentBands: [
+        InvestmentBand(
+          id: 'band-1',
+          minAmountUsd: 100,
+          maxAmountUsd: 10000,
+          weeklyRatePercent: 2,
+          monthlyRatePercent: 5,
+          yearlyRatePercent: 15,
+        ),
+      ],
     ),
     InvestmentOpportunity(
       id: 'asset-2',
@@ -1084,7 +1100,7 @@ class FakeInvestmentRepository implements InvestmentRepository {
   Future<MemberDashboardData> loadMemberDashboard() async {
     return const MemberDashboardData(
       portfolioValueUsd: 11000,
-      walletBalanceUsd: 0,
+      walletBalanceUsd: 12000,
       yearReturnPercent: 10.2,
       cryptoRails: ['USDT on Tron', 'USDC on Ethereum'],
       holdings: [
@@ -1140,6 +1156,24 @@ class FakeInvestmentRepository implements InvestmentRepository {
       networkFee: 1,
       status: 'pending_payment',
       expiresAt: '2026-06-16T10:00:00.000Z',
+    );
+  }
+
+  @override
+  Future<InvestmentPlanResult> createInvestmentPlan({
+    required String assetId,
+    required double amountUsd,
+    required String durationKey,
+  }) async {
+    return InvestmentPlanResult(
+      id: 'plan-1',
+      assetTitle: 'Skyline Heights Income Fund',
+      principalUsd: amountUsd,
+      profitUsd: amountUsd * 0.02,
+      payoutUsd: amountUsd * 1.02,
+      ratePercent: 2,
+      durationKey: durationKey,
+      maturityAt: '2026-07-02T10:00:00.000Z',
     );
   }
 

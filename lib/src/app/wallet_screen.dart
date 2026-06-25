@@ -1,6 +1,6 @@
 part of 'brickclub_app.dart';
 
-class WalletScreen extends StatelessWidget {
+class WalletScreen extends StatefulWidget {
   const WalletScreen({
     super.key,
     required this.kyc,
@@ -15,14 +15,58 @@ class WalletScreen extends StatelessWidget {
   final VoidCallback onOpenProfile;
 
   @override
+  State<WalletScreen> createState() => _WalletScreenState();
+}
+
+class _WalletScreenState extends State<WalletScreen> {
+  late Future<MemberDashboardData> _dashboard;
+
+  @override
+  void initState() {
+    super.initState();
+    _dashboard = widget.investmentRepository.loadMemberDashboard();
+  }
+
+  void _refresh() {
+    setState(() {
+      _dashboard = widget.investmentRepository.loadMemberDashboard();
+    });
+  }
+
+  // Derive the offerable deposit rails from the live crypto-rail labels
+  // ("USDT on TRON" -> "USDT"). Falls back to USDT when none are enabled.
+  List<String> _paymentMethods(MemberDashboardData data) {
+    final methods = data.cryptoRails
+        .map((rail) => rail.split(' on ').first.trim().toUpperCase())
+        .where((method) => method.isNotEmpty)
+        .toSet()
+        .toList();
+    return methods.isEmpty ? const ['USDT'] : methods;
+  }
+
+  Future<void> _openDeposit(List<String> paymentMethods) async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentScreen(
+          kyc: widget.kyc,
+          investmentRepository: widget.investmentRepository,
+          availablePaymentMethods: paymentMethods,
+        ),
+      ),
+    );
+    _refresh();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return AppPage(
       title: l10n.navWallet,
-      onProfileTap: onOpenProfile,
+      onProfileTap: widget.onOpenProfile,
       children: [
         FutureBuilder<MemberDashboardData>(
-          future: investmentRepository.loadMemberDashboard(),
+          future: _dashboard,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const _DashboardLoadingPanel();
@@ -36,42 +80,44 @@ class WalletScreen extends StatelessWidget {
               children: [
                 _WalletBalanceCard(data: data),
                 SizedBox(height: 18),
+                Panel(
+                  child: Column(
+                    children: [
+                      Text(
+                        l10n.walletFundingTitle,
+                        style: AppText.cardHeading,
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        l10n.walletFundingBody,
+                        textAlign: TextAlign.center,
+                        style: AppText.body,
+                      ),
+                      SizedBox(height: 20),
+                      PrimaryButton(
+                        key: const ValueKey('add-funds'),
+                        label: l10n.walletAddWallet,
+                        height: 46,
+                        onPressed: () => requireApprovedKyc(
+                          context,
+                          widget.kyc,
+                          () => _openDeposit(_paymentMethods(data)),
+                          widget.onStartKyc,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 18),
                 Text(l10n.walletCryptoActivity, style: AppText.h2),
                 _ActivityPanel(activity: data.activity),
               ],
             );
           },
         ),
-        KycStatusCard(kyc: kyc, onStartKyc: onStartKyc, compact: true),
+        KycStatusCard(kyc: widget.kyc, onStartKyc: widget.onStartKyc, compact: true),
         SizedBox(height: 28),
-        Panel(
-          child: Column(
-            children: [
-              Text(
-                l10n.walletFundingTitle,
-                style: AppText.cardHeading,
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 8),
-              Text(
-                l10n.walletFundingBody,
-                textAlign: TextAlign.center,
-                style: AppText.body,
-              ),
-              SizedBox(height: 20),
-              PrimaryButton(
-                label: l10n.walletAddWallet,
-                height: 46,
-                onPressed: () => requireApprovedKyc(
-                  context,
-                  kyc,
-                  () => showMessage(context, l10n.walletVerificationStarted),
-                  onStartKyc,
-                ),
-              ),
-            ],
-          ),
-        ),
         Panel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

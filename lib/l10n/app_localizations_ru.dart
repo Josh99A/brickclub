@@ -1330,4 +1330,85 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get enumRiskGrowth => 'Рост';
+
+  @override
+  String get walletAddFundsTitle => 'Add funds to wallet';
+
+  @override
+  String get walletAddFundsSubtitle => 'Top up your spendable balance';
+
+  @override
+  String get investPlanTitle => 'Start an investment';
+
+  @override
+  String get investPlanNonePanel =>
+      'No investment plans are available for this asset yet. Please check back soon.';
+
+  @override
+  String get investPlanAvailable => 'Available to invest';
+
+  @override
+  String get investPlanAmount => 'Amount to invest';
+
+  @override
+  String investPlanAmountHint(String min, String max) {
+    return 'Between $min and $max';
+  }
+
+  @override
+  String investPlanOutOfRange(String min, String max) {
+    return 'Enter an amount between $min and $max.';
+  }
+
+  @override
+  String get investPlanInsufficient =>
+      'This is more than your wallet balance. Add funds first.';
+
+  @override
+  String investPlanBandApplied(String range) {
+    return 'Plan tier: $range';
+  }
+
+  @override
+  String get investPlanDuration => 'Lock duration';
+
+  @override
+  String get investPlanPrincipal => 'Principal';
+
+  @override
+  String get investPlanRate => 'Return rate';
+
+  @override
+  String get investPlanProfit => 'Projected profit';
+
+  @override
+  String get investPlanPayout => 'Total at maturity';
+
+  @override
+  String get investPlanMaturity => 'Matures on';
+
+  @override
+  String get investPlanDisclaimer =>
+      'Profit is credited to your wallet as a lump sum when the plan matures.';
+
+  @override
+  String get investPlanConfirm => 'Confirm investment';
+
+  @override
+  String investPlanSuccess(String payout) {
+    return 'Investment started. You will receive $payout at maturity.';
+  }
+
+  @override
+  String portfolioExpectedProfit(String amount) {
+    return 'Expected profit at maturity: $amount';
+  }
+
+  @override
+  String get portfolioPlansTitle => 'Active investment plans';
+
+  @override
+  String portfolioPlanSummary(String rate, String duration, String date) {
+    return '$rate for $duration · matures $date';
+  }
 }

@@ -38,6 +38,7 @@ part 'member_shell.dart';
 part 'kyc_screen.dart';
 part 'home_screen.dart';
 part 'invest_screen.dart';
+part 'invest_plan_screen.dart';
 part 'wallet_screen.dart';
 part 'portfolio_screen.dart';
 part 'profile_screen.dart';

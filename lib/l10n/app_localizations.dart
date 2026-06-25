@@ -2515,6 +2515,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Growth'**
   String get enumRiskGrowth;
+
+  /// No description provided for @walletAddFundsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add funds to wallet'**
+  String get walletAddFundsTitle;
+
+  /// No description provided for @walletAddFundsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Top up your spendable balance'**
+  String get walletAddFundsSubtitle;
+
+  /// No description provided for @investPlanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Start an investment'**
+  String get investPlanTitle;
+
+  /// No description provided for @investPlanNonePanel.
+  ///
+  /// In en, this message translates to:
+  /// **'No investment plans are available for this asset yet. Please check back soon.'**
+  String get investPlanNonePanel;
+
+  /// No description provided for @investPlanAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Available to invest'**
+  String get investPlanAvailable;
+
+  /// No description provided for @investPlanAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount to invest'**
+  String get investPlanAmount;
+
+  /// No description provided for @investPlanAmountHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Between {min} and {max}'**
+  String investPlanAmountHint(String min, String max);
+
+  /// No description provided for @investPlanOutOfRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount between {min} and {max}.'**
+  String investPlanOutOfRange(String min, String max);
+
+  /// No description provided for @investPlanInsufficient.
+  ///
+  /// In en, this message translates to:
+  /// **'This is more than your wallet balance. Add funds first.'**
+  String get investPlanInsufficient;
+
+  /// No description provided for @investPlanBandApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan tier: {range}'**
+  String investPlanBandApplied(String range);
+
+  /// No description provided for @investPlanDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock duration'**
+  String get investPlanDuration;
+
+  /// No description provided for @investPlanPrincipal.
+  ///
+  /// In en, this message translates to:
+  /// **'Principal'**
+  String get investPlanPrincipal;
+
+  /// No description provided for @investPlanRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Return rate'**
+  String get investPlanRate;
+
+  /// No description provided for @investPlanProfit.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected profit'**
+  String get investPlanProfit;
+
+  /// No description provided for @investPlanPayout.
+  ///
+  /// In en, this message translates to:
+  /// **'Total at maturity'**
+  String get investPlanPayout;
+
+  /// No description provided for @investPlanMaturity.
+  ///
+  /// In en, this message translates to:
+  /// **'Matures on'**
+  String get investPlanMaturity;
+
+  /// No description provided for @investPlanDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Profit is credited to your wallet as a lump sum when the plan matures.'**
+  String get investPlanDisclaimer;
+
+  /// No description provided for @investPlanConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm investment'**
+  String get investPlanConfirm;
+
+  /// No description provided for @investPlanSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Investment started. You will receive {payout} at maturity.'**
+  String investPlanSuccess(String payout);
+
+  /// No description provided for @portfolioExpectedProfit.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected profit at maturity: {amount}'**
+  String portfolioExpectedProfit(String amount);
+
+  /// No description provided for @portfolioPlansTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Active investment plans'**
+  String get portfolioPlansTitle;
+
+  /// No description provided for @portfolioPlanSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{rate} for {duration} · matures {date}'**
+  String portfolioPlanSummary(String rate, String duration, String date);
 }
 
 class _AppLocalizationsDelegate

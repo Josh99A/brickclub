@@ -47,6 +47,14 @@ abstract interface class AdminRepository {
     double occupancyRate,
   });
 
+  /// Splits [totalAmountUsd] of rental income across every funded holder of the
+  /// asset, proportional to invested capital, crediting each member's wallet.
+  Future<RentalIncomeDistribution> distributeRentalIncome({
+    required String assetId,
+    required double totalAmountUsd,
+    String note,
+  });
+
   Future<void> createPaymentOption(PaymentOption option);
 
   Future<void> updatePaymentOption(PaymentOption option);
@@ -58,6 +66,10 @@ abstract interface class AdminRepository {
   Future<String> uploadAssetImage(AdminUploadFile file);
 
   Future<void> verifyDepositRequest(String id);
+
+  /// Force a member's investment plan to pay out now (principal + profit to
+  /// their wallet), regardless of maturity.
+  Future<void> settleInvestment(String investmentId);
 
   Future<void> adjustMemberWallet({
     required String uid,

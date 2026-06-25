@@ -688,5 +688,50 @@
   "enumAssetAlternative": "Alternative",
   "enumRiskConservative": "Conservative",
   "enumRiskBalanced": "Balanced",
-  "enumRiskGrowth": "Growth"
+  "enumRiskGrowth": "Growth",
+
+  "walletAddFundsTitle": "Add funds to wallet",
+  "walletAddFundsSubtitle": "Top up your spendable balance",
+  "investPlanTitle": "Start an investment",
+  "investPlanNonePanel": "No investment plans are available for this asset yet. Please check back soon.",
+  "investPlanAvailable": "Available to invest",
+  "investPlanAmount": "Amount to invest",
+  "investPlanAmountHint": "Between {min} and {max}",
+  "@investPlanAmountHint": {
+    "placeholders": { "min": { "type": "String" }, "max": { "type": "String" } }
+  },
+  "investPlanOutOfRange": "Enter an amount between {min} and {max}.",
+  "@investPlanOutOfRange": {
+    "placeholders": { "min": { "type": "String" }, "max": { "type": "String" } }
+  },
+  "investPlanInsufficient": "This is more than your wallet balance. Add funds first.",
+  "investPlanBandApplied": "Plan tier: {range}",
+  "@investPlanBandApplied": {
+    "placeholders": { "range": { "type": "String" } }
+  },
+  "investPlanDuration": "Lock duration",
+  "investPlanPrincipal": "Principal",
+  "investPlanRate": "Return rate",
+  "investPlanProfit": "Projected profit",
+  "investPlanPayout": "Total at maturity",
+  "investPlanMaturity": "Matures on",
+  "investPlanDisclaimer": "Profit is credited to your wallet as a lump sum when the plan matures.",
+  "investPlanConfirm": "Confirm investment",
+  "investPlanSuccess": "Investment started. You will receive {payout} at maturity.",
+  "@investPlanSuccess": {
+    "placeholders": { "payout": { "type": "String" } }
+  },
+  "portfolioExpectedProfit": "Expected profit at maturity: {amount}",
+  "@portfolioExpectedProfit": {
+    "placeholders": { "amount": { "type": "String" } }
+  },
+  "portfolioPlansTitle": "Active investment plans",
+  "portfolioPlanSummary": "{rate} for {duration} · matures {date}",
+  "@portfolioPlanSummary": {
+    "placeholders": {
+      "rate": { "type": "String" },
+      "duration": { "type": "String" },
+      "date": { "type": "String" }
+    }
+  }
 }

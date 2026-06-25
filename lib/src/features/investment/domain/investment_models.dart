@@ -1,3 +1,55 @@
+/// One admin-configured investment tier on an asset. A member's principal must
+/// fall within [minAmountUsd, maxAmountUsd]; the rate that applies is then
+/// chosen by the lock duration the member picks (week/month/year). Returns are a
+/// fixed percentage of principal, paid as a lump sum at maturity.
+class InvestmentBand {
+  const InvestmentBand({
+    required this.id,
+    required this.minAmountUsd,
+    required this.maxAmountUsd,
+    required this.weeklyRatePercent,
+    required this.monthlyRatePercent,
+    required this.yearlyRatePercent,
+  });
+
+  factory InvestmentBand.fromJson(Map<String, dynamic> json) {
+    return InvestmentBand(
+      id: json['id'] as String? ?? '',
+      minAmountUsd: (json['minAmountUsd'] as num?)?.toDouble() ?? 0,
+      maxAmountUsd: (json['maxAmountUsd'] as num?)?.toDouble() ?? 0,
+      weeklyRatePercent: (json['weeklyRatePercent'] as num?)?.toDouble() ?? 0,
+      monthlyRatePercent: (json['monthlyRatePercent'] as num?)?.toDouble() ?? 0,
+      yearlyRatePercent: (json['yearlyRatePercent'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  final String id;
+  final double minAmountUsd;
+  final double maxAmountUsd;
+  final double weeklyRatePercent;
+  final double monthlyRatePercent;
+  final double yearlyRatePercent;
+
+  bool accepts(double amountUsd) =>
+      amountUsd >= minAmountUsd && amountUsd <= maxAmountUsd;
+
+  /// Fixed return percentage for a lock duration key (week/month/year).
+  double rateForDuration(String durationKey) {
+    switch (durationKey) {
+      case 'week':
+        return weeklyRatePercent;
+      case 'month':
+        return monthlyRatePercent;
+      case 'year':
+        return yearlyRatePercent;
+      default:
+        return 0;
+    }
+  }
+
+  String get rangeText => '${_formatUsd(minAmountUsd)} – ${_formatUsd(maxAmountUsd)}';
+}
+
 class InvestmentOpportunity {
   const InvestmentOpportunity({
     required this.id,
@@ -27,6 +79,7 @@ class InvestmentOpportunity {
     this.status = 'available',
     this.regulationNote = '',
     this.currentAssetValue = 0,
+    this.investmentBands = const [],
   });
 
   factory InvestmentOpportunity.fromJson(Map<String, dynamic> json) {
@@ -61,6 +114,10 @@ class InvestmentOpportunity {
       regulationNote: json['regulationNote'] as String? ?? '',
       currentAssetValue:
           (json['currentAssetValue'] as num?)?.toDouble() ?? purchasePrice,
+      investmentBands: _jsonList(
+        json['investmentBands'],
+        InvestmentBand.fromJson,
+      ),
     );
   }
 
@@ -91,6 +148,31 @@ class InvestmentOpportunity {
   final String status;
   final String regulationNote;
   final double currentAssetValue;
+  final List<InvestmentBand> investmentBands;
+
+  bool get hasInvestmentPlans => investmentBands.isNotEmpty;
+
+  /// The band whose range contains [amountUsd], or null when none match.
+  InvestmentBand? bandForAmount(double amountUsd) {
+    for (final band in investmentBands) {
+      if (band.accepts(amountUsd)) return band;
+    }
+    return null;
+  }
+
+  /// Lowest principal any band accepts; 0 when no bands are configured.
+  double get bandsMinimum => investmentBands.isEmpty
+      ? 0
+      : investmentBands
+            .map((band) => band.minAmountUsd)
+            .reduce((a, b) => a < b ? a : b);
+
+  /// Highest principal any band accepts; 0 when no bands are configured.
+  double get bandsMaximum => investmentBands.isEmpty
+      ? 0
+      : investmentBands
+            .map((band) => band.maxAmountUsd)
+            .reduce((a, b) => a > b ? a : b);
 
   String get displayTitle => title.replaceAll(r'\n', '\n');
   String get minimumText => _formatUsd(minimumInvestment);
@@ -122,11 +204,13 @@ class MemberDashboardData {
     required this.allocation,
     required this.chartValues,
     required this.chartLabels,
+    this.investments = const [],
     this.totalInvested = 0,
     this.totalCurrentValue = 0,
     this.totalDividends = 0,
     this.totalProfitLoss = 0,
     this.overallReturnPercentage = 0,
+    this.expectedProfitUsd = 0,
   });
 
   factory MemberDashboardData.empty() {
@@ -159,12 +243,14 @@ class MemberDashboardData {
       allocation: _jsonList(json['allocation'], MemberAllocation.fromJson),
       chartValues: _doubleList(json['chartValues']),
       chartLabels: _stringList(json['chartLabels']),
+      investments: _jsonList(json['investments'], MemberInvestment.fromJson),
       totalInvested: invested,
       totalCurrentValue: currentValue,
       totalDividends: (json['totalDividends'] as num?)?.toDouble() ?? 0,
       totalProfitLoss: (json['totalProfitLoss'] as num?)?.toDouble() ?? 0,
       overallReturnPercentage:
           (json['overallReturnPercentage'] as num?)?.toDouble() ?? 0,
+      expectedProfitUsd: (json['expectedProfitUsd'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -177,14 +263,20 @@ class MemberDashboardData {
   final List<MemberAllocation> allocation;
   final List<double> chartValues;
   final List<String> chartLabels;
+  final List<MemberInvestment> investments;
   final double totalInvested;
   final double totalCurrentValue;
   final double totalDividends;
   final double totalProfitLoss;
   final double overallReturnPercentage;
+  final double expectedProfitUsd;
+
+  List<MemberInvestment> get activeInvestments =>
+      investments.where((investment) => investment.isActive).toList();
 
   String get portfolioValueText => _formatUsd(portfolioValueUsd);
   String get walletBalanceText => _formatUsd(walletBalanceUsd);
+  String get expectedProfitText => _formatUsd(expectedProfitUsd);
   String get totalInvestedText => _formatUsd(totalInvested);
   String get totalCurrentValueText => _formatUsd(totalCurrentValue);
   String get totalDividendsText => _formatUsd(totalDividends);
@@ -305,6 +397,93 @@ class MemberHolding {
   String get returnText {
     final prefix = returnPercent >= 0 ? '+' : '';
     return '$prefix${returnPercent.toStringAsFixed(1)}%';
+  }
+}
+
+/// A member's locked fixed-return investment plan. Created when wallet cash is
+/// invested into an asset band; pays principal + profit back to the wallet at
+/// [maturityAt].
+class MemberInvestment {
+  const MemberInvestment({
+    required this.id,
+    required this.assetId,
+    required this.assetTitle,
+    required this.assetImageUrl,
+    required this.principalUsd,
+    required this.durationKey,
+    required this.ratePercent,
+    required this.profitUsd,
+    required this.payoutUsd,
+    required this.status,
+    required this.startAt,
+    required this.maturityAt,
+    required this.settledAt,
+  });
+
+  factory MemberInvestment.fromJson(Map<String, dynamic> json) {
+    return MemberInvestment(
+      id: json['id'] as String? ?? '',
+      assetId: json['assetId'] as String? ?? '',
+      assetTitle: json['assetTitle'] as String? ?? '',
+      assetImageUrl: json['assetImageUrl'] as String? ?? '',
+      principalUsd: (json['principalUsd'] as num?)?.toDouble() ?? 0,
+      durationKey: json['durationKey'] as String? ?? '',
+      ratePercent: (json['ratePercent'] as num?)?.toDouble() ?? 0,
+      profitUsd: (json['profitUsd'] as num?)?.toDouble() ?? 0,
+      payoutUsd: (json['payoutUsd'] as num?)?.toDouble() ?? 0,
+      status: json['status'] as String? ?? 'active',
+      startAt: json['startAt'] as String? ?? '',
+      maturityAt: json['maturityAt'] as String? ?? '',
+      settledAt: json['settledAt'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String assetId;
+  final String assetTitle;
+  final String assetImageUrl;
+  final double principalUsd;
+  final String durationKey;
+  final double ratePercent;
+  final double profitUsd;
+  final double payoutUsd;
+  final String status;
+  final String startAt;
+  final String maturityAt;
+  final String settledAt;
+
+  bool get isActive => status == 'active';
+  DateTime? get maturityDate => DateTime.tryParse(maturityAt)?.toLocal();
+
+  String get principalText => _formatUsd(principalUsd);
+  String get profitText => '+${_formatUsd(profitUsd)}';
+  String get payoutText => _formatUsd(payoutUsd);
+  String get rateText => '${ratePercent.toStringAsFixed(ratePercent % 1 == 0 ? 0 : 1)}%';
+
+  String get durationLabel {
+    switch (durationKey) {
+      case 'week':
+        return '1 week';
+      case 'month':
+        return '1 month';
+      case 'year':
+        return '1 year';
+      default:
+        return durationKey;
+    }
+  }
+
+  String get statusLabel {
+    switch (status) {
+      case 'active':
+        return 'Active';
+      case 'completed':
+        return 'Matured';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return status;
+    }
   }
 }
 
@@ -518,14 +697,54 @@ class DepositProofFile {
 
 class PurchaseRequest {
   const PurchaseRequest({
-    required this.opportunityId,
     required this.amountUsd,
+    this.opportunityId,
     this.paymentAsset = 'USDT',
   });
 
-  final String opportunityId;
+  /// The asset the member intends to fund, if any. A wallet top-up leaves this
+  /// null — the deposit simply credits spendable balance.
+  final String? opportunityId;
   final double amountUsd;
   final String paymentAsset;
+}
+
+/// Result of locking wallet cash into an asset's fixed-return plan.
+class InvestmentPlanResult {
+  const InvestmentPlanResult({
+    required this.id,
+    required this.assetTitle,
+    required this.principalUsd,
+    required this.profitUsd,
+    required this.payoutUsd,
+    required this.ratePercent,
+    required this.durationKey,
+    required this.maturityAt,
+  });
+
+  factory InvestmentPlanResult.fromJson(Map<String, dynamic> json) {
+    final principal = (json['principalUsd'] as num?)?.toDouble() ?? 0;
+    final profit = (json['profitUsd'] as num?)?.toDouble() ?? 0;
+    return InvestmentPlanResult(
+      id: json['id'] as String? ?? '',
+      assetTitle: json['assetTitle'] as String? ?? '',
+      principalUsd: principal,
+      profitUsd: profit,
+      payoutUsd: (json['payoutUsd'] as num?)?.toDouble() ?? principal + profit,
+      ratePercent: (json['ratePercent'] as num?)?.toDouble() ?? 0,
+      durationKey: json['durationKey'] as String? ?? '',
+      maturityAt: json['maturityAt'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String assetTitle;
+  final double principalUsd;
+  final double profitUsd;
+  final double payoutUsd;
+  final double ratePercent;
+  final String durationKey;
+  final String maturityAt;
 }
 
 List<String> _stringList(Object? value) {
