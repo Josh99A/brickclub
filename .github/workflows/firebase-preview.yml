@@ -32,6 +32,15 @@ jobs:
         with:
           channel: stable
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Node 20 for the firebase-tools auth toolchain. On Node 22 the bundled
+          # undici drops the OAuth token request to googleapis.com ("Premature
+          # close" / "Failed to authenticate"). The action shells out to npx, so
+          # whatever Node is on PATH here is what firebase-tools runs under.
+          node-version: 20
+
       - name: Build Flutter web
         run: |
           flutter pub get
@@ -39,8 +48,17 @@ jobs:
 
       - name: Deploy to preview channel
         uses: FirebaseExtended/action-hosting-deploy@v0
+        env:
+          # Force ADC to use the service-account credentials directly instead of
+          # probing the (absent) GCE metadata server, which races and surfaces as
+          # "Failed to authenticate" in CI.
+          METADATA_SERVER_DETECTION: none
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BRICKCLUB }}
           projectId: brickclub
           expires: 7d
+          # Pinned: firebase-tools 15.22.2 intermittently fails service-account
+          # auth in CI. 15.22.1 is the last version that deploys reliably. Keep in
+          # sync with firebase-deploy.yml. Revisit when a fix ships upstream.
+          firebaseToolsVersion: "15.22.1"
