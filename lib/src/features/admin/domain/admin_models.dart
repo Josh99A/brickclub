@@ -829,6 +829,8 @@ class AdminDepositRequest {
   const AdminDepositRequest({
     required this.id,
     required this.uid,
+    required this.userEmail,
+    required this.userDisplayName,
     required this.opportunityTitle,
     required this.amountUsd,
     required this.paymentNetwork,
@@ -845,6 +847,8 @@ class AdminDepositRequest {
     return AdminDepositRequest(
       id: json['id'] as String,
       uid: json['uid'] as String? ?? '',
+      userEmail: json['userEmail'] as String? ?? '',
+      userDisplayName: json['userDisplayName'] as String? ?? '',
       opportunityTitle: json['opportunityTitle'] as String? ?? '',
       amountUsd: (json['amountUsd'] as num?)?.toDouble() ?? 0,
       paymentNetwork: json['paymentNetwork'] as String? ?? '',
@@ -863,6 +867,8 @@ class AdminDepositRequest {
 
   final String id;
   final String uid;
+  final String userEmail;
+  final String userDisplayName;
   final String opportunityTitle;
   final double amountUsd;
   final String paymentNetwork;
@@ -875,6 +881,14 @@ class AdminDepositRequest {
   final String status;
 
   bool get isCrypto => paymentType == PaymentMethodType.crypto;
+
+  /// Best label for the depositing member: display name, then email, then uid.
+  String get requesterLabel {
+    final name = userDisplayName.trim();
+    if (name.isNotEmpty) return name;
+    final email = userEmail.trim();
+    return email.isNotEmpty ? email : uid;
+  }
 }
 
 class AdminWithdrawalRequest {

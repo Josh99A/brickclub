@@ -1023,7 +1023,7 @@ class _PendingReviews extends StatelessWidget {
       for (final asset in pendingAssets.take(2))
         _ReviewRow(asset.title, asset.reviewStatus, 'Asset'),
       for (final request in pendingDeposits.take(2))
-        _ReviewRow(request.opportunityTitle, 'Deposit proof', 'Payment'),
+        _ReviewRow(request.opportunityTitle, request.requesterLabel, 'Payment'),
       for (final ticket in pendingSupport.take(2))
         _ReviewRow(ticket.subject, ticket.requesterLabel, 'Support'),
     ];
@@ -1596,11 +1596,19 @@ class _DepositRequestTable extends StatelessWidget {
     }
 
     return _ResponsiveDataTable(
-      columns: const ['Asset', 'Amount', 'Method', 'Reference', 'Status'],
+      columns: const [
+        'Member',
+        'Asset',
+        'Amount',
+        'Method',
+        'Reference',
+        'Status',
+      ],
       rows: [
         for (final request in requests)
           _AdminTableRow(
             values: [
+              request.requesterLabel,
               request.opportunityTitle,
               request.amountUsd.toStringAsFixed(0),
               request.isCrypto
@@ -1612,7 +1620,7 @@ class _DepositRequestTable extends StatelessWidget {
             source: request,
           ),
       ],
-      statusColumns: const {4},
+      statusColumns: const {5},
       trailingBuilder: (row) {
         final request = row.source as AdminDepositRequest;
         final submitted = request.status == 'proof_submitted';
