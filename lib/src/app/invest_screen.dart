@@ -74,9 +74,6 @@ class _InvestScreenState extends State<InvestScreen> {
             .where(filters.matches)
             .where(_matchesSearch)
             .toList(growable: false);
-        final featuredReturn = opportunities.isEmpty
-            ? '0.0%'
-            : opportunities.first.returnText;
 
         return AppPage(
           title: l10n.navInvest,
@@ -127,21 +124,7 @@ class _InvestScreenState extends State<InvestScreen> {
                 ),
               ),
             ),
-            Panel(
-              radius: 20,
-              child: Row(
-                children: [
-                  Text(featuredReturn, style: AppText.goldMetric),
-                  SizedBox(width: 22),
-                  Expanded(
-                    child: Text(
-                      l10n.investFilteredIncome,
-                      style: AppText.cardHeadingSmall,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            const _BrickShareCarousel(),
             SectionHeading(
               title: snapshot.connectionState == ConnectionState.done
                   ? l10n.investOpportunitiesCount(opportunities.length)
@@ -249,6 +232,126 @@ class _InvestScreenState extends State<InvestScreen> {
     if (updated != null && mounted) {
       setState(() => filters = updated);
     }
+  }
+}
+
+/// Auto-advancing carousel of BrickShare infographic cards. Each slide is shown
+/// for 3 seconds before fading to the next, looping forever, with tappable dot
+/// indicators so members can browse manually.
+class _BrickShareCarousel extends StatefulWidget {
+  const _BrickShareCarousel();
+
+  static const List<String> _images = [
+    'assets/images/carousel/card1.png',
+    'assets/images/carousel/card2.png',
+    'assets/images/carousel/card3.png',
+    'assets/images/carousel/card4.png',
+    'assets/images/carousel/card5.png',
+  ];
+
+  static const Duration _interval = Duration(seconds: 3);
+
+  @override
+  State<_BrickShareCarousel> createState() => _BrickShareCarouselState();
+}
+
+class _BrickShareCarouselState extends State<_BrickShareCarousel> {
+  final PageController _controller = PageController();
+  Timer? _timer;
+  int _index = 0;
+  bool _precached = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Warm the image cache so transitions are seamless. precacheImage reads the
+    // MediaQuery, which is only available once dependencies are resolved (not in
+    // initState), so do it here and only once.
+    if (_precached) return;
+    _precached = true;
+    for (final path in _BrickShareCarousel._images) {
+      precacheImage(AssetImage(path), context).ignore();
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(_BrickShareCarousel._interval, (_) {
+      if (!mounted) return;
+      final next = (_index + 1) % _BrickShareCarousel._images.length;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final images = _BrickShareCarousel._images;
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: AspectRatio(
+            // Source cards are 3:2.
+            aspectRatio: 3 / 2,
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: images.length,
+              onPageChanged: (i) {
+                setState(() => _index = i);
+                // Restart the dwell timer so a manual swipe gets a full 3s.
+                _startTimer();
+              },
+              itemBuilder: (context, i) => Image.asset(
+                images[i],
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < images.length; i++)
+              GestureDetector(
+                onTap: () => _controller.animateToPage(
+                  i,
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeInOut,
+                ),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: i == _index ? 22 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: i == _index ? AppColors.gold : AppColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 }
 

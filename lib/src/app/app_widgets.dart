@@ -1452,11 +1452,40 @@ String _formatUsdCompact(double value) {
   return '\$${NumberFormat.compact().format(value)}';
 }
 
+/// Full-figure currency (e.g. `$12,000.00`) for wallet-money screens, where
+/// abbreviating to "K"/"M" would hide the member's exact balance and the small
+/// per-tick growth of an accruing plan.
+String _formatUsdExact(double value) {
+  return '\$${NumberFormat('#,##0.00', 'en_US').format(value)}';
+}
+
 String _contentTypeForName(String name) {
   final lower = name.toLowerCase();
   if (lower.endsWith('.pdf')) return 'application/pdf';
   if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
+    return 'application/msword';
+  }
+  if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) {
+    return 'application/vnd.ms-excel';
+  }
   return 'image/jpeg';
+}
+
+/// Derives a human-friendly filename from a stored document/storage URL,
+/// stripping the URL path, query, and the millisecond timestamp prefix added at
+/// upload time. Falls back to a generic label when nothing usable remains.
+String _documentLabelFromUrl(String url) {
+  var name = url;
+  final uri = Uri.tryParse(url);
+  if (uri != null && uri.path.isNotEmpty) {
+    final decoded = Uri.decodeComponent(uri.path);
+    final segment = decoded.split('/').last;
+    if (segment.isNotEmpty) name = segment;
+  }
+  final match = RegExp(r'^\d{10,}-').firstMatch(name);
+  if (match != null) name = name.substring(match.end);
+  return name.trim().isEmpty ? 'Document' : name;
 }
 
 void showMessage(BuildContext context, String message) {

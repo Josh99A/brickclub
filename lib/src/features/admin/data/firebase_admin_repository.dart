@@ -183,6 +183,22 @@ class FirebaseAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<String> uploadAssetDocument(AdminUploadFile file) async {
+    final safeName = file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '-');
+    final reference = _storage.ref(
+      'admin/asset-documents/${DateTime.now().millisecondsSinceEpoch}-$safeName',
+    );
+    await reference.putData(
+      Uint8List.fromList(file.bytes),
+      SettableMetadata(
+        contentType: file.contentType,
+        customMetadata: {'originalName': file.name},
+      ),
+    );
+    return reference.getDownloadURL();
+  }
+
+  @override
   Future<void> verifyDepositRequest(String id) {
     return _callVoid('verifyDepositProof', {'orderId': id});
   }

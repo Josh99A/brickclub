@@ -146,7 +146,7 @@
   "ctaFreeToBrowse": "ब्राउज़ करना निःशुल्क",
   "ctaVerifiedOnly": "केवल सत्यापित संपत्तियाँ",
 
-  "footerCopyright": "© 2026 BrickClub",
+  "footerCopyright": "© 1996–2026 BrickClub",
 
   "commonViewAll": "सभी देखें",
   "commonCancel": "रद्द करें",
@@ -251,6 +251,7 @@
   "detailFundingStatus": "वित्तपोषण स्थिति",
   "detailFundedPercent": "{percent}% वित्तपोषित",
   "detailFundingNote": "समर्थित भुगतान विकल्प और कोट समाप्ति निपटान पुष्टि से पहले दिखाए जाते हैं।",
+  "detailDocuments": "दस्तावेज़",
   "detailInvestButton": "क्रिप्टो वित्तपोषण से निवेश करें",
 
   "kycStatusApproved": "वित्तीय कार्य अनलॉक हैं।",

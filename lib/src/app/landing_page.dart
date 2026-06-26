@@ -8,6 +8,22 @@ const String _androidApkUrl =
 const String _iosIpaUrl =
     'https://github.com/brickclub23-ux/brickclub/releases/latest/download/brickclub.ipa';
 
+/// Opens a native app build download.
+///
+/// On web, `LaunchMode.externalApplication` opens a blank `_blank` tab that
+/// popup blockers frequently swallow, which made the APK appear to "do
+/// nothing". GitHub serves release assets with `Content-Disposition:
+/// attachment`, so navigating the current tab (`_self`) triggers the download
+/// in place without leaving the page. On mobile we still want an external
+/// handler, so keep `externalApplication` there.
+Future<void> _launchAppDownload(String url) {
+  final uri = Uri.parse(url);
+  if (kIsWeb) {
+    return launchUrl(uri, webOnlyWindowName: '_self');
+  }
+  return launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
 class LandingPage extends StatefulWidget {
   const LandingPage({
     super.key,
@@ -709,10 +725,7 @@ class _DownloadLinkState extends State<_DownloadLink> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onTap: () => launchUrl(
-          Uri.parse(widget.url),
-          mode: LaunchMode.externalApplication,
-        ),
+        onTap: () => _launchAppDownload(widget.url),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),

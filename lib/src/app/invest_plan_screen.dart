@@ -20,6 +20,7 @@ class InvestPlanScreen extends StatefulWidget {
 
 class _InvestPlanScreenState extends State<InvestPlanScreen> {
   static const _durations = [
+    ('day', '1 day'),
     ('week', '1 week'),
     ('month', '1 month'),
     ('year', '1 year'),
@@ -78,6 +79,7 @@ class _InvestPlanScreenState extends State<InvestPlanScreen> {
 
   DateTime get _maturity {
     final days = switch (_durationKey) {
+      'day' => 1,
       'week' => 7,
       'month' => 30,
       'year' => 365,
@@ -116,7 +118,7 @@ class _InvestPlanScreenState extends State<InvestPlanScreen> {
                 )
               else ...[
                 _WalletAvailableCard(
-                  balanceText: _formatUsdCompact(_walletBalance),
+                  balanceText: _formatUsdExact(_walletBalance),
                   loadFailed: _loadFailed,
                 ),
                 SizedBox(height: 18),
@@ -134,8 +136,8 @@ class _InvestPlanScreenState extends State<InvestPlanScreen> {
                         key: const ValueKey('invest-amount'),
                         controller: _amountController,
                         hintText: l10n.investPlanAmountHint(
-                          _formatUsdCompact(opportunity.bandsMinimum),
-                          _formatUsdCompact(opportunity.bandsMaximum),
+                          _formatUsdExact(opportunity.bandsMinimum),
+                          _formatUsdExact(opportunity.bandsMaximum),
                         ),
                         keyboardType: TextInputType.number,
                         prefixIcon: Icons.payments_outlined,
@@ -145,8 +147,8 @@ class _InvestPlanScreenState extends State<InvestPlanScreen> {
                       Text(
                         _band == null
                             ? l10n.investPlanOutOfRange(
-                                _formatUsdCompact(opportunity.bandsMinimum),
-                                _formatUsdCompact(opportunity.bandsMaximum),
+                                _formatUsdExact(opportunity.bandsMinimum),
+                                _formatUsdExact(opportunity.bandsMaximum),
                               )
                             : !hasFunds
                             ? l10n.investPlanInsufficient
@@ -183,7 +185,7 @@ class _InvestPlanScreenState extends State<InvestPlanScreen> {
                     children: [
                       QuoteRow(
                         l10n.investPlanPrincipal,
-                        _formatUsdCompact(_amount),
+                        _formatUsdExact(_amount),
                       ),
                       QuoteRow(
                         l10n.investPlanRate,
@@ -191,11 +193,11 @@ class _InvestPlanScreenState extends State<InvestPlanScreen> {
                       ),
                       QuoteRow(
                         l10n.investPlanProfit,
-                        '+${_formatUsdCompact(_profit)}',
+                        '+${_formatUsdExact(_profit)}',
                       ),
                       QuoteRow(
                         l10n.investPlanPayout,
-                        _formatUsdCompact(_payout),
+                        _formatUsdExact(_payout),
                       ),
                       QuoteRow(
                         l10n.investPlanMaturity,
@@ -242,7 +244,7 @@ class _InvestPlanScreenState extends State<InvestPlanScreen> {
       showMessage(
         context,
         l10n.investPlanSuccess(
-          _formatUsdCompact(result.payoutUsd),
+          _formatUsdExact(result.payoutUsd),
         ),
       );
       Navigator.pop(context);

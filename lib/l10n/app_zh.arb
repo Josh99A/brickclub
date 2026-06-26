@@ -146,7 +146,7 @@
   "ctaFreeToBrowse": "免费浏览",
   "ctaVerifiedOnly": "仅限已验证资产",
 
-  "footerCopyright": "© 2026 BrickClub",
+  "footerCopyright": "© 1996–2026 BrickClub",
 
   "commonViewAll": "查看全部",
   "commonCancel": "取消",
@@ -251,6 +251,7 @@
   "detailFundingStatus": "募集状态",
   "detailFundedPercent": "已募集 {percent}%",
   "detailFundingNote": "支持的付款方式和报价有效期将在结算确认前显示。",
+  "detailDocuments": "文件",
   "detailInvestButton": "使用加密货币出资投资",
 
   "kycStatusApproved": "金融操作已解锁。",

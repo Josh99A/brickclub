@@ -322,7 +322,7 @@
   "ctaFreeToBrowse": "Free to browse",
   "ctaVerifiedOnly": "Verified assets only",
 
-  "footerCopyright": "© 2026 BrickClub",
+  "footerCopyright": "© 1996–2026 BrickClub",
 
   "commonViewAll": "View all",
   "commonCancel": "Cancel",
@@ -518,6 +518,7 @@
     "placeholders": { "percent": { "type": "String" } }
   },
   "detailFundingNote": "Supported payment options and quote expiry are shown before settlement confirmation.",
+  "detailDocuments": "Documents",
   "detailInvestButton": "Invest with crypto funding",
 
   "kycStatusApproved": "Financial actions are unlocked.",

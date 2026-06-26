@@ -911,7 +911,7 @@ abstract class AppLocalizations {
   /// No description provided for @footerCopyright.
   ///
   /// In en, this message translates to:
-  /// **'© 2026 BrickClub'**
+  /// **'© 1996–2026 BrickClub'**
   String get footerCopyright;
 
   /// No description provided for @commonViewAll.
@@ -1591,6 +1591,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Supported payment options and quote expiry are shown before settlement confirmation.'**
   String get detailFundingNote;
+
+  /// No description provided for @detailDocuments.
+  ///
+  /// In en, this message translates to:
+  /// **'Documents'**
+  String get detailDocuments;
 
   /// No description provided for @detailInvestButton.
   ///

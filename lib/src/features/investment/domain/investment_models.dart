@@ -7,6 +7,7 @@ class InvestmentBand {
     required this.id,
     required this.minAmountUsd,
     required this.maxAmountUsd,
+    required this.dailyRatePercent,
     required this.weeklyRatePercent,
     required this.monthlyRatePercent,
     required this.yearlyRatePercent,
@@ -17,6 +18,7 @@ class InvestmentBand {
       id: json['id'] as String? ?? '',
       minAmountUsd: (json['minAmountUsd'] as num?)?.toDouble() ?? 0,
       maxAmountUsd: (json['maxAmountUsd'] as num?)?.toDouble() ?? 0,
+      dailyRatePercent: (json['dailyRatePercent'] as num?)?.toDouble() ?? 0,
       weeklyRatePercent: (json['weeklyRatePercent'] as num?)?.toDouble() ?? 0,
       monthlyRatePercent: (json['monthlyRatePercent'] as num?)?.toDouble() ?? 0,
       yearlyRatePercent: (json['yearlyRatePercent'] as num?)?.toDouble() ?? 0,
@@ -26,6 +28,7 @@ class InvestmentBand {
   final String id;
   final double minAmountUsd;
   final double maxAmountUsd;
+  final double dailyRatePercent;
   final double weeklyRatePercent;
   final double monthlyRatePercent;
   final double yearlyRatePercent;
@@ -33,9 +36,11 @@ class InvestmentBand {
   bool accepts(double amountUsd) =>
       amountUsd >= minAmountUsd && amountUsd <= maxAmountUsd;
 
-  /// Fixed return percentage for a lock duration key (week/month/year).
+  /// Fixed return percentage for a lock duration key (day/week/month/year).
   double rateForDuration(String durationKey) {
     switch (durationKey) {
+      case 'day':
+        return dailyRatePercent;
       case 'week':
         return weeklyRatePercent;
       case 'month':
@@ -47,7 +52,8 @@ class InvestmentBand {
     }
   }
 
-  String get rangeText => '${_formatUsd(minAmountUsd)} – ${_formatUsd(maxAmountUsd)}';
+  String get rangeText =>
+      '${_formatUsdExact(minAmountUsd)} – ${_formatUsdExact(maxAmountUsd)}';
 }
 
 class InvestmentOpportunity {
@@ -275,7 +281,7 @@ class MemberDashboardData {
       investments.where((investment) => investment.isActive).toList();
 
   String get portfolioValueText => _formatUsd(portfolioValueUsd);
-  String get walletBalanceText => _formatUsd(walletBalanceUsd);
+  String get walletBalanceText => _formatUsdExact(walletBalanceUsd);
   String get expectedProfitText => _formatUsd(expectedProfitUsd);
   String get totalInvestedText => _formatUsd(totalInvested);
   String get totalCurrentValueText => _formatUsd(totalCurrentValue);
@@ -476,15 +482,17 @@ class MemberInvestment {
   double get currentValueUsd =>
       isActive ? principalUsd + accruedProfitUsd : payoutUsd;
 
-  String get principalText => _formatUsd(principalUsd);
-  String get profitText => '+${_formatUsd(profitUsd)}';
-  String get payoutText => _formatUsd(payoutUsd);
-  String get currentValueText => _formatUsd(currentValueUsd);
-  String get accruedProfitText => '+${_formatUsd(accruedProfitUsd)}';
+  String get principalText => _formatUsdExact(principalUsd);
+  String get profitText => '+${_formatUsdExact(profitUsd)}';
+  String get payoutText => _formatUsdExact(payoutUsd);
+  String get currentValueText => _formatUsdExact(currentValueUsd);
+  String get accruedProfitText => '+${_formatUsdExact(accruedProfitUsd)}';
   String get rateText => '${ratePercent.toStringAsFixed(ratePercent % 1 == 0 ? 0 : 1)}%';
 
   String get durationLabel {
     switch (durationKey) {
+      case 'day':
+        return '1 day';
       case 'week':
         return '1 week';
       case 'month':
@@ -801,4 +809,21 @@ String _formatUsd(double value) {
     return '\$${thousands.toStringAsFixed(thousands >= 10 ? 0 : 1)}K';
   }
   return '\$${value.toStringAsFixed(0)}';
+}
+
+/// Full-figure currency for the wallet and per-plan amounts, e.g. `$12,000.00`.
+/// Unlike [_formatUsd] this never abbreviates to "K"/"M", so members see the
+/// exact balance and small linear accrual ticks remain visible.
+String _formatUsdExact(double value) {
+  final negative = value < 0;
+  final totalCents = (value.abs() * 100).round();
+  final dollars = totalCents ~/ 100;
+  final cents = totalCents % 100;
+  final digits = dollars.toString();
+  final grouped = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+    grouped.write(digits[i]);
+  }
+  return '${negative ? '-' : ''}\$$grouped.${cents.toString().padLeft(2, '0')}';
 }

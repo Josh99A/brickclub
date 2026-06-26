@@ -448,7 +448,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get ctaVerifiedOnly => 'Solo asset verificati';
 
   @override
-  String get footerCopyright => '© 2026 BrickClub';
+  String get footerCopyright => '© 1996–2026 BrickClub';
 
   @override
   String get commonViewAll => 'Vedi tutto';
@@ -838,6 +838,9 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get detailFundingNote =>
       'Le opzioni di pagamento supportate e la scadenza della quotazione sono mostrate prima della conferma del regolamento.';
+
+  @override
+  String get detailDocuments => 'Documenti';
 
   @override
   String get detailInvestButton => 'Investi con finanziamento cripto';

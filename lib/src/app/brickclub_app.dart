@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
@@ -187,13 +188,29 @@ class _BrickClubAppState extends State<BrickClubApp> {
       themeMode: _themeModeNotifier.value,
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
+      // Switch instantly instead of lerping the ThemeData over
+      // kThemeAnimationDuration. The animated theme flips `brightness` at the
+      // midpoint, which would make our custom AppColors palette (resolved
+      // below) lag ~100ms behind the Material surfaces and visibly disagree
+      // with them mid-transition.
+      themeAnimationDuration: Duration.zero,
       locale: _localeNotifier.value,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       routerConfig: _router,
       builder: (context, child) {
-        final palette = AppPalette.forBrightness(Theme.of(context).brightness);
+        // Resolve the palette straight from the selected mode + platform
+        // brightness rather than from the (animated) Theme, so it changes in
+        // the same frame as the tap and stays in lockstep with the Material
+        // theme. For system mode this also tracks live OS brightness changes
+        // because the builder depends on MediaQuery.platformBrightnessOf.
+        final brightness = switch (_themeModeNotifier.value) {
+          ThemeMode.light => Brightness.light,
+          ThemeMode.dark => Brightness.dark,
+          ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+        };
+        final palette = AppPalette.forBrightness(brightness);
         AppColors._sync(palette);
         return LocaleControllerScope(
           locale: _localeNotifier.value,

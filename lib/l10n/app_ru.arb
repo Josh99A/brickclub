@@ -146,7 +146,7 @@
   "ctaFreeToBrowse": "Просмотр бесплатно",
   "ctaVerifiedOnly": "Только проверенные активы",
 
-  "footerCopyright": "© 2026 BrickClub",
+  "footerCopyright": "© 1996–2026 BrickClub",
 
   "commonViewAll": "Показать все",
   "commonCancel": "Отмена",
@@ -251,6 +251,7 @@
   "detailFundingStatus": "Статус финансирования",
   "detailFundedPercent": "Профинансировано {percent}%",
   "detailFundingNote": "Поддерживаемые способы оплаты и срок действия котировки показываются перед подтверждением расчёта.",
+  "detailDocuments": "Документы",
   "detailInvestButton": "Инвестировать через криптофинансирование",
 
   "kycStatusApproved": "Финансовые операции разблокированы.",

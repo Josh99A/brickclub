@@ -146,7 +146,7 @@
   "ctaFreeToBrowse": "التصفح مجاني",
   "ctaVerifiedOnly": "أصول موثَّقة فقط",
 
-  "footerCopyright": "© 2026 BrickClub",
+  "footerCopyright": "© 1996–2026 BrickClub",
 
   "commonViewAll": "عرض الكل",
   "commonCancel": "إلغاء",
@@ -251,6 +251,7 @@
   "detailFundingStatus": "حالة التمويل",
   "detailFundedPercent": "تم تمويل {percent}%",
   "detailFundingNote": "تُعرض خيارات الدفع المدعومة وانتهاء صلاحية العرض قبل تأكيد التسوية.",
+  "detailDocuments": "المستندات",
   "detailInvestButton": "الاستثمار بالتمويل المشفَّر",
 
   "kycStatusApproved": "تم فتح الإجراءات المالية.",

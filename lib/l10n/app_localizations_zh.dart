@@ -412,7 +412,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ctaVerifiedOnly => '仅限已验证资产';
 
   @override
-  String get footerCopyright => '© 2026 BrickClub';
+  String get footerCopyright => '© 1996–2026 BrickClub';
 
   @override
   String get commonViewAll => '查看全部';
@@ -783,6 +783,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get detailFundingNote => '支持的付款方式和报价有效期将在结算确认前显示。';
+
+  @override
+  String get detailDocuments => '文件';
 
   @override
   String get detailInvestButton => '使用加密货币出资投资';

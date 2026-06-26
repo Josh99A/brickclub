@@ -65,6 +65,8 @@ abstract interface class AdminRepository {
 
   Future<String> uploadAssetImage(AdminUploadFile file);
 
+  Future<String> uploadAssetDocument(AdminUploadFile file);
+
   Future<void> verifyDepositRequest(String id);
 
   /// Force a member's investment plan to pay out now (principal + profit to

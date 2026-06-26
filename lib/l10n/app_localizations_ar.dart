@@ -437,7 +437,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get ctaVerifiedOnly => 'أصول موثَّقة فقط';
 
   @override
-  String get footerCopyright => '© 2026 BrickClub';
+  String get footerCopyright => '© 1996–2026 BrickClub';
 
   @override
   String get commonViewAll => 'عرض الكل';
@@ -820,6 +820,9 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get detailFundingNote =>
       'تُعرض خيارات الدفع المدعومة وانتهاء صلاحية العرض قبل تأكيد التسوية.';
+
+  @override
+  String get detailDocuments => 'المستندات';
 
   @override
   String get detailInvestButton => 'الاستثمار بالتمويل المشفَّر';

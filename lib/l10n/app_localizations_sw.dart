@@ -444,7 +444,7 @@ class AppLocalizationsSw extends AppLocalizations {
   String get ctaVerifiedOnly => 'Mali zilizothibitishwa pekee';
 
   @override
-  String get footerCopyright => '© 2026 BrickClub';
+  String get footerCopyright => '© 1996–2026 BrickClub';
 
   @override
   String get commonViewAll => 'Tazama zote';
@@ -832,6 +832,9 @@ class AppLocalizationsSw extends AppLocalizations {
   @override
   String get detailFundingNote =>
       'Njia za malipo zinazotumika na mwisho wa bei huonyeshwa kabla ya uthibitisho wa malipo.';
+
+  @override
+  String get detailDocuments => 'Hati';
 
   @override
   String get detailInvestButton => 'Wekeza kwa ufadhili wa sarafu-fiche';

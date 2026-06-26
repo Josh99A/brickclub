@@ -146,7 +146,7 @@
   "ctaFreeToBrowse": "Bure kuvinjari",
   "ctaVerifiedOnly": "Mali zilizothibitishwa pekee",
 
-  "footerCopyright": "© 2026 BrickClub",
+  "footerCopyright": "© 1996–2026 BrickClub",
 
   "commonViewAll": "Tazama zote",
   "commonCancel": "Ghairi",
@@ -251,6 +251,7 @@
   "detailFundingStatus": "Hali ya ufadhili",
   "detailFundedPercent": "Imefadhiliwa {percent}%",
   "detailFundingNote": "Njia za malipo zinazotumika na mwisho wa bei huonyeshwa kabla ya uthibitisho wa malipo.",
+  "detailDocuments": "Hati",
   "detailInvestButton": "Wekeza kwa ufadhili wa sarafu-fiche",
 
   "kycStatusApproved": "Shughuli za kifedha zimefunguliwa.",

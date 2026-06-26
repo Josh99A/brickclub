@@ -438,6 +438,7 @@ class AdminInvestmentBand {
     this.id = '',
     this.minAmountUsd = 0,
     this.maxAmountUsd = 0,
+    this.dailyRatePercent = 0,
     this.weeklyRatePercent = 0,
     this.monthlyRatePercent = 0,
     this.yearlyRatePercent = 0,
@@ -448,6 +449,7 @@ class AdminInvestmentBand {
       id: json['id'] as String? ?? '',
       minAmountUsd: (json['minAmountUsd'] as num?)?.toDouble() ?? 0,
       maxAmountUsd: (json['maxAmountUsd'] as num?)?.toDouble() ?? 0,
+      dailyRatePercent: (json['dailyRatePercent'] as num?)?.toDouble() ?? 0,
       weeklyRatePercent: (json['weeklyRatePercent'] as num?)?.toDouble() ?? 0,
       monthlyRatePercent: (json['monthlyRatePercent'] as num?)?.toDouble() ?? 0,
       yearlyRatePercent: (json['yearlyRatePercent'] as num?)?.toDouble() ?? 0,
@@ -458,6 +460,7 @@ class AdminInvestmentBand {
     if (id.isNotEmpty) 'id': id,
     'minAmountUsd': minAmountUsd,
     'maxAmountUsd': maxAmountUsd,
+    'dailyRatePercent': dailyRatePercent,
     'weeklyRatePercent': weeklyRatePercent,
     'monthlyRatePercent': monthlyRatePercent,
     'yearlyRatePercent': yearlyRatePercent,
@@ -466,6 +469,7 @@ class AdminInvestmentBand {
   AdminInvestmentBand copyWith({
     double? minAmountUsd,
     double? maxAmountUsd,
+    double? dailyRatePercent,
     double? weeklyRatePercent,
     double? monthlyRatePercent,
     double? yearlyRatePercent,
@@ -474,6 +478,7 @@ class AdminInvestmentBand {
       id: id,
       minAmountUsd: minAmountUsd ?? this.minAmountUsd,
       maxAmountUsd: maxAmountUsd ?? this.maxAmountUsd,
+      dailyRatePercent: dailyRatePercent ?? this.dailyRatePercent,
       weeklyRatePercent: weeklyRatePercent ?? this.weeklyRatePercent,
       monthlyRatePercent: monthlyRatePercent ?? this.monthlyRatePercent,
       yearlyRatePercent: yearlyRatePercent ?? this.yearlyRatePercent,
@@ -483,6 +488,7 @@ class AdminInvestmentBand {
   final String id;
   final double minAmountUsd;
   final double maxAmountUsd;
+  final double dailyRatePercent;
   final double weeklyRatePercent;
   final double monthlyRatePercent;
   final double yearlyRatePercent;
@@ -500,6 +506,7 @@ class AdminAsset {
     this.description = '',
     this.category = 'realEstate',
     this.images = const [],
+    this.documents = const [],
     this.purchasePrice = 0,
     this.fundingTarget = 0,
     this.amountFunded = 0,
@@ -543,6 +550,7 @@ class AdminAsset {
       description: json['description'] as String? ?? '',
       category: json['category'] as String? ?? 'realEstate',
       images: _stringList(json['images']),
+      documents: _stringList(json['documents']),
       purchasePrice: purchasePrice,
       fundingTarget: (json['fundingTarget'] as num?)?.toDouble() ?? 0,
       amountFunded: (json['amountFunded'] as num?)?.toDouble() ?? 0,
@@ -579,6 +587,7 @@ class AdminAsset {
       'description': description,
       'category': category,
       'images': images,
+      'documents': documents,
       'assetType': type,
       'purchasePrice': purchasePrice,
       'fundingTarget': fundingTarget,
@@ -609,6 +618,7 @@ class AdminAsset {
     String? description,
     String? category,
     List<String>? images,
+    List<String>? documents,
     double? purchasePrice,
     double? fundingTarget,
     double? amountFunded,
@@ -637,6 +647,7 @@ class AdminAsset {
       description: description ?? this.description,
       category: category ?? this.category,
       images: images ?? this.images,
+      documents: documents ?? this.documents,
       purchasePrice: purchasePrice ?? this.purchasePrice,
       fundingTarget: fundingTarget ?? this.fundingTarget,
       amountFunded: amountFunded ?? this.amountFunded,
@@ -666,6 +677,7 @@ class AdminAsset {
   final String description;
   final String category;
   final List<String> images;
+  final List<String> documents;
   final double purchasePrice;
   final double fundingTarget;
   final double amountFunded;

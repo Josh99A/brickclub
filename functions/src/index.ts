@@ -65,12 +65,13 @@ const TRANSLATION_PROTECTED_TERMS = ["BrickShares", "BrickClub", "USDT", "KYC"];
 
 // A single admin-configured investment tier on an asset. A member's principal
 // must fall within [minAmountUsd, maxAmountUsd]; the rate that applies is then
-// chosen by the lock duration the member picks (week/month/year). Returns are a
-// fixed percentage of principal, paid as a lump sum at maturity.
+// chosen by the lock duration the member picks (day/week/month/year). Returns
+// are a fixed percentage of principal, paid as a lump sum at maturity.
 type InvestmentBand = {
   id: string;
   minAmountUsd: number;
   maxAmountUsd: number;
+  dailyRatePercent: number;
   weeklyRatePercent: number;
   monthlyRatePercent: number;
   yearlyRatePercent: number;
@@ -826,6 +827,7 @@ const INVESTMENT_DURATIONS: Record<
   string,
   {days: number; rateField: keyof InvestmentBand; label: string}
 > = {
+  day: {days: 1, rateField: "dailyRatePercent", label: "1 day"},
   week: {days: 7, rateField: "weeklyRatePercent", label: "1 week"},
   month: {days: 30, rateField: "monthlyRatePercent", label: "1 month"},
   year: {days: 365, rateField: "yearlyRatePercent", label: "1 year"},
@@ -2321,6 +2323,7 @@ function readInvestmentBands(value: unknown): InvestmentBand[] {
         `band_${index}`,
       minAmountUsd: Number(entry.minAmountUsd ?? 0),
       maxAmountUsd: Number(entry.maxAmountUsd ?? 0),
+      dailyRatePercent: Number(entry.dailyRatePercent ?? 0),
       weeklyRatePercent: Number(entry.weeklyRatePercent ?? 0),
       monthlyRatePercent: Number(entry.monthlyRatePercent ?? 0),
       yearlyRatePercent: Number(entry.yearlyRatePercent ?? 0),
@@ -3179,6 +3182,7 @@ function readInvestmentBandsPayload(value: unknown): InvestmentBand[] {
       id: readOptionalString(band, "id") || `band_${randomUUID()}`,
       minAmountUsd,
       maxAmountUsd,
+      dailyRatePercent: readNonNegativeNumber(band, "dailyRatePercent"),
       weeklyRatePercent: readNonNegativeNumber(band, "weeklyRatePercent"),
       monthlyRatePercent: readNonNegativeNumber(band, "monthlyRatePercent"),
       yearlyRatePercent: readNonNegativeNumber(band, "yearlyRatePercent"),

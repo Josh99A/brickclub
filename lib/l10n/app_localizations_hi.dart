@@ -442,7 +442,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get ctaVerifiedOnly => 'केवल सत्यापित संपत्तियाँ';
 
   @override
-  String get footerCopyright => '© 2026 BrickClub';
+  String get footerCopyright => '© 1996–2026 BrickClub';
 
   @override
   String get commonViewAll => 'सभी देखें';
@@ -829,6 +829,9 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get detailFundingNote =>
       'समर्थित भुगतान विकल्प और कोट समाप्ति निपटान पुष्टि से पहले दिखाए जाते हैं।';
+
+  @override
+  String get detailDocuments => 'दस्तावेज़';
 
   @override
   String get detailInvestButton => 'क्रिप्टो वित्तपोषण से निवेश करें';

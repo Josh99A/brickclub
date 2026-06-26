@@ -255,7 +255,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('nav-wallet')));
     await tester.pumpAndSettle();
-    expect(find.text('\$12K'), findsOneWidget);
+    expect(find.text('\$12,000.00'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-portfolio')));
     await tester.pumpAndSettle();
@@ -418,6 +418,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('1 opportunities'), findsOneWidget);
+
+    // The BrickShare carousel pushes the lone matching card below the fold in
+    // the test viewport, so scroll the lazy SliverList until it builds.
+    await tester.scrollUntilVisible(
+      find.text('Harbor District\nLogistics REIT'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Harbor District\nLogistics REIT'), findsOneWidget);
   });
 
@@ -907,6 +915,10 @@ class FakeAdminRepository implements AdminRepository {
       'https://example.com/asset/${file.name}';
 
   @override
+  Future<String> uploadAssetDocument(AdminUploadFile file) async =>
+      'https://example.com/asset-doc/${file.name}';
+
+  @override
   Future<void> verifyDepositRequest(String id) async {}
 
   @override
@@ -1039,6 +1051,7 @@ class FakeInvestmentRepository implements InvestmentRepository {
           id: 'band-1',
           minAmountUsd: 100,
           maxAmountUsd: 10000,
+          dailyRatePercent: 0.5,
           weeklyRatePercent: 2,
           monthlyRatePercent: 5,
           yearlyRatePercent: 15,

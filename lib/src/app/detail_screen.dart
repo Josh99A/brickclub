@@ -128,6 +128,27 @@ class DetailScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (opportunity.documents.isNotEmpty) ...[
+                SizedBox(height: 24),
+                Panel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.detailDocuments,
+                        style: AppText.cardHeadingSmall,
+                      ),
+                      SizedBox(height: 12),
+                      for (var index = 0;
+                          index < opportunity.documents.length;
+                          index++) ...[
+                        if (index > 0) SizedBox(height: 8),
+                        _AssetDocumentTile(url: opportunity.documents[index]),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               SizedBox(height: 20),
               PrimaryButton(
                 key: const ValueKey('invest-with-crypto'),
@@ -228,6 +249,45 @@ class _AssetGalleryHeroState extends State<_AssetGalleryHero> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A tappable row for an asset document on the member detail screen. Opens the
+/// stored file (PDF/image/spreadsheet) in an external viewer.
+class _AssetDocumentTile extends StatelessWidget {
+  const _AssetDocumentTile({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _openExternalUrl(context, url),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.description_outlined, color: AppColors.gold, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _documentLabelFromUrl(url),
+                style: AppText.fieldLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.open_in_new_rounded, color: AppColors.muted, size: 18),
+          ],
+        ),
       ),
     );
   }

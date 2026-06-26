@@ -3141,6 +3141,7 @@ Future<void> _showAssetDialog(
   final exitPeriod = TextEditingController(text: value.exitPeriod);
   final regulationNote = TextEditingController(text: value.regulationNote);
   var images = List<String>.from(value.images);
+  var documents = List<String>.from(value.documents);
   var bands = List<AdminInvestmentBand>.from(value.investmentBands);
   var category = _assetCategories.contains(value.category)
       ? value.category
@@ -3202,6 +3203,12 @@ Future<void> _showAssetDialog(
                     images: images,
                     repository: repository,
                     onChanged: (next) => setState(() => images = next),
+                  ),
+                  SizedBox(height: 10),
+                  _AssetDocumentsField(
+                    documents: documents,
+                    repository: repository,
+                    onChanged: (next) => setState(() => documents = next),
                   ),
                   SizedBox(height: 10),
                   _AssetDropdown(
@@ -3343,6 +3350,7 @@ Future<void> _showAssetDialog(
                   description: description.text.trim(),
                   category: category,
                   images: images,
+                  documents: documents,
                   strategy: strategy,
                   riskLevel: riskLevel,
                   purchasePrice: double.tryParse(purchasePrice.text) ?? 0,
@@ -3424,6 +3432,11 @@ class _BandRowControllers {
       max = TextEditingController(
         text: band.maxAmountUsd == 0 ? '' : _trimNumber(band.maxAmountUsd),
       ),
+      daily = TextEditingController(
+        text: band.dailyRatePercent == 0
+            ? ''
+            : _trimNumber(band.dailyRatePercent),
+      ),
       weekly = TextEditingController(
         text: band.weeklyRatePercent == 0
             ? ''
@@ -3443,6 +3456,7 @@ class _BandRowControllers {
   final String id;
   final TextEditingController min;
   final TextEditingController max;
+  final TextEditingController daily;
   final TextEditingController weekly;
   final TextEditingController monthly;
   final TextEditingController yearly;
@@ -3451,6 +3465,7 @@ class _BandRowControllers {
     id: id,
     minAmountUsd: double.tryParse(min.text.trim()) ?? 0,
     maxAmountUsd: double.tryParse(max.text.trim()) ?? 0,
+    dailyRatePercent: double.tryParse(daily.text.trim()) ?? 0,
     weeklyRatePercent: double.tryParse(weekly.text.trim()) ?? 0,
     monthlyRatePercent: double.tryParse(monthly.text.trim()) ?? 0,
     yearlyRatePercent: double.tryParse(yearly.text.trim()) ?? 0,
@@ -3459,6 +3474,7 @@ class _BandRowControllers {
   void dispose() {
     min.dispose();
     max.dispose();
+    daily.dispose();
     weekly.dispose();
     monthly.dispose();
     yearly.dispose();
@@ -3504,7 +3520,7 @@ class _BandsEditorState extends State<_BandsEditor> {
         SizedBox(height: 4),
         Text(
           'Members invest an amount within a band; the rate for their chosen '
-          'duration (week/month/year) applies. Leave empty for none.',
+          'duration (day/week/month/year) applies. Leave empty for none.',
           style: AppText.small,
         ),
         SizedBox(height: 10),
@@ -3550,6 +3566,16 @@ class _BandsEditorState extends State<_BandsEditor> {
                 SizedBox(height: 8),
                 Row(
                   children: [
+                    Expanded(
+                      child: AppTextField(
+                        controller: _rows[index].daily,
+                        label: 'Daily %',
+                        hintText: '0.5',
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => _emit(),
+                      ),
+                    ),
+                    SizedBox(width: 8),
                     Expanded(
                       child: AppTextField(
                         controller: _rows[index].weekly,
@@ -3792,6 +3818,154 @@ Future<List<String>> _pickAdminAssetImages(AdminRepository repository) async {
     final bytes = file.bytes;
     if (bytes == null) continue;
     final url = await repository.uploadAssetImage(
+      AdminUploadFile(
+        name: file.name,
+        bytes: bytes,
+        contentType: _contentTypeForName(file.name),
+      ),
+    );
+    urls.add(url);
+  }
+  return urls;
+}
+
+/// Picker + list of legal/disclosure documents (PDFs, images, spreadsheets)
+/// attached to an asset. Uploaded files are stored and surfaced to members on
+/// the asset detail screen.
+class _AssetDocumentsField extends StatefulWidget {
+  const _AssetDocumentsField({
+    required this.documents,
+    required this.repository,
+    required this.onChanged,
+  });
+
+  final List<String> documents;
+  final AdminRepository repository;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  State<_AssetDocumentsField> createState() => _AssetDocumentsFieldState();
+}
+
+class _AssetDocumentsFieldState extends State<_AssetDocumentsField> {
+  bool _uploading = false;
+
+  Future<void> _addDocuments() async {
+    setState(() => _uploading = true);
+    try {
+      final uploaded = await _pickAdminAssetDocuments(widget.repository);
+      if (uploaded.isNotEmpty) {
+        widget.onChanged([...widget.documents, ...uploaded]);
+      }
+    } catch (error) {
+      if (mounted) showMessage(context, _adminErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  void _removeAt(int index) {
+    final next = [...widget.documents]..removeAt(index);
+    widget.onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          child: Text('Documents', style: AppText.fieldLabel),
+        ),
+        if (widget.documents.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              children: [
+                for (var index = 0; index < widget.documents.length; index++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: _AssetDocumentRow(
+                      url: widget.documents[index],
+                      onRemove: () => _removeAt(index),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        _PickerTile(
+          icon: _uploading
+              ? Icons.hourglass_top_rounded
+              : Icons.upload_file_outlined,
+          title: _uploading
+              ? 'Uploading documents…'
+              : widget.documents.isEmpty
+              ? 'Add asset documents'
+              : 'Add more documents (${widget.documents.length})',
+          onTap: _uploading ? () {} : _addDocuments,
+        ),
+      ],
+    );
+  }
+}
+
+class _AssetDocumentRow extends StatelessWidget {
+  const _AssetDocumentRow({required this.url, required this.onRemove});
+
+  final String url;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.description_outlined, color: AppColors.gold, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _openExternalUrl(context, url),
+              child: Text(
+                _documentLabelFromUrl(url),
+                style: AppText.fieldLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onRemove,
+            child: Icon(Icons.close_rounded, size: 18, color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<List<String>> _pickAdminAssetDocuments(
+  AdminRepository repository,
+) async {
+  final result = await FilePicker.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'],
+    withData: true,
+    allowMultiple: true,
+  );
+  if (result == null) return const [];
+
+  final urls = <String>[];
+  for (final file in result.files) {
+    final bytes = file.bytes;
+    if (bytes == null) continue;
+    final url = await repository.uploadAssetDocument(
       AdminUploadFile(
         name: file.name,
         bytes: bytes,
