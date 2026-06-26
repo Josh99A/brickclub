@@ -1429,13 +1429,23 @@ void openDetail(
   InvestmentRepository investmentRepository,
   VoidCallback onStartKyc,
 ) {
-  Navigator.of(context, rootNavigator: true).push(
+  // Capture the member shell + root navigator here, while still inside the
+  // tabbed shell, so the detail route (pushed over the shell) can keep its
+  // bottom nav working: tapping a tab pops the detail and switches the branch.
+  final scope = MemberScope.of(context);
+  final rootNavigator = Navigator.of(context, rootNavigator: true);
+  rootNavigator.push(
     MaterialPageRoute(
       builder: (_) => DetailScreen(
         kyc: kyc,
         opportunity: opportunity,
         investmentRepository: investmentRepository,
         onStartKyc: onStartKyc,
+        currentTabIndex: scope.navigationShell.currentIndex,
+        onSelectTab: (index) {
+          rootNavigator.pop();
+          scope.goBranch(index);
+        },
       ),
     ),
   );

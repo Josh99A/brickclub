@@ -1046,17 +1046,18 @@ class AppLocalizationsIt extends AppLocalizations {
       'Stai autorizzando un acquisto di BrickShares finanziato in cripto. Il regolamento può richiedere conferme di rete.';
 
   @override
-  String get paymentCreateRequest => 'Crea richiesta di deposito';
+  String get paymentCreateRequest => 'Mostra indirizzo di deposito';
 
   @override
-  String get paymentSubmitProof => 'Invia prova per la revisione';
+  String get paymentSubmitProof => 'Invia il deposito per la conferma';
 
   @override
   String get paymentIncreaseAmount =>
       'Aumenta l\'importo fino al minimo dell\'opportunità.';
 
   @override
-  String get paymentDepositCreated => 'Richiesta di deposito creata';
+  String get paymentDepositCreated =>
+      'Indirizzo di deposito pronto: invia i fondi e poi la prova';
 
   @override
   String get paymentEnterHash => 'Inserisci l\'hash della transazione';

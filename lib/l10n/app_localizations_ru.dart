@@ -1035,17 +1035,18 @@ class AppLocalizationsRu extends AppLocalizations {
       'Вы авторизуете покупку BrickShares с криптофинансированием. Расчёт может потребовать подтверждений в сети.';
 
   @override
-  String get paymentCreateRequest => 'Создать запрос на депозит';
+  String get paymentCreateRequest => 'Показать адрес для депозита';
 
   @override
-  String get paymentSubmitProof => 'Отправить подтверждение на проверку';
+  String get paymentSubmitProof => 'Отправить депозит на подтверждение';
 
   @override
   String get paymentIncreaseAmount =>
       'Увеличьте сумму до минимума для этой возможности.';
 
   @override
-  String get paymentDepositCreated => 'Запрос на депозит создан';
+  String get paymentDepositCreated =>
+      'Адрес готов — переведите средства, затем отправьте подтверждение';
 
   @override
   String get paymentEnterHash => 'Введите хеш транзакции';

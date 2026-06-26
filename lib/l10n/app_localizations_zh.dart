@@ -984,16 +984,16 @@ class AppLocalizationsZh extends AppLocalizations {
       '您正在授权一笔加密货币出资的 BrickShares 购买。结算可能需要网络确认。';
 
   @override
-  String get paymentCreateRequest => '创建存款请求';
+  String get paymentCreateRequest => '显示存款地址';
 
   @override
-  String get paymentSubmitProof => '提交凭证以供审核';
+  String get paymentSubmitProof => '提交存款以待确认';
 
   @override
   String get paymentIncreaseAmount => '请将金额增加到机会的最低金额。';
 
   @override
-  String get paymentDepositCreated => '存款请求已创建';
+  String get paymentDepositCreated => '存款地址已就绪——请转账后提交凭证';
 
   @override
   String get paymentEnterHash => '请输入交易哈希';

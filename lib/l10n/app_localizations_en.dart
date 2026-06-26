@@ -989,7 +989,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get paymentDemoAmount =>
-      'Demo amount can be adjusted before creating the deposit request.';
+      'Adjust the amount before you reveal the deposit address.';
 
   @override
   String get paymentQuotePaymentAsset => 'Payment asset';
@@ -1001,7 +1001,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paymentQuoteNetwork => 'Network';
 
   @override
-  String get paymentNetworkAfterRequest => 'Selected after request';
+  String get paymentNetworkAfterRequest => 'Shown with deposit address';
 
   @override
   String get paymentQuote => 'Quote';
@@ -1029,17 +1029,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'You are authorizing a crypto-funded BrickShares purchase. Settlement may take network confirmations.';
 
   @override
-  String get paymentCreateRequest => 'Create deposit request';
+  String get paymentCreateRequest => 'Show deposit address';
 
   @override
-  String get paymentSubmitProof => 'Submit proof for review';
+  String get paymentSubmitProof => 'Submit deposit for confirmation';
 
   @override
   String get paymentIncreaseAmount =>
       'Increase the amount to the opportunity minimum.';
 
   @override
-  String get paymentDepositCreated => 'Deposit request created';
+  String get paymentDepositCreated =>
+      'Deposit address ready — send your funds, then submit proof';
 
   @override
   String get paymentEnterHash => 'Enter the transaction hash';

@@ -1049,17 +1049,18 @@ class AppLocalizationsEs extends AppLocalizations {
       'Estás autorizando una compra de BrickShares financiada con cripto. La liquidación puede requerir confirmaciones de red.';
 
   @override
-  String get paymentCreateRequest => 'Crear solicitud de depósito';
+  String get paymentCreateRequest => 'Mostrar dirección de depósito';
 
   @override
-  String get paymentSubmitProof => 'Enviar comprobante para revisión';
+  String get paymentSubmitProof => 'Enviar depósito para confirmación';
 
   @override
   String get paymentIncreaseAmount =>
       'Aumenta el importe hasta el mínimo de la oportunidad.';
 
   @override
-  String get paymentDepositCreated => 'Solicitud de depósito creada';
+  String get paymentDepositCreated =>
+      'Dirección de depósito lista: envía tus fondos y luego el comprobante';
 
   @override
   String get paymentEnterHash => 'Introduce el hash de la transacción';

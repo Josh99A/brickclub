@@ -1024,16 +1024,17 @@ class AppLocalizationsAr extends AppLocalizations {
       'أنت تُصرّح بعملية شراء BrickShares ممولة بالعملات المشفرة. قد تستغرق التسوية تأكيدات الشبكة.';
 
   @override
-  String get paymentCreateRequest => 'إنشاء طلب إيداع';
+  String get paymentCreateRequest => 'عرض عنوان الإيداع';
 
   @override
-  String get paymentSubmitProof => 'إرسال الإثبات للمراجعة';
+  String get paymentSubmitProof => 'إرسال الإيداع للتأكيد';
 
   @override
   String get paymentIncreaseAmount => 'ارفع المبلغ إلى الحد الأدنى للفرصة.';
 
   @override
-  String get paymentDepositCreated => 'تم إنشاء طلب الإيداع';
+  String get paymentDepositCreated =>
+      'عنوان الإيداع جاهز — أرسل أموالك ثم قدّم الإثبات';
 
   @override
   String get paymentEnterHash => 'أدخل تجزئة المعاملة';

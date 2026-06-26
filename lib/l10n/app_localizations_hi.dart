@@ -1034,16 +1034,17 @@ class AppLocalizationsHi extends AppLocalizations {
       'आप एक क्रिप्टो-वित्तपोषित BrickShares खरीद को अधिकृत कर रहे हैं। निपटान में नेटवर्क पुष्टि लग सकती है।';
 
   @override
-  String get paymentCreateRequest => 'जमा अनुरोध बनाएँ';
+  String get paymentCreateRequest => 'जमा पता दिखाएँ';
 
   @override
-  String get paymentSubmitProof => 'समीक्षा के लिए प्रमाण सबमिट करें';
+  String get paymentSubmitProof => 'पुष्टि के लिए जमा सबमिट करें';
 
   @override
   String get paymentIncreaseAmount => 'राशि को अवसर के न्यूनतम तक बढ़ाएँ।';
 
   @override
-  String get paymentDepositCreated => 'जमा अनुरोध बनाया गया';
+  String get paymentDepositCreated =>
+      'जमा पता तैयार — अपनी राशि भेजें, फिर प्रमाण सबमिट करें';
 
   @override
   String get paymentEnterHash => 'लेन-देन हैश दर्ज करें';

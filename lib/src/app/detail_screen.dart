@@ -7,12 +7,21 @@ class DetailScreen extends StatelessWidget {
     required this.opportunity,
     required this.investmentRepository,
     required this.onStartKyc,
+    required this.currentTabIndex,
+    required this.onSelectTab,
   });
 
   final KycProfile kyc;
   final InvestmentOpportunity opportunity;
   final InvestmentRepository investmentRepository;
   final VoidCallback onStartKyc;
+
+  /// The member tab the detail was opened from, kept highlighted in the bottom
+  /// nav so the page reads as part of the tabbed shell rather than a modal.
+  final int currentTabIndex;
+
+  /// Switches to a member tab: closes this detail route and selects [index].
+  final ValueChanged<int> onSelectTab;
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +30,10 @@ class DetailScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: detailAppBar(context, 'BrickShares'),
+        bottomNavigationBar: AppBottomNav(
+          index: currentTabIndex,
+          onChanged: onSelectTab,
+        ),
         body: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           child: Column(

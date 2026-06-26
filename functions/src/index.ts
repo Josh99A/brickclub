@@ -329,9 +329,11 @@ export const listAdminDashboard = onAdminCall(async () => {
       paymentOptionsCollection.get(),
       kycProfilesCollection.get(),
     ]);
+  // "pending_payment" deposits are drafts the member has opened but not yet sent
+  // funds for (no proof). They are deliberately excluded so the admin queue only
+  // surfaces deposits awaiting confirmation or already actioned.
   const depositRequestsSnapshot = await purchaseOrdersCollection
     .where("status", "in", [
-      "pending_payment",
       "proof_submitted",
       "deposit_verified",
       "deposit_rejected",
@@ -558,11 +560,14 @@ export const getMemberDashboard = onMemberCall(async (request) => {
   };
 });
 
-// Create a deposit request. A deposit funds the member's cash wallet: once an
-// admin verifies the payment, the amount is credited as spendable balance the
-// member can then lock into an asset's investment plan. `opportunityId` is
-// optional and informational only (which asset the member intends to fund); the
-// money no longer flows straight into a holding.
+// Open a deposit. This only resolves the rail's deposit address/quote so the
+// member can send funds — it does NOT notify the admin or enter the admin queue.
+// The deposit reaches the admin for confirmation only once the member submits
+// the transaction hash + proof (see submitDepositProof). Once an admin verifies
+// the payment, the amount is credited as spendable wallet balance the member can
+// then lock into an asset's investment plan. `opportunityId` is optional and
+// informational only (which asset the member intends to fund); the money no
+// longer flows straight into a holding.
 export const createPurchaseOrder = onMemberCall(async (request) => {
   const data = readObject(request.data);
   const opportunityId = readOptionalString(data, "opportunityId") ?? "";
@@ -646,13 +651,8 @@ export const createPurchaseOrder = onMemberCall(async (request) => {
 
   await purchaseOrdersCollection.doc(id).set(order);
 
-  await notifyAdmins({
-    type: "deposit_request_created",
-    title: "New deposit request",
-    body: `Wallet deposit request created for ${formatUsd(amountUsd)}.`,
-    data: {orderId: id, uid, opportunityId},
-  });
-
+  // Intentionally no admin notification here: opening a deposit just reveals the
+  // address. The admin is notified only when the member submits proof below.
   return order;
 });
 
