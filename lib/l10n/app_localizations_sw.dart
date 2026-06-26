@@ -1040,17 +1040,18 @@ class AppLocalizationsSw extends AppLocalizations {
       'Unaidhinisha ununuzi wa BrickShares uliofadhiliwa kwa sarafu-fiche. Malipo yanaweza kuhitaji uthibitisho wa mtandao.';
 
   @override
-  String get paymentCreateRequest => 'Unda ombi la amana';
+  String get paymentCreateRequest => 'Onyesha anwani ya amana';
 
   @override
-  String get paymentSubmitProof => 'Wasilisha uthibitisho kwa ukaguzi';
+  String get paymentSubmitProof => 'Wasilisha amana ili kuthibitishwa';
 
   @override
   String get paymentIncreaseAmount =>
       'Ongeza kiasi hadi kiwango cha chini cha fursa.';
 
   @override
-  String get paymentDepositCreated => 'Ombi la amana limeundwa';
+  String get paymentDepositCreated =>
+      'Anwani ya amana tayari — tuma fedha zako, kisha wasilisha uthibitisho';
 
   @override
   String get paymentEnterHash => 'Weka hashi ya muamala';

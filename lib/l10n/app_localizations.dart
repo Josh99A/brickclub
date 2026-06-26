@@ -1907,7 +1907,7 @@ abstract class AppLocalizations {
   /// No description provided for @paymentDemoAmount.
   ///
   /// In en, this message translates to:
-  /// **'Demo amount can be adjusted before creating the deposit request.'**
+  /// **'Adjust the amount before you reveal the deposit address.'**
   String get paymentDemoAmount;
 
   /// No description provided for @paymentQuotePaymentAsset.
@@ -1931,7 +1931,7 @@ abstract class AppLocalizations {
   /// No description provided for @paymentNetworkAfterRequest.
   ///
   /// In en, this message translates to:
-  /// **'Selected after request'**
+  /// **'Shown with deposit address'**
   String get paymentNetworkAfterRequest;
 
   /// No description provided for @paymentQuote.
@@ -1985,13 +1985,13 @@ abstract class AppLocalizations {
   /// No description provided for @paymentCreateRequest.
   ///
   /// In en, this message translates to:
-  /// **'Create deposit request'**
+  /// **'Show deposit address'**
   String get paymentCreateRequest;
 
   /// No description provided for @paymentSubmitProof.
   ///
   /// In en, this message translates to:
-  /// **'Submit proof for review'**
+  /// **'Submit deposit for confirmation'**
   String get paymentSubmitProof;
 
   /// No description provided for @paymentIncreaseAmount.
@@ -2003,7 +2003,7 @@ abstract class AppLocalizations {
   /// No description provided for @paymentDepositCreated.
   ///
   /// In en, this message translates to:
-  /// **'Deposit request created'**
+  /// **'Deposit address ready — send your funds, then submit proof'**
   String get paymentDepositCreated;
 
   /// No description provided for @paymentEnterHash.
