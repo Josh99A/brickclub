@@ -97,7 +97,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     l10n.walletAddFundsTitle,
                 location: widget.opportunity?.location ??
                     l10n.walletAddFundsSubtitle,
-                amountText: _formatUsdCompact(amount),
+                amountText: _formatUsdExact(amount),
                 rail: selectedPaymentAsset,
               ),
               SizedBox(height: 18),
@@ -156,7 +156,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       l10n.paymentQuotePaymentAsset,
                       order?.paymentAsset ?? selectedPaymentAsset,
                     ),
-                    QuoteRow(l10n.paymentQuoteAmount, _formatUsdCompact(amount)),
+                    QuoteRow(l10n.paymentQuoteAmount, _formatUsdExact(amount)),
                     QuoteRow(
                       l10n.paymentQuoteNetwork,
                       order == null

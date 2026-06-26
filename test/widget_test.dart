@@ -726,6 +726,8 @@ class FakeAdminRepository implements AdminRepository {
       AdminDepositRequest(
         id: 'order-1',
         uid: 'member-1',
+        userEmail: 'sarah@brickclub.com',
+        userDisplayName: 'Sarah Member',
         opportunityTitle: 'Skyline Heights Income Fund',
         amountUsd: 100,
         paymentNetwork: 'Tron',

@@ -1457,11 +1457,6 @@ String _shortHash(String hash) {
   return '${trimmed.substring(0, 8)}...${trimmed.substring(trimmed.length - 6)}';
 }
 
-String _formatUsdCompact(double value) {
-  if (value <= 0) return '\$0';
-  return '\$${NumberFormat.compact().format(value)}';
-}
-
 /// Full-figure currency (e.g. `$12,000.00`) for wallet-money screens, where
 /// abbreviating to "K"/"M" would hide the member's exact balance and the small
 /// per-tick growth of an accruing plan.

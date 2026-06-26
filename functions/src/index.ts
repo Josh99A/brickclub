@@ -365,7 +365,9 @@ export const listAdminDashboard = onAdminCall(async () => {
     users: usersResult.users.map(userToJson),
     assets: assetsSnapshot.docs.map(assetFromDoc),
     cryptoPaymentOptions: paymentOptionsSnapshot.docs.map(paymentOptionFromDoc),
-    depositRequests: depositRequestsSnapshot.docs.map(depositRequestFromDoc),
+    depositRequests: depositRequestsSnapshot.docs.map((doc) =>
+      depositRequestFromDoc(doc, usersByUid.get(String(doc.data().uid ?? ""))),
+    ),
     withdrawalRequests: withdrawalRequestsSnapshot.docs.map((doc) =>
       withdrawalRequestFromDoc(doc, usersByUid.get(String(doc.data().uid ?? "")),
       ),
@@ -693,10 +695,19 @@ export const submitDepositProof = onMemberCall(async (request) => {
     {merge: true},
   );
 
+  // Resolve who deposited so the admin knows which member to confirm, rather
+  // than just seeing a bare uid. Best-effort: fall back to the uid on lookup
+  // failure so the notification still fires.
+  const depositor = await auth
+    .getUser(uid)
+    .then((user) => user.displayName || user.email || uid)
+    .catch(() => uid);
+
   await notifyAdmins({
     type: "deposit_proof_submitted",
     title: "Deposit proof submitted",
-    body: `${String(order.opportunityTitle ?? "BrickShares")} proof is ready for verification.`,
+    body: `${depositor} submitted ${formatUsd(Number(order.amountUsd ?? 0))} ` +
+      "deposit proof and is awaiting confirmation.",
     data: {orderId, uid},
   });
 
@@ -2533,11 +2544,14 @@ function accountDetailsFromData(raw: unknown): PaymentAccountField[] {
 
 function depositRequestFromDoc(
   doc: FirebaseFirestore.QueryDocumentSnapshot,
+  user?: UserRecord,
 ) {
   const data = doc.data();
   return {
     id: doc.id,
     uid: String(data.uid ?? ""),
+    userEmail: user?.email ?? "",
+    userDisplayName: user?.displayName ?? "",
     opportunityTitle: String(data.opportunityTitle ?? ""),
     amountUsd: Number(data.amountUsd ?? 0),
     paymentNetwork: String(data.paymentNetwork ?? ""),
